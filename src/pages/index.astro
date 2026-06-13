@@ -1,0 +1,128 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+import type { Album } from '../types';
+
+const db = env.DB;
+
+const q     = Astro.url.searchParams.get('q')     ?? '';
+const genre = Astro.url.searchParams.get('genre') ?? '';
+const sort  = Astro.url.searchParams.get('sort')  ?? 'artist';
+const dir   = Astro.url.searchParams.get('dir')   ?? 'asc';
+
+const VALID_SORTS = ['artist', 'album', 'year', 'rating', 'genre'] as const;
+const safeSort = VALID_SORTS.includes(sort as typeof VALID_SORTS[number]) ? sort : 'artist';
+const safeDir  = dir === 'desc' ? 'DESC' : 'ASC';
+
+const clauses: string[] = [];
+const params: (string | number)[] = [];
+
+if (q) {
+  clauses.push('(artist LIKE ? OR album LIKE ?)');
+  params.push(`%${q}%`, `%${q}%`);
+}
+if (genre) {
+  clauses.push('genre = ?');
+  params.push(genre);
+}
+
+const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+const sql   = `SELECT * FROM albums ${where} ORDER BY ${safeSort} ${safeDir} NULLS LAST`;
+
+const { results: albums } = await db.prepare(sql).bind(...params).all<Album>();
+
+const { results: genreRows } = await db
+  .prepare("SELECT DISTINCT genre FROM albums WHERE genre != '' ORDER BY genre")
+  .all<{ genre: string }>();
+
+function sortHref(col: string) {
+  const nextDir = safeSort === col && safeDir === 'ASC' ? 'desc' : 'asc';
+  return `?${new URLSearchParams({ q, genre, sort: col, dir: nextDir })}`;
+}
+
+function sortArrow(col: string) {
+  if (safeSort !== col) return '';
+  return safeDir === 'ASC' ? ' ↑' : ' ↓';
+}
+
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 80) return 'rating-hi';
+  if (r >= 65) return 'rating-mid';
+  return 'rating-lo';
+}
+---
+
+<Layout>
+  <div class="page-header">
+    <h1>Library <span class="count">{albums.length} albums</span></h1>
+  </div>
+
+  <form class="filters" method="get" action="/">
+    <input
+      class="search-input"
+      type="text"
+      name="q"
+      placeholder="Search artist or album..."
+      value={q}
+      autocomplete="off"
+    />
+    <select name="genre">
+      <option value="">All Genres</option>
+      {genreRows.map(g => (
+        <option value={g.genre} selected={g.genre === genre}>{g.genre}</option>
+      ))}
+    </select>
+    <button class="btn" type="submit">Filter</button>
+    {(q || genre) && <a href="/" class="btn">Clear</a>}
+  </form>
+
+  {albums.length === 0 ? (
+    <div class="empty-state">
+      <p>No albums found. <a href="/add">Add your first album →</a></p>
+    </div>
+  ) : (
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th title="Recommended"></th>
+            <th><a href={sortHref('artist')} class={safeSort === 'artist' ? 'active' : ''}>Artist{sortArrow('artist')}</a></th>
+            <th><a href={sortHref('album')} class={safeSort === 'album' ? 'active' : ''}>Album{sortArrow('album')}</a></th>
+            <th><a href={sortHref('year')} class={safeSort === 'year' ? 'active' : ''}>Year{sortArrow('year')}</a></th>
+            <th>Country</th>
+            <th><a href={sortHref('genre')} class={safeSort === 'genre' ? 'active' : ''}>Genre{sortArrow('genre')}</a></th>
+            <th>Subgenres</th>
+            <th><a href={sortHref('rating')} class={safeSort === 'rating' ? 'active' : ''}>Rating{sortArrow('rating')}</a></th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {albums.map(a => {
+            const subs: string[] = JSON.parse(a.subgenres || '[]');
+            return (
+              <tr>
+                <td>
+                  {a.cover_url
+                    ? <img class="cover-thumb" src={a.cover_url} alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
+                    : <div class="cover-thumb" />
+                  }
+                </td>
+                <td>{a.recommended ? <span class="rec-dot" title="Recommended" /> : null}</td>
+                <td><a href={`/album/${a.id}`}>{a.artist}</a></td>
+                <td><a href={`/album/${a.id}`}>{a.album}</a></td>
+                <td>{a.year ?? ''}</td>
+                <td>{a.country}</td>
+                <td>{a.genre}</td>
+                <td>{subs.map(s => <span class="tag">{s}</span>)}</td>
+                <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                <td class="notes-cell" title={a.notes}>{a.notes}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</Layout>

@@ -1,0 +1,26 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+}
+const { title } = Astro.props;
+const pageTitle = title ? `${title} — Music Library` : 'Music Library';
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{pageTitle}</title>
+  </head>
+  <body>
+    <nav>
+      <a href="/" class="nav-brand">&#9670; Music Library</a>
+      <a href="/add" class="btn">+ Add Album</a>
+    </nav>
+    <main>
+      <slot />
+    </main>
+  </body>
+</html>

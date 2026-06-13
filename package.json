@@ -1,0 +1,21 @@
+{
+  "name": "music-library",
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "db:migrate:local": "wrangler d1 execute music-library --local --file=./schema.sql",
+    "db:migrate:remote": "wrangler d1 execute music-library --remote --file=./schema.sql"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^13.7.0",
+    "astro": "^6.4.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
+    "wrangler": "^4.100.0"
+  }
+}
