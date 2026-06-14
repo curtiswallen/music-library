@@ -1,0 +1,129 @@
+---
+import type { LibraryEntry } from '../types';
+import { countryCode, slugify } from '../lib/utils';
+
+interface Props {
+  albums: LibraryEntry[];
+  base: string;
+  isOwner?: boolean;
+  safeSort: string;
+  currentGenre: string;
+  currentCountry: string;
+  currentSubgenres: string[];
+  sortHref:    (col: string) => string;
+  sortArrow:   (col: string) => string;
+  ratingClass: (r: number | null) => string;
+  sortedSubs:  (subs: string[]) => string[];
+  subgenreHref:(s: string) => string;
+  buildParams: (o: Record<string, string | string[] | null | undefined>) => string;
+}
+
+const {
+  albums,
+  base,
+  isOwner = false,
+  safeSort,
+  currentGenre,
+  currentCountry,
+  currentSubgenres,
+  sortHref,
+  sortArrow,
+  ratingClass,
+  sortedSubs,
+  subgenreHref,
+  buildParams,
+} = Astro.props;
+---
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th><a href={sortHref('artist')} class={safeSort === 'artist' ? 'active' : ''}>Artist{sortArrow('artist')}</a></th>
+        <th></th>
+        <th class="col-album"><a href={sortHref('album')}  class={safeSort === 'album'  ? 'active' : ''}>Album{sortArrow('album')}</a></th>
+        <th><a href={sortHref('year')}   class={safeSort === 'year'   ? 'active' : ''}>Year{sortArrow('year')}</a></th>
+        <th class="col-genre"><a href={sortHref('genre')}  class={safeSort === 'genre'  ? 'active' : ''}>Genre{sortArrow('genre')}</a></th>
+        <th class="col-subgenres">Subgenres</th>
+        <th style="position:relative">
+          <a href={sortHref('rating')} class={safeSort === 'rating' ? 'active' : ''}>Rating{sortArrow('rating')}</a>
+          <span class="rating-tip">?<span class="rating-tip-body">
+            <div class="rating-tip-row"><strong>100</strong><span>Masterpiece / Perfect</span></div>
+            <div class="rating-tip-row"><strong>90</strong><span>Amazing / Fantastic</span></div>
+            <div class="rating-tip-row"><strong>80</strong><span>Great / Excellent</span></div>
+            <div class="rating-tip-row"><strong>70</strong><span>Very Good / Solid</span></div>
+            <div class="rating-tip-row"><strong>60</strong><span>Good / Serviceable</span></div>
+            <div class="rating-tip-row"><strong>50</strong><span>Decent / Mixed Opinion</span></div>
+            <div class="rating-tip-row"><strong>40</strong><span>Acceptable / Unremarkable</span></div>
+            <div class="rating-tip-row"><strong>30</strong><span>Mediocre / Poor</span></div>
+            <div class="rating-tip-row"><strong>20</strong><span>Bad / Terrible</span></div>
+            <div class="rating-tip-row"><strong>10</strong><span>Abysmal / Worthless</span></div>
+          </span></span>
+        </th>
+        <th>Notes</th>
+        {isOwner && <th><a href={sortHref('added')} class={safeSort === 'added' ? 'active' : ''}>Added{sortArrow('added')}</a></th>}
+        {isOwner && <th></th>}
+      </tr>
+    </thead>
+    <tbody>
+      {albums.map(a => {
+        const subs: string[] = JSON.parse(a.subgenres || '[]');
+        const cc = countryCode(a.country).toLowerCase();
+        return (
+          <tr class={isOwner && a.is_hidden ? 'album-hidden' : ''}>
+            <td>
+              <div class="cover-thumb" style="background:#000;overflow:hidden">
+                {a.cover_url && (
+                  <img src={a.cover_url} alt="" loading="lazy"
+                       style="width:100%;height:100%;object-fit:cover;display:block"
+                       onerror="this.style.display='none'" />
+                )}
+              </div>
+            </td>
+            <td><a href={`${base}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
+            <td>
+              {a.country
+                ? <a href={buildParams({ country: a.country === currentCountry ? null : a.country })}
+                     class="flag-link"
+                     title={a.country === currentCountry ? `Remove filter: ${a.country}` : `Filter: ${a.country}`}>
+                    {cc
+                      ? <span class={`fi fi-${cc} country-flag${a.country === currentCountry ? ' flag-active' : ''}`} />
+                      : <span class={`flag-text${a.country === currentCountry ? ' flag-active' : ''}`}>{a.country}</span>
+                    }
+                  </a>
+                : null
+              }
+            </td>
+            <td class="col-album">
+              <a href={`${base}/album/${a.slug}`}>
+                {a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
+              </a>
+            </td>
+            <td>{a.year ?? ''}</td>
+            <td class="col-genre">
+              {a.genre && (
+                <a href={buildParams({ genre: a.genre === currentGenre ? null : a.genre, subgenre: [], excl: [] })}
+                   class="genre-link">{a.genre}</a>
+              )}
+            </td>
+            <td class="col-subgenres">
+              {sortedSubs(subs).map(s => (
+                <a href={subgenreHref(s)}
+                   class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}${currentSubgenres.includes(s) ? ' tag-filtered' : ''}`}
+                >{s}</a>
+              ))}
+            </td>
+            <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+            <td class="notes-cell">
+              <span class="notes-text">{a.notes}</span>
+              {a.notes && <span class="notes-tip-body">{a.notes}</span>}
+            </td>
+            {isOwner && <td class="added-cell">{a.added_at ? a.added_at.slice(0, 10) : ''}</td>}
+            {isOwner && <td>{a.is_hidden ? <span class="hidden-badge" title="Hidden from public profile">🔒</span> : null}</td>}
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>

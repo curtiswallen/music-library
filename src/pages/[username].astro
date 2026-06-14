@@ -1,9 +1,10 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Combobox from '../components/Combobox.astro';
+import LibraryTable from '../components/LibraryTable.astro';
 import { env } from 'cloudflare:workers';
 import type { LibraryEntry } from '../types';
-import { countryCode, slugify } from '../lib/utils';
+import { countryCode } from '../lib/utils';
 
 const { username } = Astro.params;
 if (!username) return Astro.redirect('/');
@@ -312,80 +313,21 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
           <p>No albums match the current filters.</p>
         </div>
       ) : (
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th></th>
-                <th><a href={sortHref('artist')} class={safeSort === 'artist' ? 'active' : ''}>Artist{sortArrow('artist')}</a></th>
-                <th></th>
-                <th><a href={sortHref('album')} class={safeSort === 'album' ? 'active' : ''}>Album{sortArrow('album')}</a></th>
-                <th><a href={sortHref('year')} class={safeSort === 'year' ? 'active' : ''}>Year{sortArrow('year')}</a></th>
-                <th><a href={sortHref('genre')} class={safeSort === 'genre' ? 'active' : ''}>Genre{sortArrow('genre')}</a></th>
-                <th>Subgenres</th>
-                <th><a href={sortHref('rating')} class={safeSort === 'rating' ? 'active' : ''}>Rating{sortArrow('rating')}</a></th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {albums.map(a => {
-                const subs: string[] = JSON.parse(a.subgenres || '[]');
-                const cc = countryCode(a.country).toLowerCase();
-                return (
-                  <tr>
-                    <td>
-                      <div class="cover-thumb" style="background:#000;overflow:hidden">
-                        {a.cover_url && (
-                          <img src={a.cover_url} alt="" loading="lazy"
-                               style="width:100%;height:100%;object-fit:cover;display:block"
-                               onerror="this.style.display='none'" />
-                        )}
-                      </div>
-                    </td>
-                    <td><a href={`${base}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
-                    <td>
-                      {a.country
-                        ? <a href={buildParams({ country: a.country === country ? null : a.country })}
-                             class="flag-link"
-                             title={a.country === country ? `Remove filter: ${a.country}` : `Filter: ${a.country}`}>
-                            {cc
-                              ? <span class={`fi fi-${cc} country-flag${a.country === country ? ' flag-active' : ''}`} />
-                              : <span class={`flag-text${a.country === country ? ' flag-active' : ''}`}>{a.country}</span>
-                            }
-                          </a>
-                        : null
-                      }
-                    </td>
-                    <td>
-                      <a href={`/${username}/album/${a.slug}`}>
-                        {a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
-                      </a>
-                    </td>
-                    <td>{a.year ?? ''}</td>
-                    <td>
-                      {a.genre && (
-                        <a href={buildParams({ genre: a.genre === genre ? null : a.genre, subgenre: [], excl: [] })}
-                           class="genre-link">{a.genre}</a>
-                      )}
-                    </td>
-                    <td>
-                      {sortedSubs(subs).map(s => (
-                        <a href={subgenreHref(s)}
-                           class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}${subgenres.includes(s) ? ' tag-filtered' : ''}`}
-                        >{s}</a>
-                      ))}
-                    </td>
-                    <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-                    <td class="notes-cell">
-                      <span class="notes-text">{a.notes}</span>
-                      {a.notes && <span class="notes-tip-body">{a.notes}</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <LibraryTable
+          albums={albums}
+          base={base}
+          isOwner={false}
+          safeSort={safeSort}
+          currentGenre={genre}
+          currentCountry={country}
+          currentSubgenres={subgenres}
+          sortHref={sortHref}
+          sortArrow={sortArrow}
+          ratingClass={ratingClass}
+          sortedSubs={sortedSubs}
+          subgenreHref={subgenreHref}
+          buildParams={buildParams}
+        />
       )}
     </>
   )}

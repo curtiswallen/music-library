@@ -1,0 +1,162 @@
+---
+import Combobox from './Combobox.astro';
+import { COUNTRIES, GENRES } from '../lib/utils';
+
+interface FormValues {
+  mbid?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  year?: number | null;
+  country?: string | null;
+  genre?: string | null;
+  subgenres?: string[];
+  rating?: number | null;
+  notes?: string | null;
+  cover_url?: string | null;
+  tracks?: string;
+  recommended?: number | boolean | null;
+  is_hidden?: number | boolean | null;
+}
+
+interface Props {
+  values?: FormValues;
+  includeDbAlbumId?: boolean;
+  submitLabel?: string;
+  cancelHref?: string;
+}
+
+const {
+  values = {},
+  includeDbAlbumId = false,
+  submitLabel = 'Save',
+  cancelHref,
+} = Astro.props;
+
+const hasRating     = values.rating != null;
+const hasCover      = !!values.cover_url;
+const isRecommended = values.recommended === 1 || values.recommended === true;
+const isHidden      = values.is_hidden   === 1 || values.is_hidden   === true;
+---
+
+<form method="post" id="album-form">
+  <input type="hidden" name="mbid"      id="f-mbid"      value={values.mbid ?? ''} />
+  {includeDbAlbumId && <input type="hidden" name="db_album_id" id="f-db-album-id" />}
+  <input type="hidden" name="cover_url" id="f-cover-url" value={values.cover_url ?? ''} />
+
+  <div class="form-grid">
+    <div class="form-group">
+      <label for="f-artist">Artist *</label>
+      <input id="f-artist" name="artist" type="text" required value={values.artist ?? ''} />
+    </div>
+    <div class="form-group">
+      <label for="f-album">Album *</label>
+      <input id="f-album" name="album" type="text" required value={values.album ?? ''} />
+    </div>
+    <div class="form-group">
+      <label for="f-year">Year</label>
+      <input id="f-year" name="year" type="number" min="1900" max="2099" value={values.year ?? ''} />
+    </div>
+    <div class="form-group">
+      <label for="f-country">Country</label>
+      <Combobox id="f-country" name="country" options={COUNTRIES.map(c => c.name)}
+                value={values.country ?? ''} placeholder="Search country..." />
+    </div>
+    <div class="form-group">
+      <label for="f-genre">Genre</label>
+      <Combobox id="f-genre" name="genre" options={GENRES}
+                value={values.genre ?? ''} placeholder="Search genre..." />
+    </div>
+    <div class="form-group">
+      <label>Subgenres</label>
+      <div class="subgenre-chips" id="subgenre-chips"></div>
+      <input type="hidden" name="subgenres" id="f-subgenres"
+             value={(values.subgenres ?? []).join(', ')} />
+    </div>
+    <div class="form-group">
+      <label>Rating</label>
+      <div class="rating-slider-wrap">
+        <div class="rating-slider-top">
+          <span class="rating-current" id="rating-val">{values.rating ?? '—'}</span>
+          <span class="rating-desc" id="rating-desc"></span>
+          <button type="button" class={`clear-rating-btn${hasRating ? ' visible' : ''}`} id="clear-rating">×</button>
+        </div>
+        <input type="range" id="rating-slider" min="0" max="100" step="5" list="rating-ticks"
+               value={values.rating ?? 50} />
+        <datalist id="rating-ticks">
+          {Array.from({length: 21}, (_, i) => i * 5).map(v => <option value={v} />)}
+        </datalist>
+        <div class="rating-labels">
+          {[0,10,20,30,40,50,60,70,80,90,100].map(v => <span>{v}</span>)}
+        </div>
+        <input type="hidden" name="rating" id="f-rating" value={values.rating ?? ''} />
+      </div>
+      <div style="display:flex;flex-direction:row;gap:18px;align-items:center;padding-top:18px;">
+        <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+          <input name="recommended" type="checkbox" style="width:auto" checked={isRecommended} />
+          <span>Recommended</span>
+        </label>
+        <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+          <input name="is_hidden" type="checkbox" style="width:auto" checked={isHidden} />
+          <span>Hide from public profile</span>
+        </label>
+      </div>
+    </div>
+    <div class="form-group" style="padding-bottom:18px">
+      <div id="cover-preview" style={hasCover ? '' : 'display:none'}>
+        <label>Cover Art</label>
+        <div class="cover-box">
+          <img id="cover-img" src={values.cover_url ?? ''} alt="" onerror="this.style.display='none'" />
+        </div>
+        <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
+      </div>
+      <div id="cover-upload-wrap" style={hasCover ? 'display:none' : ''}>
+        <label class="fp-label">Cover Art</label>
+        <label class="cover-file-label" for="cover-file">
+          <span id="cover-file-text">Choose image…</span>
+        </label>
+        <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
+        <span id="cover-upload-status" class="cover-upload-status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="f-notes">Notes</label>
+    <textarea id="f-notes" name="notes" rows="4"
+              placeholder="Your thoughts...">{values.notes ?? ''}</textarea>
+  </div>
+
+  <div class="form-group" style="grid-column: 1 / -1">
+    <label>
+      Tracks
+      {includeDbAlbumId && <span class="tracks-loading" id="tracks-loading" hidden> — Loading from MusicBrainz...</span>}
+    </label>
+    <div class="tracks-wrap">
+      <table class="tracks-table" id="tracks-table" hidden>
+        <thead>
+          <tr>
+            <th class="track-num">#</th>
+            <th>Title</th>
+            <th class="track-len">Length</th>
+            <th class="track-rating-cell">Rating</th>
+            <th class="track-notable-cell" title="Notable track">★</th>
+            <th>Note</th>
+            <th style="width:28px"></th>
+          </tr>
+        </thead>
+        <tbody id="tracks-tbody"></tbody>
+        <tfoot id="tracks-tfoot"></tfoot>
+      </table>
+      <button type="button" class="btn tracks-add-btn" id="add-track-btn">+ Add Track</button>
+    </div>
+    <input type="hidden" name="tracks" id="f-tracks" value={values.tracks ?? '[]'} />
+  </div>
+
+  <div style="display:flex;gap:10px;margin-top:18px">
+    <button class="btn btn-primary" type="submit">{submitLabel}</button>
+    {cancelHref
+      ? <a href={cancelHref} class="btn">Cancel</a>
+      : <button class="btn" type="button" id="cancel-btn">Cancel</button>
+    }
+  </div>
+</form>

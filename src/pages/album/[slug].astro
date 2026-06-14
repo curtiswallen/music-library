@@ -1,9 +1,9 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import Combobox from '../../components/Combobox.astro';
+import AlbumForm from '../../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
 import type { Album, UserAlbum, Track } from '../../types';
-import { slugify, generateUniqueSlug, countryCode, COUNTRIES } from '../../lib/utils';
+import { slugify, generateUniqueSlug, countryCode } from '../../lib/utils';
 
 const { slug: slugParam } = Astro.params;
 if (!slugParam) return Astro.redirect('/');
@@ -124,19 +124,6 @@ const totalAlbumLen = (() => {
   return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
            : `${m}:${String(s).padStart(2,'0')}`;
 })();
-
-const GENRES = [
-  'Black Metal', 'Death Metal', 'Black/Death', 'Doom Metal', 'Thrash Metal',
-  'Speed Metal', 'Heavy Metal', 'Power Metal', 'Progressive Metal', 'Post-Metal',
-  'Folk Metal', 'Gothic Metal', 'Grindcore', 'Industrial Metal', 'Sludge Metal',
-  'Alternative Metal', 'Metalcore', 'Deathcore', 'Stoner Rock',
-  'Rock', 'Post-Rock', 'Noise Rock', 'Shoegaze', 'Post-Punk', 'Punk',
-  'Pop', 'Country',
-  'Electronic', 'Ambient', 'Darkwave', 'Neofolk',
-  'Hip-Hop / Rap', 'R&B / Soul', 'Reggae',
-  'Jazz', 'Classical', 'Blues', 'Folk',
-  'World Music', 'Experimental',
-];
 
 function ratingClass(r: number | null) {
   if (r == null) return '';
@@ -355,209 +342,36 @@ const addedAt = album.added_at
 
   <!-- ── Edit mode ── -->
   <div class="edit-panel" id="edit-panel">
-    <form method="post">
-      <input type="hidden" name="mbid"      value={album.mbid ?? ''} />
-      <input type="hidden" name="cover_url" id="f-cover-url" value={album.cover_url ?? ''} />
-
-      <div class="form-grid">
-        <div class="form-group">
-          <label for="f-artist">Artist *</label>
-          <input id="f-artist" name="artist" type="text" required value={album.artist} />
-        </div>
-        <div class="form-group">
-          <label for="f-album">Album *</label>
-          <input id="f-album" name="album" type="text" required value={album.album} />
-        </div>
-        <div class="form-group">
-          <label for="f-year">Year</label>
-          <input id="f-year" name="year" type="number" min="1900" max="2099" value={album.year ?? ''} />
-        </div>
-        <div class="form-group">
-          <label for="f-country">Country</label>
-          <Combobox id="f-country" name="country" options={COUNTRIES.map(c => c.name)} value={album.country ?? ''} placeholder="Search country..." />
-        </div>
-        <div class="form-group">
-          <label for="f-genre">Genre</label>
-          <Combobox id="f-genre" name="genre" options={GENRES} value={album.genre ?? ''} placeholder="Search genre..." />
-        </div>
-        <div class="form-group">
-          <label>Subgenres</label>
-          <div class="subgenre-chips" id="subgenre-chips"></div>
-          <input type="hidden" name="subgenres" id="f-subgenres" value={subgenres.join(', ')} />
-        </div>
-        <div class="form-group">
-          <label>Rating</label>
-          <div class="rating-slider-wrap">
-            <div class="rating-slider-top">
-              <span class="rating-current" id="rating-val">{album.rating ?? '—'}</span>
-              <span class="rating-desc" id="rating-desc"></span>
-              <button type="button" class={`clear-rating-btn${album.rating != null ? ' visible' : ''}`} id="clear-rating">×</button>
-            </div>
-            <input type="range" id="rating-slider" min="0" max="100" step="5" list="rating-ticks"
-                   value={album.rating ?? 50} />
-            <datalist id="rating-ticks">
-              {Array.from({length: 21}, (_, i) => i * 5).map(v => <option value={v} />)}
-            </datalist>
-            <div class="rating-labels">
-              {[0,10,20,30,40,50,60,70,80,90,100].map(v => <span>{v}</span>)}
-            </div>
-            <input type="hidden" name="rating" id="f-rating" value={album.rating ?? ''} />
-          </div>
-          <div style="display:flex;flex-direction:row;gap:18px;align-items:center;padding-top:18px;">
-            <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
-              <input name="recommended" type="checkbox" style="width:auto" checked={album.recommended === 1} />
-              <span>Recommended</span>
-            </label>
-            <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
-              <input name="is_hidden" type="checkbox" style="width:auto;" checked={album.is_hidden === 1} />
-              <span>Hide from public profile</span>
-            </label>
-          </div>
-        </div>
-        <div class="form-group" style="padding-bottom:18px">
-          <div id="cover-preview" style={album.cover_url ? '' : 'display:none'}>
-            <label>Cover Art</label>
-            <div class="cover-box">
-              <img id="cover-img" src={album.cover_url ?? ''} alt="" onerror="this.style.display='none'" />
-            </div>
-            <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
-          </div>
-          <div id="cover-upload-wrap" style={album.cover_url ? 'display:none' : ''}>
-            <label class="fp-label">Cover Art</label>
-            <label class="cover-file-label" for="cover-file">
-              <span id="cover-file-text">Choose image…</span>
-            </label>
-            <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
-            <span id="cover-upload-status" class="cover-upload-status"></span>
-          </div>
-        </div>
-        
-      </div>
-
-      <div class="form-group">
-        <label for="f-notes">Notes</label>
-        <textarea id="f-notes" name="notes" rows="4">{album.notes}</textarea>
-      </div>
-
-      <div class="form-group" style="grid-column: 1 / -1">
-        <label>Tracks</label>
-        <div class="tracks-wrap">
-          <table class="tracks-table" id="tracks-table">
-            <thead>
-              <tr>
-                <th class="track-num">#</th>
-                <th>Title</th>
-                <th class="track-len">Length</th>
-                <th class="track-rating-cell">Rating</th>
-                <th class="track-notable-cell" title="Notable track">★</th>
-                <th>Note</th>
-                <th style="width:28px"></th>
-              </tr>
-            </thead>
-            <tbody id="tracks-tbody"></tbody>
-            <tfoot id="tracks-tfoot"></tfoot>
-          </table>
-          <button type="button" class="btn tracks-add-btn" id="add-track-btn">+ Add Track</button>
-        </div>
-        <input type="hidden" name="tracks" id="f-tracks" value={JSON.stringify(albumTracks)} />
-      </div>
-
-      
-
-      <div style="display:flex;gap:10px;margin-top:18px">
-        <button class="btn btn-primary" type="submit">Save Changes</button>
-        <button class="btn" type="button" id="cancel-btn">Cancel</button>
-      </div>
-    </form>
+    <AlbumForm
+      values={{
+        mbid:        album.mbid,
+        artist:      album.artist,
+        album:       album.album,
+        year:        album.year,
+        country:     album.country,
+        genre:       album.genre,
+        subgenres,
+        rating:      album.rating,
+        notes:       album.notes,
+        cover_url:   album.cover_url,
+        tracks:      JSON.stringify(albumTracks),
+        recommended: album.recommended,
+        is_hidden:   album.is_hidden,
+      }}
+      submitLabel="Save Changes"
+    />
   </div>
 </Layout>
 
 <script>
-import { initCoverUpload } from '../../lib/cover-upload';
+import { initAlbumForm } from '../../lib/album-form';
 
-// ── Track management ─────────────────────────────────────────────────────────
-interface TrackData { pos: number; title: string; length: number | null; rating: number | null; notable?: boolean; note: string; }
-
-let tracks: TrackData[] = [];
-try { tracks = JSON.parse((document.getElementById('f-tracks') as HTMLInputElement).value || '[]'); } catch {}
-
-function clientFmtLen(s: number | null): string {
-  if (s == null) return '';
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-function parseLenInput(v: string): number | null {
-  const m = v.match(/^(\d+):(\d{1,2})$/);
-  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
-}
-function totalLen(ts: TrackData[]): string {
-  const t = ts.reduce((s, t) => s + (t.length ?? 0), 0);
-  if (!t) return '';
-  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
-}
-function saveTracks() {
-  (document.getElementById('f-tracks') as HTMLInputElement).value =
-    JSON.stringify(tracks.map((t, i) => ({ ...t, pos: i + 1 })));
-}
-const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100];
-
-function renderTracks() {
-  const tbody = document.getElementById('tracks-tbody') as HTMLTableSectionElement;
-  const tfoot = document.getElementById('tracks-tfoot') as HTMLTableSectionElement;
-  const table = document.getElementById('tracks-table') as HTMLTableElement;
-  if (!tbody) return;
-  table.hidden = false;
-  tbody.innerHTML = tracks.map((t, i) => `
-    <tr>
-      <td class="track-num">${i + 1}</td>
-      <td><input class="track-title-input ti" type="text" value="${esc(t.title)}" data-i="${i}" data-f="title"></td>
-      <td class="track-len"><input class="track-len-input ti" type="text" value="${clientFmtLen(t.length)}" placeholder="m:ss" data-i="${i}" data-f="length"></td>
-      <td class="track-rating-cell">
-        <select class="track-rating-input ti" data-i="${i}" data-f="rating">
-          <option value="">—</option>
-          ${RATING_OPTS.map(v => `<option value="${v}"${t.rating === v ? ' selected' : ''}>${v}</option>`).join('')}
-        </select>
-      </td>
-      <td class="track-notable-cell">
-        <input type="checkbox" class="ti" data-i="${i}" data-f="notable"${t.notable ? ' checked' : ''}>
-      </td>
-      <td><input class="track-note-input ti" type="text" value="${esc(t.note)}" placeholder="Note..." data-i="${i}" data-f="note"></td>
-      <td><button type="button" class="track-remove-btn" data-i="${i}">×</button></td>
-    </tr>
-  `).join('');
-  const tot = totalLen(tracks);
-  tfoot.innerHTML = tot
-    ? `<tr class="tracks-total-row"><td class="track-num"></td><td></td><td class="track-len tracks-total">${tot}</td><td colspan="4"></td></tr>`
-    : '';
-  tbody.querySelectorAll<HTMLElement>('.ti').forEach(el => {
-    el.addEventListener('change', () => {
-      const inp = el as HTMLInputElement;
-      const i = parseInt(inp.dataset.i!), f = inp.dataset.f!;
-      if      (f === 'title')   tracks[i].title   = inp.value;
-      else if (f === 'length')  tracks[i].length  = parseLenInput(inp.value);
-      else if (f === 'rating')  tracks[i].rating  = inp.value ? parseInt(inp.value) : null;
-      else if (f === 'notable') tracks[i].notable = inp.checked;
-      else if (f === 'note')    tracks[i].note    = inp.value;
-      if (f === 'length') renderTracks();
-      else saveTracks();
-    });
-  });
-  tbody.querySelectorAll<HTMLButtonElement>('.track-remove-btn').forEach(btn => {
-    btn.addEventListener('click', () => { tracks.splice(parseInt(btn.dataset.i!), 1); renderTracks(); });
-  });
-  saveTracks();
-}
-document.getElementById('add-track-btn')!.addEventListener('click', () => {
-  tracks.push({ pos: tracks.length + 1, title: '', length: null, rating: null, note: '' });
-  renderTracks();
-});
+initAlbumForm();
 
 // ── View / edit toggle ───────────────────────────────────────────────────────
 document.getElementById('edit-btn')!.addEventListener('click', () => {
   document.getElementById('view-panel')!.classList.add('hidden');
   document.getElementById('edit-panel')!.classList.add('visible');
-  renderSubgenreWidget();
-  renderTracks();
 });
 document.getElementById('cancel-btn')!.addEventListener('click', () => {
   document.getElementById('edit-panel')!.classList.remove('visible');
@@ -572,128 +386,6 @@ document.getElementById('delete-btn')?.addEventListener('click', async e => {
   window.location.href = '/';
 });
 
-// ── Subgenre map ────────────────────────────────────────────────────────────
-const SUBGENRE_MAP: Record<string, string[]> = {
-  'Black Metal':       ['Sketchy', 'Melodic', 'Raw', 'Atmospheric', 'Symphonic', 'Depressive', 'Folk', 'Viking', 'Pagan', 'Ambient', 'Industrial', 'Blackgaze'],
-  'Death Metal':       ['Technical', 'Brutal', 'Melodic', 'Death/Doom', 'Progressive', 'Blackened', 'Slam', 'Deathgrind', 'Old School'],
-  'Black/Death':       ['Blackened', 'War Metal', 'Bestial', 'Blasphemic'],
-  'Doom Metal':        ['Traditional', 'Funeral', 'Atmospheric', 'Sludge', 'Stoner', 'Death/Doom', 'Gothic', 'Epic', 'Drone'],
-  'Thrash Metal':      ['Bay Area', 'German', 'Technical', 'Crossover', 'Blackened', 'Speed'],
-  'Speed Metal':       ['NWOBHM', 'Thrash-Adjacent', 'Heavy/Speed', 'Power/Speed'],
-  'Heavy Metal':       ['NWOBHM', 'Traditional', 'Epic', 'Speed', 'Power'],
-  'Power Metal':       ['Symphonic', 'Progressive', 'Folk', 'Epic', 'Speed'],
-  'Progressive Metal': ['Djent', 'Technical', 'Atmospheric', 'Jazz-Influenced', 'Math Metal'],
-  'Post-Metal':        ['Atmospheric', 'Sludge', 'Post-Rock Influenced'],
-  'Folk Metal':        ['Pagan', 'Viking', 'Celtic', 'Medieval'],
-  'Gothic Metal':      ['Doom/Gothic', 'Symphonic', 'Romantic'],
-  'Grindcore':         ['Goregrind', 'Powerviolence', 'Noisecore', 'Death-Grind'],
-  'Industrial Metal':  ['Electronic', 'EBM', 'Noise'],
-  'Sludge Metal':      ['Stoner', 'Post-Metal', 'Southern'],
-  'Alternative Metal': ['Nu-Metal', 'Groove', 'Post-Grunge'],
-  'Metalcore':         ['Melodic', 'Post-Hardcore', 'Mathcore'],
-  'Deathcore':         ['Slam', 'Brutal', 'Melodic', 'Technical'],
-  'Stoner Rock':       ['Psychedelic', 'Fuzz', 'Desert Rock', 'Southern'],
-  'Rock':              ['Classic', 'Hard Rock', 'Garage', 'Psychedelic', 'Art Rock', 'Indie', 'Alternative'],
-  'Post-Rock':         ['Instrumental', 'Atmospheric', 'Post-Metal Adjacent', 'Cinematic'],
-  'Noise Rock':        ['No Wave', 'Sludge', 'Experimental', 'Post-Punk Adjacent'],
-  'Shoegaze':          ['Dream Pop', 'Blackgaze', 'Lo-Fi', 'Neo-Shoegaze'],
-  'Post-Punk':         ['Darkwave', 'Cold Wave', 'Goth Rock', 'New Wave', 'Proto-Punk'],
-  'Punk':              ['Hardcore', 'Anarcho', 'Crust', 'Oi!', 'Street Punk', 'D-Beat'],
-  'Electronic':        ['Ambient', 'Industrial', 'EBM', 'Dark Electro', 'Synthwave', 'Noise', 'IDM'],
-  'Ambient':           ['Dark Ambient', 'Drone', 'Isolationism', 'Post-Industrial', 'New Age'],
-  'Darkwave':          ['Ethereal', 'Coldwave', 'Goth Rock', 'Neoclassical', 'Industrial'],
-  'Neofolk':           ['Apocalyptic Folk', 'Dark Folk', 'Folk Noir', 'Military Pop'],
-  'Pop':             ['Indie Pop', 'Synth-Pop', 'Art Pop', 'Chamber Pop', 'Dream Pop', 'Electropop', 'Baroque Pop', 'Folk Pop'],
-  'Country':         ['Alt-Country', 'Outlaw', 'Bluegrass', 'Americana', 'Classic Country', 'Folk Country', 'Cowpunk'],
-  'Hip-Hop / Rap':   ['East Coast', 'West Coast', 'Conscious', 'Trap', 'Boom Bap', 'Southern', 'Alternative', 'Horrorcore'],
-  'R&B / Soul':      ['Classic Soul', 'Neo-Soul', 'Funk', 'Gospel', 'Contemporary R&B', 'Motown'],
-  'Reggae':          ['Roots', 'Dancehall', 'Ska', 'Dub', 'Rocksteady'],
-  'Jazz':            ['Bebop', 'Free Jazz', 'Fusion', 'Hard Bop', 'Modal', 'Post-Bop', 'Cool Jazz', 'Big Band', 'Avant-Garde'],
-  'Classical':       ['Baroque', 'Romantic', 'Contemporary', 'Minimalist', 'Chamber', 'Symphony'],
-  'Blues':           ['Delta', 'Chicago', 'Electric', 'Country Blues', 'Boogie'],
-  'Folk':            ['Singer-Songwriter', 'Freak Folk', 'Indie Folk', 'Celtic', 'Americana'],
-  'World Music':     ['African', 'Latin', 'Caribbean', 'Afrobeat', 'Celtic', 'Middle Eastern', 'Asian'],
-  'Experimental':    ['Avant-Garde', 'Noise', 'Musique Concrète', 'Free Improvisation', 'Electroacoustic'],
-};
-
-function getKnownSubs(genre: string): string[] {
-  const key = Object.keys(SUBGENRE_MAP).find(
-    k => k.toLowerCase() === genre.trim().toLowerCase()
-  );
-  return key ? SUBGENRE_MAP[key] : [];
-}
-
-let selectedSubs: string[] = [];
-
-function renderSubgenreWidget() {
-  const genre  = (document.getElementById('f-genre') as HTMLInputElement).value;
-  const known  = getKnownSubs(genre);
-  const chips  = document.getElementById('subgenre-chips')!;
-  const hidden = document.getElementById('f-subgenres') as HTMLInputElement;
-
-  chips.innerHTML = known.map(s => {
-    const active = selectedSubs.includes(s);
-    return `<button type="button" class="subgenre-chip${active ? ' active' : ''}" data-sub="${esc(s)}">${esc(s)}</button>`;
-  }).join('');
-  chips.querySelectorAll<HTMLButtonElement>('.subgenre-chip').forEach(btn => {
-    btn.addEventListener('click', () => toggleSub(btn.dataset.sub!));
-  });
-  hidden.value = selectedSubs.join(', ');
-}
-
-function toggleSub(s: string) {
-  selectedSubs = selectedSubs.includes(s)
-    ? selectedSubs.filter(x => x !== s)
-    : [...selectedSubs, s];
-  renderSubgenreWidget();
-}
-
-document.getElementById('f-genre')!.addEventListener('change', () => {
-  selectedSubs = [];
-  renderSubgenreWidget();
-});
-
-const initial = (document.getElementById('f-subgenres') as HTMLInputElement).value;
-selectedSubs = initial.split(',').map(s => s.trim()).filter(Boolean);
-
-function esc(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-// ── Rating slider ─────────────────────────────────────────────────────────────
-const RATING_SCALE: Record<number, string> = {
-  100: 'Masterpiece / Perfect',  90: 'Amazing / Fantastic',
-   80: 'Great / Excellent',       70: 'Very Good / Solid',
-   60: 'Good / Serviceable',      50: 'Decent / Mixed Opinion',
-   40: 'Acceptable / Unremarkable', 30: 'Mediocre / Poor',
-   20: 'Bad / Terrible',          10: 'Abysmal / Worthless',
-};
-function getRatingDesc(v: number) {
-  return RATING_SCALE[v === 100 ? 100 : Math.floor(v / 10) * 10] ?? '';
-}
-
-const ratingSlider   = document.getElementById('rating-slider') as HTMLInputElement;
-const ratingHidden   = document.getElementById('f-rating') as HTMLInputElement;
-const ratingVal      = document.getElementById('rating-val') as HTMLSpanElement;
-const ratingDesc     = document.getElementById('rating-desc') as HTMLSpanElement;
-const clearRatingBtn = document.getElementById('clear-rating') as HTMLButtonElement;
-
-ratingSlider.addEventListener('input', () => {
-  const v = parseInt(ratingSlider.value);
-  ratingVal.textContent  = String(v);
-  ratingDesc.textContent = getRatingDesc(v);
-  ratingHidden.value     = String(v);
-  clearRatingBtn.classList.add('visible');
-});
-clearRatingBtn.addEventListener('click', () => {
-  ratingHidden.value     = '';
-  ratingVal.textContent  = '—';
-  ratingDesc.textContent = '';
-  ratingSlider.value     = '50';
-  clearRatingBtn.classList.remove('visible');
-});
-if (ratingHidden.value) ratingDesc.textContent = getRatingDesc(parseInt(ratingHidden.value));
-
 // ── Clickable related-album rows ─────────────────────────────────────────────
 document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
   tr.addEventListener('click', e => {
@@ -701,6 +393,4 @@ document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
     window.location.href = tr.dataset.href!;
   });
 });
-
-initCoverUpload();
 </script>

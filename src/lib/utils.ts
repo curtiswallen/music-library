@@ -30,6 +30,28 @@ export async function generateUniqueSlug(
   }
 }
 
+export const GENRES: string[] = [
+  // Metal
+  'Black Metal', 'Death Metal', 'Black/Death', 'Doom Metal', 'Thrash Metal',
+  'Speed Metal', 'Heavy Metal', 'Power Metal', 'Progressive Metal', 'Post-Metal',
+  'Folk Metal', 'Gothic Metal', 'Grindcore', 'Industrial Metal', 'Sludge Metal',
+  'Alternative Metal', 'Metalcore', 'Deathcore', 'Stoner Rock',
+  // Rock & adjacent
+  'Rock', 'Post-Rock', 'Noise Rock', 'Shoegaze', 'Post-Punk', 'Punk',
+  // Pop
+  'Pop',
+  // Country & Americana
+  'Country',
+  // Electronic & dark
+  'Electronic', 'Ambient', 'Darkwave', 'Neofolk',
+  // Hip-hop, R&B, Reggae
+  'Hip-Hop / Rap', 'R&B / Soul', 'Reggae',
+  // Jazz & classical
+  'Jazz', 'Classical', 'Blues', 'Folk',
+  // Catch-all
+  'World Music', 'Experimental',
+];
+
 // Sorted alphabetically by name.
 export const COUNTRIES: Array<{ code: string; name: string }> = [
   { code: 'AF', name: 'Afghanistan' },
