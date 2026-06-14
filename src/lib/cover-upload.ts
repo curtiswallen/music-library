@@ -38,10 +38,12 @@ export function initCoverUpload() {
     try {
       const url = await uploadCover(file);
       (document.getElementById('f-cover-url') as HTMLInputElement).value = url;
+      img.onload = () => {
+        preview.style.display    = 'block';
+        uploadWrap.style.display = 'none';
+        statusEl.textContent     = '';
+      };
       img.src = url;
-      preview.style.display    = 'block';
-      uploadWrap.style.display = 'none';
-      statusEl.textContent     = '';
     } catch {
       statusEl.textContent = 'Upload failed.';
       statusEl.className   = 'cover-upload-status error';
