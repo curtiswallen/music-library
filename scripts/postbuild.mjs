@@ -15,6 +15,7 @@ const cfg = JSON.parse(readFileSync(wranglerPath, 'utf8'));
 const REMOVE = [
   'assets', 'images', 'kv_namespaces', 'previews',
   'main', 'rules', 'pages_build_output_dir',
+  'vars',
   'configPath', 'userConfigPath', 'topLevelName',
   'definedEnvironments', 'legacy_env',
   'jsx_factory', 'jsx_fragment', 'no_bundle',
@@ -30,6 +31,9 @@ const REMOVE = [
 ];
 
 for (const key of REMOVE) delete cfg[key];
+
+// Tell Pages where to find the static files (relative to dist/server/)
+cfg.pages_build_output_dir = '../client';
 
 writeFileSync(wranglerPath, JSON.stringify(cfg, null, 2));
 
