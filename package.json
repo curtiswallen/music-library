@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "postbuild": "node -e \"var f='dist/server/wrangler.json',o=JSON.parse(require('fs').readFileSync(f,'utf8')),keep=['name','compatibility_date','compatibility_flags','d1_databases','vars'],o2={};keep.forEach(function(k){if(o[k]!==undefined)o2[k]=o[k];});require('fs').writeFileSync(f,JSON.stringify(o2,null,2));\"",
+    "postbuild": "node scripts/postbuild.mjs",
     "preview": "astro preview",
     "astro": "astro",
     "db:migrate:local": "wrangler d1 execute music-library --local --file=./schema.sql",
