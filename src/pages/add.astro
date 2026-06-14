@@ -8,10 +8,12 @@ const user = Astro.locals.user!;
 const db   = env.DB;
 
 if (Astro.request.method === 'POST') {
-  const data    = await Astro.request.formData();
-  const artist  = (data.get('artist') as string) || '';
-  const album   = (data.get('album') as string) || '';
-  const mbid    = (data.get('mbid') as string) || null;
+  const data      = await Astro.request.formData();
+  const artist    = (data.get('artist') as string) || '';
+  const album     = (data.get('album') as string) || '';
+  const mbid      = (data.get('mbid') as string) || null;
+  const dbAlbumId = (data.get('db_album_id') as string)
+    ? parseInt(data.get('db_album_id') as string) : null;
 
   const subgenres = JSON.stringify(
     ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean)
@@ -28,26 +30,64 @@ if (Astro.request.method === 'POST') {
     pos: t.pos, rating: t.rating ?? null, notable: t.notable ?? false, note: t.note ?? '',
   })));
 
-  const slug = await generateUniqueSlug(db, artist, album);
+  let albumId: number;
+  let albumSlug: string;
 
-  const result = await db.prepare(`
-    INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    mbid,
-    slug,
-    artist,
-    album,
-    (data.get('country') as string) || '',
-    data.get('year') ? parseInt(data.get('year') as string) : null,
-    (data.get('cover_url') as string) || null,
-    canonicalTracks,
-  ).run();
+  if (dbAlbumId) {
+    // Reuse an existing album record (user picked a result already in our DB)
+    const existing = await db.prepare('SELECT id, slug FROM albums WHERE id = ?')
+      .bind(dbAlbumId).first<{ id: number; slug: string }>();
+    if (!existing) return new Response('Album not found', { status: 404 });
+    albumId   = existing.id;
+    albumSlug = existing.slug;
+  } else if (mbid) {
+    // Deduplicate by MBID — another user may have added this album already
+    const existing = await db.prepare('SELECT id, slug FROM albums WHERE mbid = ?')
+      .bind(mbid).first<{ id: number; slug: string }>();
+    if (existing) {
+      albumId   = existing.id;
+      albumSlug = existing.slug;
+    } else {
+      albumSlug = await generateUniqueSlug(db, artist, album);
+      const r = await db.prepare(`
+        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        mbid, albumSlug, artist, album,
+        (data.get('country') as string) || '',
+        data.get('year') ? parseInt(data.get('year') as string) : null,
+        (data.get('cover_url') as string) || null,
+        canonicalTracks,
+      ).run();
+      albumId = r.meta.last_row_id as number;
+    }
+  } else {
+    // Manual entry — deduplicate by artist+album (case-insensitive)
+    const existing = await db.prepare(
+      'SELECT id, slug FROM albums WHERE LOWER(artist) = LOWER(?) AND LOWER(album) = LOWER(?)'
+    ).bind(artist, album).first<{ id: number; slug: string }>();
+    if (existing) {
+      albumId   = existing.id;
+      albumSlug = existing.slug;
+    } else {
+      albumSlug = await generateUniqueSlug(db, artist, album);
+      const r = await db.prepare(`
+        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        null, albumSlug, artist, album,
+        (data.get('country') as string) || '',
+        data.get('year') ? parseInt(data.get('year') as string) : null,
+        (data.get('cover_url') as string) || null,
+        canonicalTracks,
+      ).run();
+      albumId = r.meta.last_row_id as number;
+    }
+  }
 
-  const albumId = result.meta.last_row_id as number;
-
+  // Insert into user's library (IGNORE if they somehow already have it)
   await db.prepare(`
-    INSERT INTO user_albums (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended)
+    INSERT OR IGNORE INTO user_albums (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
@@ -60,7 +100,7 @@ if (Astro.request.method === 'POST') {
     data.get('recommended') === 'on' ? 1 : 0,
   ).run();
 
-  return Astro.redirect(`/album/${slug}`);
+  return Astro.redirect(`/album/${albumSlug}`);
 }
 
 const GENRES = [
@@ -104,8 +144,9 @@ const GENRES = [
   </div>
 
   <form method="post" id="album-form">
-    <input type="hidden" name="mbid"      id="f-mbid" />
-    <input type="hidden" name="cover_url" id="f-cover-url" />
+    <input type="hidden" name="mbid"        id="f-mbid" />
+    <input type="hidden" name="db_album_id" id="f-db-album-id" />
+    <input type="hidden" name="cover_url"   id="f-cover-url" />
 
     <div class="form-grid">
       <div class="form-group">
@@ -226,6 +267,10 @@ interface MBResult {
   year: string;
   tags: string[];
   coverUrl: string;
+  dbId?: number;
+  country?: string;
+  fromDb?: boolean;
+  dbTracks?: Array<{ pos: number; title: string; length: number | null }>;
 }
 
 // ── Subgenre map ────────────────────────────────────────────────────────────
@@ -354,7 +399,7 @@ function renderResults(items: MBResult[]) {
       </div>
       <div class="mb-info">
         <strong>${esc(r.title)}</strong>
-        <span>${esc(r.artist)}${r.year ? ' · ' + r.year : ''}</span>
+        <span>${esc(r.artist)}${r.year ? ' · ' + r.year : ''}${r.fromDb ? ' <span class="mb-db-badge">in library</span>' : ''}</span>
       </div>
     </div>
   `).join('');
@@ -440,7 +485,8 @@ document.getElementById('add-track-btn')!.addEventListener('click', () => {
 });
 
 function pick(r: MBResult) {
-  set('f-mbid',   r.mbid);
+  set('f-mbid',        r.mbid ?? '');
+  set('f-db-album-id', r.dbId ? String(r.dbId) : '');
   set('f-artist', r.artist);
   set('f-album',  r.title);
   set('f-year',   r.year);
@@ -448,24 +494,31 @@ function pick(r: MBResult) {
 
   if (r.tags?.length) resolveGenre(r.tags[0]);
 
-  // Async: fetch artist country
-  if (r.artistId) {
+  // Country: DB results already have it; MB results need an artist lookup
+  if (r.country) {
+    set('f-country', r.country);
+  } else if (r.artistId) {
     fetch(`/api/musicbrainz-artist?id=${encodeURIComponent(r.artistId)}`)
       .then(res => res.json())
       .then(data => { const d = data as { country: string }; if (d.country) set('f-country', d.country); })
       .catch(() => {});
   }
 
-  // Async: fetch tracklist
-  const loadingEl = document.getElementById('tracks-loading') as HTMLElement;
-  loadingEl.hidden = false;
-  tracks = [];
-  renderTracks();
-  fetch(`/api/musicbrainz-release?id=${encodeURIComponent(r.mbid)}`)
-    .then(res => res.json())
-    .then(data => { tracks = data as TrackData[]; renderTracks(); })
-    .catch(() => {})
-    .finally(() => { loadingEl.hidden = true; });
+  // Tracklist: use DB tracks if available; otherwise fetch from MusicBrainz by mbid
+  if (r.dbTracks?.length && !r.mbid) {
+    tracks = r.dbTracks.map(t => ({ pos: t.pos, title: t.title, length: t.length, rating: null, notable: false, note: '' }));
+    renderTracks();
+  } else if (r.mbid) {
+    const loadingEl = document.getElementById('tracks-loading') as HTMLElement;
+    loadingEl.hidden = false;
+    tracks = [];
+    renderTracks();
+    fetch(`/api/musicbrainz-release?id=${encodeURIComponent(r.mbid)}`)
+      .then(res => res.json())
+      .then(data => { tracks = data as TrackData[]; renderTracks(); })
+      .catch(() => {})
+      .finally(() => { loadingEl.hidden = true; });
+  }
 
   // Cover art — show preview if URL loads; fall back to upload section
   const coverPreview    = document.getElementById('cover-preview')    as HTMLElement;

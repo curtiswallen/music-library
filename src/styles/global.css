@@ -320,6 +320,16 @@ tr:hover td { background: var(--bg-hover); }
 }
 .mb-info strong { display: block; font-size: 13px; }
 .mb-info span { font-size: 12px; color: var(--text-muted); }
+.mb-db-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 10px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent-hi);
+  vertical-align: middle;
+}
 
 .mb-empty { padding: 14px 12px; color: var(--text-muted); font-size: 12px; }
 
