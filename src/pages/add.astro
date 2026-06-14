@@ -190,11 +190,20 @@ const GENRES = [
       <input type="hidden" name="tracks" id="f-tracks" value="[]" />
     </div>
 
-    <div class="cover-preview" id="cover-preview">
+    <div id="cover-preview" style="display:none">
       <label>Cover Art</label>
-      <div class="cover-box" id="cover-box">
+      <div class="cover-box">
         <img id="cover-img" src="" alt="" />
       </div>
+      <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
+    </div>
+    <div id="cover-upload-wrap">
+      <label class="fp-label">Cover Art</label>
+      <label class="cover-file-label" for="cover-file">
+        <span id="cover-file-text">Choose image to upload…</span>
+      </label>
+      <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
+      <span id="cover-upload-status" class="cover-upload-status"></span>
     </div>
 
     <div style="display:flex;gap:10px;margin-top:8px">
@@ -206,6 +215,8 @@ const GENRES = [
 </Layout>
 
 <script>
+import { initCoverUpload } from '../lib/cover-upload';
+
 // ── Types ──────────────────────────────────────────────────────────────────
 interface MBResult {
   mbid: string;
@@ -456,14 +467,27 @@ function pick(r: MBResult) {
     .catch(() => {})
     .finally(() => { loadingEl.hidden = true; });
 
-  // Cover art — show preview; black box if image 404s
-  const img     = document.getElementById('cover-img') as HTMLImageElement;
-  const preview = document.getElementById('cover-preview') as HTMLDivElement;
-  preview.style.display = 'block';
-  img.style.display = 'block';
-  img.onload  = () => { set('f-cover-url', r.coverUrl); };
-  img.onerror = () => { img.style.display = 'none'; set('f-cover-url', ''); };
-  img.src = r.coverUrl;
+  // Cover art — show preview if URL loads; fall back to upload section
+  const coverPreview    = document.getElementById('cover-preview')    as HTMLElement;
+  const coverUploadWrap = document.getElementById('cover-upload-wrap') as HTMLElement;
+  const img             = document.getElementById('cover-img')        as HTMLImageElement;
+  if (r.coverUrl) {
+    img.onload  = () => {
+      set('f-cover-url', r.coverUrl);
+      coverPreview.style.display    = 'block';
+      coverUploadWrap.style.display = 'none';
+    };
+    img.onerror = () => {
+      set('f-cover-url', '');
+      coverPreview.style.display    = 'none';
+      coverUploadWrap.style.display = '';
+    };
+    img.src = r.coverUrl;
+  } else {
+    set('f-cover-url', '');
+    coverPreview.style.display    = 'none';
+    coverUploadWrap.style.display = '';
+  }
 
   closeResults();
 }
@@ -553,4 +577,6 @@ clearRatingBtn.addEventListener('click', () => {
   ratingSlider.value     = '50';
   clearRatingBtn.classList.remove('visible');
 });
+
+initCoverUpload();
 </script>

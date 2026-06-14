@@ -444,14 +444,21 @@ const addedAt = album.added_at
         <input type="hidden" name="tracks" id="f-tracks" value={JSON.stringify(albumTracks)} />
       </div>
 
-      {album.cover_url && (
-        <div class="cover-preview" style="display:block">
-          <label>Cover Art</label>
-          <div class="cover-box">
-            <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
-          </div>
+      <div id="cover-preview" style={album.cover_url ? '' : 'display:none'}>
+        <label>Cover Art</label>
+        <div class="cover-box">
+          <img id="cover-img" src={album.cover_url ?? ''} alt="" onerror="this.style.display='none'" />
         </div>
-      )}
+        <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
+      </div>
+      <div id="cover-upload-wrap" style={album.cover_url ? 'display:none' : ''}>
+        <label class="fp-label">Cover Art</label>
+        <label class="cover-file-label" for="cover-file">
+          <span id="cover-file-text">Choose image to upload…</span>
+        </label>
+        <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
+        <span id="cover-upload-status" class="cover-upload-status"></span>
+      </div>
 
       <div style="display:flex;gap:10px;margin-top:8px">
         <button class="btn btn-primary" type="submit">Save Changes</button>
@@ -462,6 +469,8 @@ const addedAt = album.added_at
 </Layout>
 
 <script>
+import { initCoverUpload } from '../../lib/cover-upload';
+
 // ── Track management ─────────────────────────────────────────────────────────
 interface TrackData { pos: number; title: string; length: number | null; rating: number | null; notable?: boolean; note: string; }
 
@@ -688,4 +697,6 @@ document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
     window.location.href = tr.dataset.href!;
   });
 });
+
+initCoverUpload();
 </script>

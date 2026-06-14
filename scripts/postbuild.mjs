@@ -31,7 +31,7 @@ const REMOVE = [
   'definedEnvironments', 'legacy_env',
   'jsx_factory', 'jsx_fragment', 'no_bundle',
   'triggers', 'durable_objects', 'workflows', 'migrations',
-  'cloudchamber', 'send_email', 'queues', 'r2_buckets',
+  'cloudchamber', 'send_email', 'queues',
   'vectorize', 'ai_search_namespaces', 'ai_search',
   'agent_memory', 'hyperdrive', 'services',
   'analytics_engine_datasets', 'dispatch_namespaces',

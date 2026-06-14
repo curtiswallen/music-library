@@ -4,6 +4,8 @@
 declare namespace Cloudflare {
   interface Env {
     DB: D1Database;
+    COVERS: R2Bucket;
+    COVERS_PUBLIC_URL: string;
     GOOGLE_CLIENT_ID: string;
     GOOGLE_CLIENT_SECRET: string;
     /** Comma-separated list of emails allowed to sign in */
