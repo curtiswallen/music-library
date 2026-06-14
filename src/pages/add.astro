@@ -87,8 +87,8 @@ if (Astro.request.method === 'POST') {
 
   // Insert into user's library (IGNORE if they somehow already have it)
   await db.prepare(`
-    INSERT OR IGNORE INTO user_albums (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO user_albums (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
     albumId,
@@ -98,6 +98,7 @@ if (Astro.request.method === 'POST') {
     (data.get('notes') as string) || '',
     tracksData,
     data.get('recommended') === 'on' ? 1 : 0,
+    data.get('is_hidden') === 'on' ? 1 : 0,
   ).run();
 
   return Astro.redirect(`/album/${albumSlug}`);
@@ -191,12 +192,33 @@ const GENRES = [
           </div>
           <input type="hidden" name="rating" id="f-rating" />
         </div>
+        <div style="display:flex;flex-direction:row;gap:18px;align-items:center;padding-top:18px;">
+          <label style="display: flex; flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+            <input id="f-recommended" name="recommended" type="checkbox" style="width:auto" />
+            Recommended
+          </label>
+          <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+            <input name="is_hidden" type="checkbox" style="width:auto" />
+            Hide from public profile
+          </label>
+        </div>
       </div>
-      <div class="form-group" style="justify-content:flex-end;padding-bottom:18px">
-        <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
-          <input id="f-recommended" name="recommended" type="checkbox" style="width:auto" />
-          Recommended
-        </label>
+      <div class="form-group" style="padding-bottom:18px">
+        <div id="cover-preview" style="display:none">
+          <label>Cover Art</label>
+          <div class="cover-box">
+            <img id="cover-img" src="" alt="" />
+          </div>
+          <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
+        </div>
+        <div id="cover-upload-wrap">
+          <label class="fp-label">Cover Art</label>
+          <label class="cover-file-label" for="cover-file">
+            <span id="cover-file-text">Choose image…</span>
+          </label>
+          <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
+          <span id="cover-upload-status" class="cover-upload-status"></span>
+        </div>
       </div>
     </div>
 
@@ -231,23 +253,7 @@ const GENRES = [
       <input type="hidden" name="tracks" id="f-tracks" value="[]" />
     </div>
 
-    <div id="cover-preview" style="display:none">
-      <label>Cover Art</label>
-      <div class="cover-box">
-        <img id="cover-img" src="" alt="" />
-      </div>
-      <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
-    </div>
-    <div id="cover-upload-wrap">
-      <label class="fp-label">Cover Art</label>
-      <label class="cover-file-label" for="cover-file">
-        <span id="cover-file-text">Choose image to upload…</span>
-      </label>
-      <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
-      <span id="cover-upload-status" class="cover-upload-status"></span>
-    </div>
-
-    <div style="display:flex;gap:10px;margin-top:8px">
+    <div style="display:flex;gap:10px;margin-top:18px">
       <button class="btn btn-primary" type="submit">Save Album</button>
       <a href="/" class="btn">Cancel</a>
     </div>

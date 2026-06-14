@@ -403,17 +403,35 @@ const addedAt = album.added_at
             </div>
             <input type="hidden" name="rating" id="f-rating" value={album.rating ?? ''} />
           </div>
+          <div style="display:flex;flex-direction:row;gap:18px;align-items:center;padding-top:18px;">
+            <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+              <input name="recommended" type="checkbox" style="width:auto" checked={album.recommended === 1} />
+              <span>Recommended</span>
+            </label>
+            <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+              <input name="is_hidden" type="checkbox" style="width:auto;" checked={album.is_hidden === 1} />
+              <span>Hide from public profile</span>
+            </label>
+          </div>
         </div>
-        <div class="form-group" style="justify-content:flex-end;padding-bottom:18px">
-          <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
-            <input name="recommended" type="checkbox" style="width:auto" checked={album.recommended === 1} />
-            Recommended
-          </label>
-          <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer;margin-top:8px">
-            <input name="is_hidden" type="checkbox" style="width:auto" checked={album.is_hidden === 1} />
-            Hide from public profile
-          </label>
+        <div class="form-group" style="padding-bottom:18px">
+          <div id="cover-preview" style={album.cover_url ? '' : 'display:none'}>
+            <label>Cover Art</label>
+            <div class="cover-box">
+              <img id="cover-img" src={album.cover_url ?? ''} alt="" onerror="this.style.display='none'" />
+            </div>
+            <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
+          </div>
+          <div id="cover-upload-wrap" style={album.cover_url ? 'display:none' : ''}>
+            <label class="fp-label">Cover Art</label>
+            <label class="cover-file-label" for="cover-file">
+              <span id="cover-file-text">Choose image…</span>
+            </label>
+            <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
+            <span id="cover-upload-status" class="cover-upload-status"></span>
+          </div>
         </div>
+        
       </div>
 
       <div class="form-group">
@@ -444,23 +462,9 @@ const addedAt = album.added_at
         <input type="hidden" name="tracks" id="f-tracks" value={JSON.stringify(albumTracks)} />
       </div>
 
-      <div id="cover-preview" style={album.cover_url ? '' : 'display:none'}>
-        <label>Cover Art</label>
-        <div class="cover-box">
-          <img id="cover-img" src={album.cover_url ?? ''} alt="" onerror="this.style.display='none'" />
-        </div>
-        <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
-      </div>
-      <div id="cover-upload-wrap" style={album.cover_url ? 'display:none' : ''}>
-        <label class="fp-label">Cover Art</label>
-        <label class="cover-file-label" for="cover-file">
-          <span id="cover-file-text">Choose image to upload…</span>
-        </label>
-        <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
-        <span id="cover-upload-status" class="cover-upload-status"></span>
-      </div>
+      
 
-      <div style="display:flex;gap:10px;margin-top:8px">
+      <div style="display:flex;gap:10px;margin-top:18px">
         <button class="btn btn-primary" type="submit">Save Changes</button>
         <button class="btn" type="button" id="cancel-btn">Cancel</button>
       </div>
