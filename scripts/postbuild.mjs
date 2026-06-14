@@ -15,7 +15,6 @@ const cfg = JSON.parse(readFileSync(wranglerPath, 'utf8'));
 const REMOVE = [
   'assets', 'images', 'kv_namespaces', 'previews',
   'main', 'rules', 'pages_build_output_dir',
-  'vars',
   'configPath', 'userConfigPath', 'topLevelName',
   'definedEnvironments', 'legacy_env',
   'jsx_factory', 'jsx_fragment', 'no_bundle',
