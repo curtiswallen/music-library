@@ -1,0 +1,691 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Combobox from '../../components/Combobox.astro';
+import { env } from 'cloudflare:workers';
+import type { Album, UserAlbum, Track } from '../../types';
+import { slugify, generateUniqueSlug, countryCode, COUNTRIES } from '../../lib/utils';
+
+const { slug: slugParam } = Astro.params;
+if (!slugParam) return Astro.redirect('/');
+
+const user = Astro.locals.user!;
+const db   = env.DB;
+
+// ── POST: save edits ──────────────────────────────────────────────────────────
+if (Astro.request.method === 'POST') {
+  const data   = await Astro.request.formData();
+  const artist = (data.get('artist') as string) || '';
+  const albumName = (data.get('album') as string) || '';
+
+  // Find album by current slug to get the id
+  const existing = await db.prepare('SELECT id FROM albums WHERE slug = ?')
+    .bind(slugParam).first<{ id: number }>();
+  if (!existing) return Astro.redirect('/');
+
+  const subgenres = JSON.stringify(
+    ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean)
+  );
+
+  let rawTracks: Array<Record<string, unknown>> = [];
+  try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
+
+  const canonicalTracks = JSON.stringify(rawTracks.map(t => ({
+    pos: t.pos, title: t.title, length: t.length ?? null,
+  })));
+  const tracksData = JSON.stringify(rawTracks.map(t => ({
+    pos: t.pos, rating: t.rating ?? null, notable: t.notable ?? false, note: t.note ?? '',
+  })));
+
+  const newSlug = await generateUniqueSlug(db, artist, albumName, existing.id);
+
+  await db.prepare(`
+    UPDATE albums SET
+      artist = ?, album = ?, country = ?, year = ?,
+      slug = ?, cover_url = ?, mbid = ?, tracks = ?
+    WHERE id = ?
+  `).bind(
+    artist,
+    albumName,
+    (data.get('country') as string) || '',
+    data.get('year') ? parseInt(data.get('year') as string) : null,
+    newSlug,
+    (data.get('cover_url') as string) || null,
+    (data.get('mbid') as string) || null,
+    canonicalTracks,
+    existing.id,
+  ).run();
+
+  await db.prepare(`
+    UPDATE user_albums SET
+      genre = ?, subgenres = ?, rating = ?, notes = ?,
+      tracks_data = ?, recommended = ?, is_hidden = ?
+    WHERE album_id = ? AND user_id = ?
+  `).bind(
+    (data.get('genre') as string) || '',
+    subgenres,
+    data.get('rating') ? parseInt(data.get('rating') as string) : null,
+    (data.get('notes') as string) || '',
+    tracksData,
+    data.get('recommended') === 'on' ? 1 : 0,
+    data.get('is_hidden') === 'on' ? 1 : 0,
+    existing.id,
+    user.id,
+  ).run();
+
+  return Astro.redirect(`/album/${newSlug}`);
+}
+
+// ── GET: fetch album + user data ──────────────────────────────────────────────
+const row = await db.prepare(`
+  SELECT
+    a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
+    ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
+    ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at
+  FROM albums a
+  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+  WHERE a.slug = ?
+`).bind(user.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string }>();
+
+if (!row) return Astro.redirect('/');
+
+const album     = row;
+const subgenres: string[] = JSON.parse(album.subgenres || '[]');
+
+// Merge canonical tracks with per-user annotations
+type CanonTrack = { pos: number; title: string; length: number | null; rating?: number | null; notable?: boolean; note?: string };
+type AnnoTrack  = { pos: number; rating: number | null; notable?: boolean; note: string };
+
+let rawCanon: CanonTrack[] = [];
+let rawAnno:  AnnoTrack[]  = [];
+try { rawCanon = JSON.parse(album.tracks || '[]'); } catch {}
+try { rawAnno  = JSON.parse(album.tracks_data || '[]'); } catch {}
+
+const annoMap = new Map(rawAnno.map(t => [t.pos, t]));
+const albumTracks: Track[] = rawCanon.map(t => {
+  const a = annoMap.get(t.pos);
+  return {
+    pos:     t.pos,
+    title:   t.title,
+    length:  t.length ?? null,
+    rating:  a ? (a.rating ?? null)    : (t.rating  ?? null),
+    notable: a ? (a.notable ?? false)  : (t.notable ?? false),
+    note:    a ? (a.note    ?? '')     : (t.note    ?? ''),
+  };
+});
+
+function fmtLen(s: number | null): string {
+  if (s == null) return '';
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+const totalAlbumLen = (() => {
+  const t = albumTracks.reduce((sum, t) => sum + (t.length ?? 0), 0);
+  if (!t) return '';
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+           : `${m}:${String(s).padStart(2,'0')}`;
+})();
+
+const GENRES = [
+  'Black Metal', 'Death Metal', 'Black/Death', 'Doom Metal', 'Thrash Metal',
+  'Speed Metal', 'Heavy Metal', 'Power Metal', 'Progressive Metal', 'Post-Metal',
+  'Folk Metal', 'Gothic Metal', 'Grindcore', 'Industrial Metal', 'Sludge Metal',
+  'Alternative Metal', 'Metalcore', 'Deathcore', 'Stoner Rock',
+  'Rock', 'Post-Rock', 'Noise Rock', 'Shoegaze', 'Post-Punk', 'Punk',
+  'Pop', 'Country',
+  'Electronic', 'Ambient', 'Darkwave', 'Neofolk',
+  'Hip-Hop / Rap', 'R&B / Soul', 'Reggae',
+  'Jazz', 'Classical', 'Blues', 'Folk',
+  'World Music', 'Experimental',
+];
+
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 70) return 'rating-hi';
+  if (r >= 50) return 'rating-mid';
+  return 'rating-lo';
+}
+
+function sortSubs(subs: string[]) {
+  return [...subs].sort((a, b) => a === 'Sketchy' ? -1 : b === 'Sketchy' ? 1 : 0);
+}
+const sortedSubs = sortSubs(subgenres);
+
+// Other albums by this artist (for current user)
+const { results: artistAlbums } = await db.prepare(`
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+         ua.subgenres, ua.rating, ua.recommended
+  FROM albums a
+  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+  WHERE a.artist = ? AND a.id != ?
+  ORDER BY a.year ASC NULLS LAST
+`).bind(user.id, album.artist, album.id).all<{
+  id: number; slug: string; artist: string; album: string; country: string;
+  year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
+}>();
+
+// Similar albums: ≥2 matching tags (subgenre or country)
+const albumCountry = countryCode(album.country);
+const { results: candidates } = await db.prepare(`
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+         ua.subgenres, ua.rating, ua.recommended
+  FROM albums a
+  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+  WHERE a.artist != ?
+`).bind(user.id, album.artist).all<{
+  id: number; slug: string; artist: string; album: string; country: string;
+  year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
+}>();
+
+const similar = candidates
+  .map(a => {
+    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+    const cMatch = albumCountry && countryCode(a.country) === albumCountry ? 1 : 0;
+    const sMatch = subgenres.filter(s => aSubs.includes(s)).length;
+    return { ...a, _score: cMatch + sMatch };
+  })
+  .filter(a => a._score >= 2)
+  .sort((a, b) => b._score - a._score)
+  .slice(0, 5);
+
+// Format date added
+const addedAt = album.added_at
+  ? new Date(album.added_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  : null;
+---
+
+<Layout title={`${album.artist} — ${album.album}`}>
+  <div class="page-header">
+    <div class="breadcrumb">
+      <h1><a href="/">Library</a></h1>
+      <h1><span class="breadcrumb-sep">›</span></h1>
+      <h1><a href={`/artist/${slugify(album.artist)}`}>{album.artist} {countryCode(album.country)
+                  ? <span class={`fi fi-${countryCode(album.country).toLowerCase()} country-flag`} title={album.country} />
+                  : <span style="color:var(--text-muted);font-size:11px">{album.country}</span>
+                }</a></h1>
+      <h1><span class="breadcrumb-sep">›</span></h1>
+      <h1><span class="breadcrumb-current">{album.album} {album.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span></h1>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="edit-btn">Edit</button>
+      <button class="btn btn-danger" id="delete-btn" data-id={album.id}>Delete</button>
+      <a href="/add" class="btn">+ Add Album</a>
+    </div>
+  </div>
+
+  <!-- ── View mode ── -->
+  <div class="view-panel" id="view-panel">
+    <div class="album-hero">
+      <div class="cover-box-lg">
+        {album.cover_url && (
+          <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
+        )}
+      </div>
+      <div class="album-meta">
+        <div class="album-attrs">
+          {album.year && <span>{album.year}</span>}
+          {album.genre && <span class="album-genre-label">{album.genre}</span>}
+          {album.rating != null && (
+            <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
+          )}
+        </div>
+        {sortedSubs.length > 0 && (
+          <div class="album-tags">
+            {sortedSubs.map(s => (
+              <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+            ))}
+          </div>
+        )}
+        {album.notes && (
+          <div>
+            <p class="attr-label">Notes</p>
+            <p class="album-notes">{album.notes}</p>
+          </div>
+        )}
+        {addedAt && (
+          <p class="added-at">Added {addedAt}</p>
+        )}
+        {albumTracks.length > 0 && (
+          <div class="tracks-wrap" style="margin-top:16px">
+            <p class="attr-label" style="margin-bottom:6px">Tracks</p>
+            <table class="tracks-table">
+              <thead>
+                <tr>
+                  <th class="track-num">#</th>
+                  <th class="track-title">Title</th>
+                  <th class="track-len">Length</th>
+                  <th class="track-rating-cell">Rating</th>
+                  <th>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {albumTracks.map(t => (
+                  <tr>
+                    <td class="track-num">{t.pos}</td>
+                    <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
+                    <td class="track-len">{fmtLen(t.length)}</td>
+                    <td class="track-rating-cell">
+                      {t.rating != null
+                        ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
+                        : <span style="color:var(--text-muted)">—</span>
+                      }
+                    </td>
+                    <td class="track-note-cell">{t.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {totalAlbumLen && (
+                <tfoot>
+                  <tr class="tracks-total-row">
+                    <td class="track-num"></td><td></td>
+                    <td class="track-len tracks-total">{totalAlbumLen}</td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
+
+        <section class="related-section">
+          {artistAlbums.length > 0 && (
+            <div class="more-by">
+              <p class="related-title">More by {album.artist}</p>
+              <div class="table-wrap">
+                <table><tbody>
+                  {artistAlbums.map(a => {
+                    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+                    const cc = countryCode(a.country).toLowerCase();
+                    return (
+                      <tr data-href={`/album/${a.slug}`}>
+                        <td style="width:44px">
+                          <div class="cover-thumb" style="background:#000;overflow:hidden">
+                            {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
+                              style="width:100%;height:100%;object-fit:cover;display:block"
+                              onerror="this.style.display='none'" />}
+                          </div>
+                        </td>
+                        <td><a href={`/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+                        <td style="color:var(--text-muted)">{a.year ?? ''}</td>
+                        <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                        <td>{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody></table>
+              </div>
+            </div>
+          )}
+
+          {similar.length > 0 && (
+            <div class="more-by">
+              <p class="related-title">Similar Albums</p>
+              <div class="table-wrap">
+                <table><tbody>
+                  {similar.map(a => {
+                    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+                    const cc = countryCode(a.country).toLowerCase();
+                    return (
+                      <tr data-href={`/album/${a.slug}`}>
+                        <td style="width:44px">
+                          <div class="cover-thumb" style="background:#000;overflow:hidden">
+                            {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
+                              style="width:100%;height:100%;object-fit:cover;display:block"
+                              onerror="this.style.display='none'" />}
+                          </div>
+                        </td>
+                        <td style="color:var(--text-muted)"><a href={`/artist/${slugify(a.artist)}`}>{a.artist} </a></td>
+                        <td>{cc && <span class={`fi fi-${cc} country-flag`} title={a.country} />}</td>
+                        <td><a href={`/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+                        <td style="color:var(--text-muted)">{a.year ?? ''}</td>
+                        <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                        <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody></table>
+              </div>
+            </div>
+          )}
+          </section>
+      </div>
+    </div>
+
+    
+  </div>
+
+  <!-- ── Edit mode ── -->
+  <div class="edit-panel" id="edit-panel">
+    <form method="post">
+      <input type="hidden" name="mbid"      value={album.mbid ?? ''} />
+      <input type="hidden" name="cover_url" id="f-cover-url" value={album.cover_url ?? ''} />
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="f-artist">Artist *</label>
+          <input id="f-artist" name="artist" type="text" required value={album.artist} />
+        </div>
+        <div class="form-group">
+          <label for="f-album">Album *</label>
+          <input id="f-album" name="album" type="text" required value={album.album} />
+        </div>
+        <div class="form-group">
+          <label for="f-year">Year</label>
+          <input id="f-year" name="year" type="number" min="1900" max="2099" value={album.year ?? ''} />
+        </div>
+        <div class="form-group">
+          <label for="f-country">Country</label>
+          <Combobox id="f-country" name="country" options={COUNTRIES.map(c => c.name)} value={album.country ?? ''} placeholder="Search country..." />
+        </div>
+        <div class="form-group">
+          <label for="f-genre">Genre</label>
+          <Combobox id="f-genre" name="genre" options={GENRES} value={album.genre ?? ''} placeholder="Search genre..." />
+        </div>
+        <div class="form-group">
+          <label>Subgenres</label>
+          <div class="subgenre-chips" id="subgenre-chips"></div>
+          <input type="hidden" name="subgenres" id="f-subgenres" value={subgenres.join(', ')} />
+        </div>
+        <div class="form-group">
+          <label>Rating</label>
+          <div class="rating-slider-wrap">
+            <div class="rating-slider-top">
+              <span class="rating-current" id="rating-val">{album.rating ?? '—'}</span>
+              <span class="rating-desc" id="rating-desc"></span>
+              <button type="button" class={`clear-rating-btn${album.rating != null ? ' visible' : ''}`} id="clear-rating">×</button>
+            </div>
+            <input type="range" id="rating-slider" min="0" max="100" step="5" list="rating-ticks"
+                   value={album.rating ?? 50} />
+            <datalist id="rating-ticks">
+              {Array.from({length: 21}, (_, i) => i * 5).map(v => <option value={v} />)}
+            </datalist>
+            <div class="rating-labels">
+              {[0,10,20,30,40,50,60,70,80,90,100].map(v => <span>{v}</span>)}
+            </div>
+            <input type="hidden" name="rating" id="f-rating" value={album.rating ?? ''} />
+          </div>
+        </div>
+        <div class="form-group" style="justify-content:flex-end;padding-bottom:18px">
+          <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+            <input name="recommended" type="checkbox" style="width:auto" checked={album.recommended === 1} />
+            Recommended
+          </label>
+          <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer;margin-top:8px">
+            <input name="is_hidden" type="checkbox" style="width:auto" checked={album.is_hidden === 1} />
+            Hide from public profile
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="f-notes">Notes</label>
+        <textarea id="f-notes" name="notes" rows="4">{album.notes}</textarea>
+      </div>
+
+      <div class="form-group" style="grid-column: 1 / -1">
+        <label>Tracks</label>
+        <div class="tracks-wrap">
+          <table class="tracks-table" id="tracks-table">
+            <thead>
+              <tr>
+                <th class="track-num">#</th>
+                <th>Title</th>
+                <th class="track-len">Length</th>
+                <th class="track-rating-cell">Rating</th>
+                <th class="track-notable-cell" title="Notable track">★</th>
+                <th>Note</th>
+                <th style="width:28px"></th>
+              </tr>
+            </thead>
+            <tbody id="tracks-tbody"></tbody>
+            <tfoot id="tracks-tfoot"></tfoot>
+          </table>
+          <button type="button" class="btn tracks-add-btn" id="add-track-btn">+ Add Track</button>
+        </div>
+        <input type="hidden" name="tracks" id="f-tracks" value={JSON.stringify(albumTracks)} />
+      </div>
+
+      {album.cover_url && (
+        <div class="cover-preview" style="display:block">
+          <label>Cover Art</label>
+          <div class="cover-box">
+            <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
+          </div>
+        </div>
+      )}
+
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-primary" type="submit">Save Changes</button>
+        <button class="btn" type="button" id="cancel-btn">Cancel</button>
+      </div>
+    </form>
+  </div>
+</Layout>
+
+<script>
+// ── Track management ─────────────────────────────────────────────────────────
+interface TrackData { pos: number; title: string; length: number | null; rating: number | null; notable?: boolean; note: string; }
+
+let tracks: TrackData[] = [];
+try { tracks = JSON.parse((document.getElementById('f-tracks') as HTMLInputElement).value || '[]'); } catch {}
+
+function clientFmtLen(s: number | null): string {
+  if (s == null) return '';
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function parseLenInput(v: string): number | null {
+  const m = v.match(/^(\d+):(\d{1,2})$/);
+  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+}
+function totalLen(ts: TrackData[]): string {
+  const t = ts.reduce((s, t) => s + (t.length ?? 0), 0);
+  if (!t) return '';
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+}
+function saveTracks() {
+  (document.getElementById('f-tracks') as HTMLInputElement).value =
+    JSON.stringify(tracks.map((t, i) => ({ ...t, pos: i + 1 })));
+}
+const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100];
+
+function renderTracks() {
+  const tbody = document.getElementById('tracks-tbody') as HTMLTableSectionElement;
+  const tfoot = document.getElementById('tracks-tfoot') as HTMLTableSectionElement;
+  const table = document.getElementById('tracks-table') as HTMLTableElement;
+  if (!tbody) return;
+  table.hidden = false;
+  tbody.innerHTML = tracks.map((t, i) => `
+    <tr>
+      <td class="track-num">${i + 1}</td>
+      <td><input class="track-title-input ti" type="text" value="${esc(t.title)}" data-i="${i}" data-f="title"></td>
+      <td class="track-len"><input class="track-len-input ti" type="text" value="${clientFmtLen(t.length)}" placeholder="m:ss" data-i="${i}" data-f="length"></td>
+      <td class="track-rating-cell">
+        <select class="track-rating-input ti" data-i="${i}" data-f="rating">
+          <option value="">—</option>
+          ${RATING_OPTS.map(v => `<option value="${v}"${t.rating === v ? ' selected' : ''}>${v}</option>`).join('')}
+        </select>
+      </td>
+      <td class="track-notable-cell">
+        <input type="checkbox" class="ti" data-i="${i}" data-f="notable"${t.notable ? ' checked' : ''}>
+      </td>
+      <td><input class="track-note-input ti" type="text" value="${esc(t.note)}" placeholder="Note..." data-i="${i}" data-f="note"></td>
+      <td><button type="button" class="track-remove-btn" data-i="${i}">×</button></td>
+    </tr>
+  `).join('');
+  const tot = totalLen(tracks);
+  tfoot.innerHTML = tot
+    ? `<tr class="tracks-total-row"><td class="track-num"></td><td></td><td class="track-len tracks-total">${tot}</td><td colspan="4"></td></tr>`
+    : '';
+  tbody.querySelectorAll<HTMLElement>('.ti').forEach(el => {
+    el.addEventListener('change', () => {
+      const inp = el as HTMLInputElement;
+      const i = parseInt(inp.dataset.i!), f = inp.dataset.f!;
+      if      (f === 'title')   tracks[i].title   = inp.value;
+      else if (f === 'length')  tracks[i].length  = parseLenInput(inp.value);
+      else if (f === 'rating')  tracks[i].rating  = inp.value ? parseInt(inp.value) : null;
+      else if (f === 'notable') tracks[i].notable = inp.checked;
+      else if (f === 'note')    tracks[i].note    = inp.value;
+      if (f === 'length') renderTracks();
+      else saveTracks();
+    });
+  });
+  tbody.querySelectorAll<HTMLButtonElement>('.track-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => { tracks.splice(parseInt(btn.dataset.i!), 1); renderTracks(); });
+  });
+  saveTracks();
+}
+document.getElementById('add-track-btn')!.addEventListener('click', () => {
+  tracks.push({ pos: tracks.length + 1, title: '', length: null, rating: null, note: '' });
+  renderTracks();
+});
+
+// ── View / edit toggle ───────────────────────────────────────────────────────
+document.getElementById('edit-btn')!.addEventListener('click', () => {
+  document.getElementById('view-panel')!.classList.add('hidden');
+  document.getElementById('edit-panel')!.classList.add('visible');
+  renderSubgenreWidget();
+  renderTracks();
+});
+document.getElementById('cancel-btn')!.addEventListener('click', () => {
+  document.getElementById('edit-panel')!.classList.remove('visible');
+  document.getElementById('view-panel')!.classList.remove('hidden');
+});
+
+// ── Delete ───────────────────────────────────────────────────────────────────
+document.getElementById('delete-btn')?.addEventListener('click', async e => {
+  const id = (e.currentTarget as HTMLElement).dataset.id;
+  if (!confirm('Remove this album from your library? This cannot be undone.')) return;
+  await fetch(`/api/album/${id}`, { method: 'DELETE' });
+  window.location.href = '/';
+});
+
+// ── Subgenre map ────────────────────────────────────────────────────────────
+const SUBGENRE_MAP: Record<string, string[]> = {
+  'Black Metal':       ['Sketchy', 'Melodic', 'Raw', 'Atmospheric', 'Symphonic', 'Depressive', 'DSBM', 'Folk', 'Viking', 'Pagan', 'Ambient', 'Industrial', 'Blackgaze'],
+  'Death Metal':       ['Technical', 'Brutal', 'Melodic', 'Death/Doom', 'Progressive', 'Blackened', 'Slam', 'Deathgrind', 'Old School'],
+  'Black/Death':       ['Blackened', 'War Metal', 'Bestial', 'Blasphemic'],
+  'Doom Metal':        ['Traditional', 'Funeral', 'Atmospheric', 'Sludge', 'Stoner', 'Death/Doom', 'Gothic', 'Epic', 'Drone'],
+  'Thrash Metal':      ['Bay Area', 'German', 'Technical', 'Crossover', 'Blackened', 'Speed'],
+  'Speed Metal':       ['NWOBHM', 'Thrash-Adjacent', 'Heavy/Speed', 'Power/Speed'],
+  'Heavy Metal':       ['NWOBHM', 'Traditional', 'Epic', 'Speed', 'Power'],
+  'Power Metal':       ['Symphonic', 'Progressive', 'Folk', 'Epic', 'Speed'],
+  'Progressive Metal': ['Djent', 'Technical', 'Atmospheric', 'Jazz-Influenced', 'Math Metal'],
+  'Post-Metal':        ['Atmospheric', 'Sludge', 'Post-Rock Influenced'],
+  'Folk Metal':        ['Pagan', 'Viking', 'Celtic', 'Medieval'],
+  'Gothic Metal':      ['Doom/Gothic', 'Symphonic', 'Romantic'],
+  'Grindcore':         ['Goregrind', 'Powerviolence', 'Noisecore', 'Death-Grind'],
+  'Industrial Metal':  ['Electronic', 'EBM', 'Noise'],
+  'Sludge Metal':      ['Stoner', 'Post-Metal', 'Southern'],
+  'Alternative Metal': ['Nu-Metal', 'Groove', 'Post-Grunge'],
+  'Metalcore':         ['Melodic', 'Post-Hardcore', 'Mathcore'],
+  'Deathcore':         ['Slam', 'Brutal', 'Melodic', 'Technical'],
+  'Stoner Rock':       ['Psychedelic', 'Fuzz', 'Desert Rock', 'Southern'],
+  'Rock':              ['Classic', 'Hard Rock', 'Garage', 'Psychedelic', 'Art Rock', 'Indie', 'Alternative'],
+  'Post-Rock':         ['Instrumental', 'Atmospheric', 'Post-Metal Adjacent', 'Cinematic'],
+  'Noise Rock':        ['No Wave', 'Sludge', 'Experimental', 'Post-Punk Adjacent'],
+  'Shoegaze':          ['Dream Pop', 'Blackgaze', 'Lo-Fi', 'Neo-Shoegaze'],
+  'Post-Punk':         ['Darkwave', 'Cold Wave', 'Goth Rock', 'New Wave', 'Proto-Punk'],
+  'Punk':              ['Hardcore', 'Anarcho', 'Crust', 'Oi!', 'Street Punk', 'D-Beat'],
+  'Electronic':        ['Ambient', 'Industrial', 'EBM', 'Dark Electro', 'Synthwave', 'Noise', 'IDM'],
+  'Ambient':           ['Dark Ambient', 'Drone', 'Isolationism', 'Post-Industrial', 'New Age'],
+  'Darkwave':          ['Ethereal', 'Coldwave', 'Goth Rock', 'Neoclassical', 'Industrial'],
+  'Neofolk':           ['Apocalyptic Folk', 'Dark Folk', 'Folk Noir', 'Military Pop'],
+  'Pop':             ['Indie Pop', 'Synth-Pop', 'Art Pop', 'Chamber Pop', 'Dream Pop', 'Electropop', 'Baroque Pop', 'Folk Pop'],
+  'Country':         ['Alt-Country', 'Outlaw', 'Bluegrass', 'Americana', 'Classic Country', 'Folk Country', 'Cowpunk'],
+  'Hip-Hop / Rap':   ['East Coast', 'West Coast', 'Conscious', 'Trap', 'Boom Bap', 'Southern', 'Alternative', 'Horrorcore'],
+  'R&B / Soul':      ['Classic Soul', 'Neo-Soul', 'Funk', 'Gospel', 'Contemporary R&B', 'Motown'],
+  'Reggae':          ['Roots', 'Dancehall', 'Ska', 'Dub', 'Rocksteady'],
+  'Jazz':            ['Bebop', 'Free Jazz', 'Fusion', 'Hard Bop', 'Modal', 'Post-Bop', 'Cool Jazz', 'Big Band', 'Avant-Garde'],
+  'Classical':       ['Baroque', 'Romantic', 'Contemporary', 'Minimalist', 'Chamber', 'Symphony'],
+  'Blues':           ['Delta', 'Chicago', 'Electric', 'Country Blues', 'Boogie'],
+  'Folk':            ['Singer-Songwriter', 'Freak Folk', 'Indie Folk', 'Celtic', 'Americana'],
+  'World Music':     ['African', 'Latin', 'Caribbean', 'Afrobeat', 'Celtic', 'Middle Eastern', 'Asian'],
+  'Experimental':    ['Avant-Garde', 'Noise', 'Musique Concrète', 'Free Improvisation', 'Electroacoustic'],
+};
+
+function getKnownSubs(genre: string): string[] {
+  const key = Object.keys(SUBGENRE_MAP).find(
+    k => k.toLowerCase() === genre.trim().toLowerCase()
+  );
+  return key ? SUBGENRE_MAP[key] : [];
+}
+
+let selectedSubs: string[] = [];
+
+function renderSubgenreWidget() {
+  const genre  = (document.getElementById('f-genre') as HTMLInputElement).value;
+  const known  = getKnownSubs(genre);
+  const chips  = document.getElementById('subgenre-chips')!;
+  const hidden = document.getElementById('f-subgenres') as HTMLInputElement;
+
+  chips.innerHTML = known.map(s => {
+    const active = selectedSubs.includes(s);
+    return `<button type="button" class="subgenre-chip${active ? ' active' : ''}" data-sub="${esc(s)}">${esc(s)}</button>`;
+  }).join('');
+  chips.querySelectorAll<HTMLButtonElement>('.subgenre-chip').forEach(btn => {
+    btn.addEventListener('click', () => toggleSub(btn.dataset.sub!));
+  });
+  hidden.value = selectedSubs.join(', ');
+}
+
+function toggleSub(s: string) {
+  selectedSubs = selectedSubs.includes(s)
+    ? selectedSubs.filter(x => x !== s)
+    : [...selectedSubs, s];
+  renderSubgenreWidget();
+}
+
+document.getElementById('f-genre')!.addEventListener('change', () => {
+  selectedSubs = [];
+  renderSubgenreWidget();
+});
+
+const initial = (document.getElementById('f-subgenres') as HTMLInputElement).value;
+selectedSubs = initial.split(',').map(s => s.trim()).filter(Boolean);
+
+function esc(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Rating slider ─────────────────────────────────────────────────────────────
+const RATING_SCALE: Record<number, string> = {
+  100: 'Masterpiece / Perfect',  90: 'Amazing / Fantastic',
+   80: 'Great / Excellent',       70: 'Very Good / Solid',
+   60: 'Good / Serviceable',      50: 'Decent / Mixed Opinion',
+   40: 'Acceptable / Unremarkable', 30: 'Mediocre / Poor',
+   20: 'Bad / Terrible',          10: 'Abysmal / Worthless',
+};
+function getRatingDesc(v: number) {
+  return RATING_SCALE[v === 100 ? 100 : Math.floor(v / 10) * 10] ?? '';
+}
+
+const ratingSlider   = document.getElementById('rating-slider') as HTMLInputElement;
+const ratingHidden   = document.getElementById('f-rating') as HTMLInputElement;
+const ratingVal      = document.getElementById('rating-val') as HTMLSpanElement;
+const ratingDesc     = document.getElementById('rating-desc') as HTMLSpanElement;
+const clearRatingBtn = document.getElementById('clear-rating') as HTMLButtonElement;
+
+ratingSlider.addEventListener('input', () => {
+  const v = parseInt(ratingSlider.value);
+  ratingVal.textContent  = String(v);
+  ratingDesc.textContent = getRatingDesc(v);
+  ratingHidden.value     = String(v);
+  clearRatingBtn.classList.add('visible');
+});
+clearRatingBtn.addEventListener('click', () => {
+  ratingHidden.value     = '';
+  ratingVal.textContent  = '—';
+  ratingDesc.textContent = '';
+  ratingSlider.value     = '50';
+  clearRatingBtn.classList.remove('visible');
+});
+if (ratingHidden.value) ratingDesc.textContent = getRatingDesc(parseInt(ratingHidden.value));
+
+// ── Clickable related-album rows ─────────────────────────────────────────────
+document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
+  tr.addEventListener('click', e => {
+    if ((e.target as Element).closest('a')) return;
+    window.location.href = tr.dataset.href!;
+  });
+});
+</script>

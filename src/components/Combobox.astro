@@ -1,0 +1,135 @@
+---
+interface Props {
+  id: string;
+  name: string;
+  options?: string[];
+  labeledOptions?: { label: string; value: string }[];
+  value?: string;
+  placeholder?: string;
+}
+const { id, name, options = [], labeledOptions, value = '', placeholder = 'Search...' } = Astro.props;
+
+// When using labeledOptions, show the label for the current value in the text input
+const displayValue = labeledOptions
+  ? (labeledOptions.find(o => o.value === value)?.label ?? '')
+  : value;
+---
+
+<div class="combo">
+  <input
+    id={id}
+    class="combo-input"
+    type="text"
+    autocomplete="off"
+    spellcheck="false"
+    placeholder={placeholder}
+    value={displayValue}
+  />
+  <div class="combo-dropdown" role="listbox" hidden>
+    <div class="combo-opt combo-clear" role="option" data-val="">Clear</div>
+    {labeledOptions
+      ? labeledOptions.map(opt => (
+          <div class="combo-opt" role="option" data-val={opt.value}>{opt.label}</div>
+        ))
+      : options.map(opt => (
+          <div class="combo-opt" role="option" data-val={opt}>{opt}</div>
+        ))
+    }
+  </div>
+  <input type="hidden" name={name} class="combo-hidden" value={value} />
+</div>
+
+<script>
+document.querySelectorAll<HTMLDivElement>('.combo').forEach(wrap => {
+  const input    = wrap.querySelector<HTMLInputElement>('.combo-input')!;
+  const dropdown = wrap.querySelector<HTMLDivElement>('.combo-dropdown')!;
+  const hidden   = wrap.querySelector<HTMLInputElement>('.combo-hidden')!;
+  const allOpts  = Array.from(dropdown.querySelectorAll<HTMLDivElement>('.combo-opt'));
+  let focusedIdx = -1;
+
+  function getVisible() { return allOpts.filter(o => !o.hidden); }
+
+  // Display text for an option: empty string for the clear option, label text otherwise
+  function displayOf(opt: HTMLDivElement) {
+    return opt.dataset.val ? opt.textContent?.trim() ?? opt.dataset.val : '';
+  }
+
+  // Restore the input to match the current hidden value (handles labeled options correctly)
+  function revertDisplay() {
+    const committed = allOpts.find(o => o.dataset.val === hidden.value);
+    input.value = committed ? displayOf(committed) : '';
+  }
+
+  function setFocused(idx: number) {
+    const vis = getVisible();
+    focusedIdx = Math.max(-1, Math.min(vis.length - 1, idx));
+    allOpts.forEach(o => o.classList.remove('focused'));
+    if (focusedIdx >= 0) {
+      vis[focusedIdx].classList.add('focused');
+      vis[focusedIdx].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function showAll() {
+    allOpts.forEach(o => o.hidden = false);
+    dropdown.hidden = false;
+    focusedIdx = -1;
+  }
+
+  function filter(q: string) {
+    const lq = q.toLowerCase();
+    allOpts.forEach(opt => {
+      const label = opt.textContent?.trim().toLowerCase() ?? '';
+      opt.hidden = opt.dataset.val !== '' && !label.includes(lq);
+    });
+    dropdown.hidden = getVisible().length === 0;
+    focusedIdx = -1;
+  }
+
+  function selectOpt(opt: HTMLDivElement) {
+    input.value  = displayOf(opt);
+    hidden.value = opt.dataset.val!;
+    dropdown.hidden = true;
+    focusedIdx = -1;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  input.addEventListener('focus', showAll);
+
+  input.addEventListener('input', () => filter(input.value));
+
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (document.activeElement?.closest?.('.combo') === wrap) return;
+      dropdown.hidden = true;
+      revertDisplay();
+    }, 150);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (dropdown.hidden) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); showAll(); }
+      return;
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocused(focusedIdx + 1); }
+    else if (e.key === 'ArrowUp')  { e.preventDefault(); setFocused(focusedIdx - 1); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      const vis = getVisible();
+      const target = focusedIdx >= 0 ? vis[focusedIdx] : vis.length === 1 ? vis[0] : null;
+      if (target) selectOpt(target);
+      else dropdown.hidden = true;
+    }
+    else if (e.key === 'Escape') { dropdown.hidden = true; input.blur(); }
+  });
+
+  allOpts.forEach(opt => {
+    opt.addEventListener('mousedown', e => { e.preventDefault(); selectOpt(opt); });
+    opt.addEventListener('mouseenter', () => {
+      allOpts.forEach(o => o.classList.remove('focused'));
+      opt.classList.add('focused');
+      focusedIdx = getVisible().indexOf(opt);
+    });
+  });
+});
+</script>

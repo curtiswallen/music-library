@@ -2,8 +2,13 @@ name = "music-library"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "./dist"
 
-# After running `wrangler d1 create music-library`, replace the database_id below.
 [[d1_databases]]
 binding = "DB"
 database_name = "music-library"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "cc935107-ee3a-4dbc-96f2-f972c7a1dfd7"
+
+[vars]
+# Google OAuth — Client ID is public; Client Secret goes in .dev.vars (local) or `wrangler secret put` (prod)
+GOOGLE_CLIENT_ID = "1013442807833-dutbpt0s2r9ukev81abbtvg4h7144ah1.apps.googleusercontent.com"
+# Comma-separated list of Google account emails allowed to sign in (leave empty to allow all)
+ALLOWED_EMAILS = "curtiswallen@gmail.com"

@@ -1,0 +1,294 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+import type { Album, UserAlbum, Track } from '../../../types';
+import { slugify, countryCode } from '../../../lib/utils';
+
+const { username, slug: slugParam } = Astro.params;
+if (!username || !slugParam) return Astro.redirect('/');
+
+const db = env.DB;
+
+// Look up the profile owner
+const profileUser = await db.prepare(`
+  SELECT id, username, display_name, profile_url, is_private, avatar_url
+  FROM users WHERE profile_url = ?
+`).bind(username).first<{
+  id: number; username: string; display_name: string | null;
+  profile_url: string; is_private: number; avatar_url: string | null;
+}>();
+
+if (!profileUser || profileUser.is_private) {
+  return new Response(null, { status: 404 });
+}
+
+const displayName = profileUser.display_name || profileUser.username;
+
+// Fetch album + this profile user's annotation
+const row = await db.prepare(`
+  SELECT
+    a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
+    ua.genre, ua.subgenres, ua.rating, ua.notes,
+    ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at
+  FROM albums a
+  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+  WHERE a.slug = ? AND ua.is_hidden = 0
+`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string }>();
+
+if (!row) return new Response(null, { status: 404 });
+
+const album    = row;
+const subgenres: string[] = JSON.parse(album.subgenres || '[]');
+
+type CanonTrack = { pos: number; title: string; length: number | null; rating?: number | null; notable?: boolean; note?: string };
+type AnnoTrack  = { pos: number; rating: number | null; notable?: boolean; note: string };
+
+let rawCanon: CanonTrack[] = [];
+let rawAnno:  AnnoTrack[]  = [];
+try { rawCanon = JSON.parse(album.tracks || '[]'); } catch {}
+try { rawAnno  = JSON.parse(album.tracks_data || '[]'); } catch {}
+
+const annoMap = new Map(rawAnno.map(t => [t.pos, t]));
+const albumTracks: Track[] = rawCanon.map(t => {
+  const a = annoMap.get(t.pos);
+  return {
+    pos:     t.pos,
+    title:   t.title,
+    length:  t.length ?? null,
+    rating:  a ? (a.rating ?? null)   : (t.rating  ?? null),
+    notable: a ? (a.notable ?? false) : (t.notable ?? false),
+    note:    a ? (a.note    ?? '')    : (t.note    ?? ''),
+  };
+});
+
+function fmtLen(s: number | null): string {
+  if (s == null) return '';
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+const totalAlbumLen = (() => {
+  const t = albumTracks.reduce((sum, t) => sum + (t.length ?? 0), 0);
+  if (!t) return '';
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+           : `${m}:${String(s).padStart(2,'0')}`;
+})();
+
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 70) return 'rating-hi';
+  if (r >= 50) return 'rating-mid';
+  return 'rating-lo';
+}
+
+function sortSubs(subs: string[]) {
+  return [...subs].sort((a, b) => a === 'Sketchy' ? -1 : b === 'Sketchy' ? 1 : 0);
+}
+const sortedSubs = sortSubs(subgenres);
+const cc = countryCode(album.country).toLowerCase();
+
+// Other albums by this artist in this user's library
+const { results: artistAlbums } = await db.prepare(`
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+         ua.subgenres, ua.rating, ua.recommended
+  FROM albums a
+  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+  WHERE a.artist = ? AND a.id != ? AND ua.is_hidden = 0
+  ORDER BY a.year ASC NULLS LAST
+`).bind(profileUser.id, album.artist, album.id).all<{
+  id: number; slug: string; artist: string; album: string; country: string;
+  year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
+}>();
+
+// Similar albums: score by matching subgenres + country, min score 2, top 5
+const albumCountry = countryCode(album.country);
+const { results: candidates } = await db.prepare(`
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+         ua.subgenres, ua.rating, ua.recommended
+  FROM albums a
+  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+  WHERE a.artist != ? AND ua.is_hidden = 0
+`).bind(profileUser.id, album.artist).all<{
+  id: number; slug: string; artist: string; album: string; country: string;
+  year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
+}>();
+
+const similar = candidates
+  .map(a => {
+    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+    const cMatch = albumCountry && countryCode(a.country) === albumCountry ? 1 : 0;
+    const sMatch = subgenres.filter(s => aSubs.includes(s)).length;
+    return { ...a, _score: cMatch + sMatch };
+  })
+  .filter(a => a._score >= 2)
+  .sort((a, b) => b._score - a._score)
+  .slice(0, 5);
+
+const addedAt = album.added_at
+  ? new Date(album.added_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  : null;
+
+const backUrl = `/${username}`;
+---
+
+<Layout title={`${album.artist} — ${album.album}`}>
+  <div class="page-header">
+    <div class="breadcrumb">
+      <h1><a href={backUrl}>{displayName}'s Library</a></h1>
+      <h1><span class="breadcrumb-sep">›</span></h1>
+      <h1><a href={`/${username}/artist/${slugify(album.artist)}`}>{album.artist}
+        {cc
+          ? <span class={`fi fi-${cc} country-flag`} title={album.country} />
+          : album.country && <span style="color:var(--text-muted);font-size:11px">{album.country}</span>
+        }
+      </a></h1>
+      <h1><span class="breadcrumb-sep">›</span></h1>
+      <h1><span class="breadcrumb-current">
+        {album.album}
+        {album.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
+      </span></h1>
+    </div>
+    {Astro.locals.user
+      ? <a href="/" class="btn">← My Library</a>
+      : <a href="/auth/login" class="btn">Sign In</a>
+    }
+  </div>
+
+  <div class="album-hero">
+    <div class="cover-box-lg">
+      {album.cover_url && (
+        <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
+      )}
+    </div>
+    <div class="album-meta">
+      <div class="album-attrs">
+        {album.year && <span>{album.year}</span>}
+        {album.genre && <span class="album-genre-label">{album.genre}</span>}
+        {album.rating != null && (
+          <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
+        )}
+      </div>
+
+      {sortedSubs.length > 0 && (
+        <div class="album-tags">
+          {sortedSubs.map(s => (
+            <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+          ))}
+        </div>
+      )}
+
+      {album.notes && (
+        <div>
+          <p class="attr-label">Notes</p>
+          <p class="album-notes">{album.notes}</p>
+        </div>
+      )}
+
+      {addedAt && <p class="added-at">Added {addedAt}</p>}
+
+      {albumTracks.length > 0 && (
+        <div class="tracks-wrap" style="margin-top:16px">
+          <p class="attr-label" style="margin-bottom:6px">Tracks</p>
+          <table class="tracks-table">
+            <thead>
+              <tr>
+                <th class="track-num">#</th>
+                <th class="track-title">Title</th>
+                <th class="track-len">Length</th>
+                <th class="track-rating-cell">Rating</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {albumTracks.map(t => (
+                <tr>
+                  <td class="track-num">{t.pos}</td>
+                  <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
+                  <td class="track-len">{fmtLen(t.length)}</td>
+                  <td class="track-rating-cell">
+                    {t.rating != null
+                      ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
+                      : <span style="color:var(--text-muted)">—</span>
+                    }
+                  </td>
+                  <td class="track-note-cell">{t.note}</td>
+                </tr>
+              ))}
+            </tbody>
+            {totalAlbumLen && (
+              <tfoot>
+                <tr class="tracks-total-row">
+                  <td class="track-num"></td><td></td>
+                  <td class="track-len tracks-total">{totalAlbumLen}</td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+
+      {(artistAlbums.length > 0 || similar.length > 0) && (
+        <section class="related-section">
+          {artistAlbums.length > 0 && (
+            <div class="more-by">
+              <p class="related-title">More by {album.artist}</p>
+              <div class="table-wrap">
+                <table><tbody>
+                  {artistAlbums.map(a => {
+                    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+                    return (
+                      <tr style="cursor:pointer" onclick={`window.location='/${username}/album/${a.slug}'`}>
+                        <td style="width:44px">
+                          <div class="cover-thumb" style="background:#000;overflow:hidden">
+                            {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
+                              style="width:100%;height:100%;object-fit:cover;display:block"
+                              onerror="this.style.display='none'" />}
+                          </div>
+                        </td>
+                        <td><a href={`/${username}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star"> ★</span> : null}</a></td>
+                        <td style="color:var(--text-muted)">{a.year ?? ''}</td>
+                        <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                        <td>{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody></table>
+              </div>
+            </div>
+          )}
+
+          {similar.length > 0 && (
+            <div class="more-by">
+              <p class="related-title">Similar Albums</p>
+              <div class="table-wrap">
+                <table><tbody>
+                  {similar.map(a => {
+                    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+                    const acc = countryCode(a.country).toLowerCase();
+                    return (
+                      <tr style="cursor:pointer" onclick={`window.location='/${username}/album/${a.slug}'`}>
+                        <td style="width:44px">
+                          <div class="cover-thumb" style="background:#000;overflow:hidden">
+                            {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
+                              style="width:100%;height:100%;object-fit:cover;display:block"
+                              onerror="this.style.display='none'" />}
+                          </div>
+                        </td>
+                        <td style="color:var(--text-muted)"><a href={`/${username}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
+                        <td>{acc && <span class={`fi fi-${acc} country-flag`} title={a.country} />}</td>
+                        <td><a href={`/${username}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star"> ★</span> : null}</a></td>
+                        <td style="color:var(--text-muted)">{a.year ?? ''}</td>
+                        <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                        <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody></table>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  </div>
+</Layout>

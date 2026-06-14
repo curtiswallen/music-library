@@ -1,0 +1,224 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+
+const user = Astro.locals.user!;
+const db   = env.DB;
+
+const RESERVED = new Set(['add', 'album', 'artist', 'auth', 'api', 'settings', 'admin', 'login', 'logout']);
+const URL_RE   = /^[a-z0-9][a-z0-9_-]{1,28}[a-z0-9]$|^[a-z0-9]{3}$/;
+
+let errors: Record<string, string> = {};
+let saved = false;
+
+// Values to re-populate form on error
+let formDisplayName = user.display_name ?? '';
+let formProfileUrl  = user.profile_url  ?? '';
+let formIsPrivate   = user.is_private;
+
+if (Astro.request.method === 'POST') {
+  const data = await Astro.request.formData();
+
+  formDisplayName = ((data.get('display_name') as string) ?? '').trim();
+  formProfileUrl  = ((data.get('profile_url')  as string) ?? '').trim().toLowerCase();
+  formIsPrivate   = data.get('is_private') === '1' ? 1 : 0;
+
+  // Validate display_name
+  if (formDisplayName.length > 50) {
+    errors.display_name = 'Display name must be 50 characters or fewer.';
+  }
+
+  // Validate profile_url
+  if (formProfileUrl) {
+    if (!URL_RE.test(formProfileUrl)) {
+      errors.profile_url = 'URL must be 3–30 characters: lowercase letters, numbers, hyphens, and underscores only.';
+    } else if (RESERVED.has(formProfileUrl)) {
+      errors.profile_url = `"${formProfileUrl}" is a reserved word and cannot be used as a URL.`;
+    } else {
+      // Uniqueness check (exclude current user)
+      const clash = await db.prepare(
+        'SELECT id FROM users WHERE profile_url = ? AND id != ?'
+      ).bind(formProfileUrl, user.id).first<{ id: number }>();
+      if (clash) errors.profile_url = 'That URL is already taken.';
+    }
+  }
+
+  if (Object.keys(errors).length === 0) {
+    await db.prepare(`
+      UPDATE users
+      SET display_name = ?, profile_url = ?, is_private = ?
+      WHERE id = ?
+    `).bind(
+      formDisplayName || null,
+      formProfileUrl  || null,
+      formIsPrivate,
+      user.id,
+    ).run();
+
+    return Astro.redirect('/settings?saved=1');
+  }
+}
+
+if (Astro.url.searchParams.get('saved') === '1') saved = true;
+---
+
+<Layout title="Settings">
+  <div class="page-header">
+    <h1>Settings</h1>
+    <a href="/" class="btn">← Library</a>
+  </div>
+
+  {saved && <p class="flash-ok">Settings saved.</p>}
+
+  <form method="post" class="settings-form">
+    <div class="settings-section">
+      <h2>Profile</h2>
+
+      <div class="form-group">
+        <label for="display_name">Display Name</label>
+        <input id="display_name" name="display_name" type="text"
+               value={formDisplayName} placeholder={user.username} maxlength="50" />
+        <span class="field-hint">Shown as "Display Name's Library". Defaults to your Google username if empty.</span>
+        {errors.display_name && <span class="field-error">{errors.display_name}</span>}
+      </div>
+
+      <div class="form-group">
+        <label for="profile_url">Profile URL</label>
+        <div class="url-input-wrap">
+          <span class="url-prefix">{Astro.url.origin}/</span>
+          <input id="profile_url" name="profile_url" type="text"
+                 value={formProfileUrl} placeholder="yourname"
+                 pattern="[a-z0-9][a-z0-9_\-]{1,28}[a-z0-9]|[a-z0-9]{3}"
+                 maxlength="30" autocomplete="off" spellcheck="false" />
+        </div>
+        <span class="field-hint">3–30 characters: lowercase letters, numbers, hyphens, underscores. Leave empty to disable your public profile.</span>
+        {errors.profile_url && <span class="field-error">{errors.profile_url}</span>}
+      </div>
+
+      <div class="form-group">
+        <label>Privacy</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="is_private" value="0" checked={formIsPrivate === 0} />
+            Public — your library is visible to other users
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="is_private" value="1" checked={formIsPrivate === 1} />
+            Private — only you can see your library
+          </label>
+        </div>
+        <span class="field-hint">Albums you've individually hidden will remain hidden even if you switch back to Public.</span>
+      </div>
+    </div>
+
+    <div class="settings-footer">
+      <button type="submit" class="btn btn-primary">Save Settings</button>
+    </div>
+  </form>
+</Layout>
+
+<style>
+.settings-form {
+  max-width: 520px;
+  margin-top: 24px;
+}
+.settings-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.settings-section h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin: 0 0 16px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 16px;
+}
+.form-group:last-child { margin-bottom: 0; }
+.form-group label:first-child {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.form-group input[type="text"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.form-group input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.url-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.url-prefix {
+  padding: 6px 8px 6px 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  border-right: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.url-input-wrap input {
+  border: none !important;
+  border-radius: 0 !important;
+  flex: 1;
+}
+.url-input-wrap input:focus { outline: none; }
+.field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.field-error {
+  font-size: 12px;
+  color: #c06060;
+}
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.radio-label input[type="radio"] {
+  width: auto;
+  accent-color: var(--accent);
+}
+.settings-footer {
+  display: flex;
+  gap: 8px;
+}
+.flash-ok {
+  color: #5a9e6f;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+</style>

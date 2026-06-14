@@ -9,7 +9,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   try {
     const res = await fetch(
-      `${MB}/release-group?query=${encodeURIComponent(q)}&type=album&fmt=json&limit=8`,
+      `${MB}/release-group?query=${encodeURIComponent(q)}&type=album&fmt=json&limit=8&inc=genres`,
       { headers: { 'User-Agent': UA, Accept: 'application/json' } }
     );
     if (!res.ok) return json([]);
@@ -20,10 +20,12 @@ export const GET: APIRoute = async ({ url }) => {
       mbid:     rg.id,
       title:    rg.title,
       artist:   rg['artist-credit']?.[0]?.artist?.name ?? '',
+      artistId: rg['artist-credit']?.[0]?.artist?.id ?? '',
       year:     rg['first-release-date']?.slice(0, 4) ?? '',
-      country:  '',
-      // Cover Art Archive serves album art by MBID; browser follows the redirect.
-      // Falls back gracefully via onerror in the UI if no art exists.
+      tags:     (rg.genres ?? rg.tags ?? [])
+                  .sort((a, b) => b.count - a.count)
+                  .slice(0, 3)
+                  .map(t => t.name),
       coverUrl: `https://coverartarchive.org/release-group/${rg.id}/front-250`,
     }));
 
@@ -43,6 +45,8 @@ interface MBResponse {
     id: string;
     title: string;
     'first-release-date'?: string;
-    'artist-credit'?: Array<{ artist: { name: string } }>;
+    'artist-credit'?: Array<{ artist: { id: string; name: string } }>;
+    genres?: Array<{ name: string; count: number }>;
+    tags?:   Array<{ name: string; count: number }>;
   }>;
 }

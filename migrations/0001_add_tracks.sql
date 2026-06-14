@@ -1,0 +1,1 @@
+ALTER TABLE albums ADD COLUMN tracks TEXT NOT NULL DEFAULT '[]';

@@ -1,0 +1,521 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Combobox from '../components/Combobox.astro';
+import { env } from 'cloudflare:workers';
+import type { LibraryEntry } from '../types';
+import { countryCode, slugify } from '../lib/utils';
+
+const { username } = Astro.params;
+if (!username) return Astro.redirect('/');
+
+const db = env.DB;
+
+const profileUser = await db.prepare(`
+  SELECT id, username, display_name, profile_url, is_private, avatar_url
+  FROM users WHERE profile_url = ?
+`).bind(username).first<{
+  id: number; username: string; display_name: string | null;
+  profile_url: string; is_private: number; avatar_url: string | null;
+}>();
+
+if (!profileUser) return new Response(null, { status: 404 });
+
+const displayName  = profileUser.display_name || profileUser.username;
+const isOwnProfile = Astro.locals.user?.id === profileUser.id;
+if (isOwnProfile) return Astro.redirect('/');
+
+// ── URL params ────────────────────────────────────────────────────────────────
+const q           = Astro.url.searchParams.get('q')           ?? '';
+const genre       = Astro.url.searchParams.get('genre')       ?? '';
+const subgenres   = Astro.url.searchParams.getAll('subgenre');
+const recommended = Astro.url.searchParams.get('recommended') ?? '';
+const country     = Astro.url.searchParams.get('country')     ?? '';
+const yearFrom    = Astro.url.searchParams.get('year_from')   ?? '';
+const yearTo      = Astro.url.searchParams.get('year_to')     ?? '';
+const excludes    = Astro.url.searchParams.getAll('excl');
+const ratingMin   = Astro.url.searchParams.get('rating_min')  ?? '';
+const ratingMax   = Astro.url.searchParams.get('rating_max')  ?? '';
+const rated       = Astro.url.searchParams.get('rated')       ?? '';
+const sort        = Astro.url.searchParams.get('sort')        ?? 'artist';
+const dir         = Astro.url.searchParams.get('dir')         ?? 'asc';
+
+const VALID_SORTS: Record<string, string> = {
+  artist: 'a.artist', album: 'a.album', year: 'a.year',
+  rating: 'ua.rating', genre: 'ua.genre', added: 'ua.added_at',
+};
+const safeSort    = VALID_SORTS[sort] ? sort : 'artist';
+const safeSortCol = VALID_SORTS[safeSort];
+const safeDir     = dir === 'desc' ? 'DESC' : 'ASC';
+
+// ── Filter SQL ────────────────────────────────────────────────────────────────
+const clauses: string[] = ['ua.is_hidden = 0'];
+const params:  (string | number)[] = [];
+
+if (q) { clauses.push('(a.artist LIKE ? OR a.album LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+if (country)   { clauses.push('a.country = ?');    params.push(country); }
+if (yearFrom)  { clauses.push('a.year >= ?');      params.push(Number(yearFrom)); }
+if (yearTo)    { clauses.push('a.year <= ?');      params.push(Number(yearTo)); }
+if (genre)     { clauses.push('ua.genre = ?');     params.push(genre); }
+for (const s of subgenres) { clauses.push('ua.subgenres LIKE ?');     params.push(`%"${s}"%`); }
+for (const s of excludes)  { clauses.push('ua.subgenres NOT LIKE ?'); params.push(`%"${s}"%`); }
+if (ratingMin) { clauses.push('ua.rating >= ?');   params.push(Number(ratingMin)); }
+if (ratingMax) { clauses.push('ua.rating <= ?');   params.push(Number(ratingMax)); }
+if (rated === 'yes') clauses.push('ua.rating IS NOT NULL');
+if (rated === 'no')  clauses.push('ua.rating IS NULL');
+if (recommended)     clauses.push('ua.recommended = 1');
+
+let albums: LibraryEntry[] = [];
+let libraryCountries: string[] = [];
+
+if (!profileUser.is_private) {
+  const where = `AND ${clauses.join(' AND ')}`;
+  const { results } = await db.prepare(`
+    SELECT a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+           ua.genre, ua.subgenres, ua.rating, ua.notes, ua.recommended, ua.is_hidden, ua.added_at
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+    WHERE 1=1 ${where}
+    ORDER BY ${safeSortCol} ${safeDir} NULLS LAST
+  `).bind(profileUser.id, ...params).all<LibraryEntry>();
+  albums = results;
+
+  const { results: countryRows } = await db.prepare(`
+    SELECT DISTINCT a.country FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+    WHERE a.country != '' AND ua.is_hidden = 0
+    ORDER BY a.country
+  `).bind(profileUser.id).all<{ country: string }>();
+  libraryCountries = countryRows.map(r => r.country);
+}
+
+// ── Genres ────────────────────────────────────────────────────────────────────
+const GENRES = [
+  'Black Metal', 'Death Metal', 'Black/Death', 'Doom Metal', 'Thrash Metal',
+  'Speed Metal', 'Heavy Metal', 'Power Metal', 'Progressive Metal', 'Post-Metal',
+  'Folk Metal', 'Gothic Metal', 'Grindcore', 'Industrial Metal', 'Sludge Metal',
+  'Alternative Metal', 'Metalcore', 'Deathcore', 'Stoner Rock',
+  'Rock', 'Post-Rock', 'Noise Rock', 'Shoegaze', 'Post-Punk', 'Punk',
+  'Pop', 'Country',
+  'Electronic', 'Ambient', 'Darkwave', 'Neofolk',
+  'Hip-Hop / Rap', 'R&B / Soul', 'Reggae',
+  'Jazz', 'Classical', 'Blues', 'Folk',
+  'World Music', 'Experimental',
+];
+
+// ── URL helpers ───────────────────────────────────────────────────────────────
+const base = `/${username}`;
+
+function buildParams(o: Record<string, string | string[] | null | undefined> = {}) {
+  const defaults: Record<string, string | string[]> = {};
+  if (q)                defaults.q            = q;
+  if (country)          defaults.country      = country;
+  if (yearFrom)         defaults.year_from    = yearFrom;
+  if (yearTo)           defaults.year_to      = yearTo;
+  if (ratingMin)        defaults.rating_min   = ratingMin;
+  if (ratingMax)        defaults.rating_max   = ratingMax;
+  if (rated)            defaults.rated        = rated;
+  if (genre)            defaults.genre        = genre;
+  defaults.sort = safeSort;
+  defaults.dir  = safeDir.toLowerCase();
+  if (recommended)       defaults.recommended  = '1';
+  if (subgenres.length)  defaults.subgenre    = subgenres;
+  if (excludes.length)   defaults.excl        = excludes;
+
+  const merged = { ...defaults, ...o };
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(merged)) {
+    if (v == null) continue;
+    if (Array.isArray(v)) v.forEach(x => p.append(k, x));
+    else p.set(k, v);
+  }
+  return `${base}?${p}`;
+}
+
+function sortHref(col: string) {
+  const nextDir = safeSort === col && safeDir === 'ASC' ? 'desc' : 'asc';
+  return buildParams({ sort: col, dir: nextDir });
+}
+function sortArrow(col: string) {
+  if (safeSort !== col) return '';
+  return safeDir === 'ASC' ? ' ↑' : ' ↓';
+}
+function recToggleHref() {
+  return buildParams({ recommended: recommended ? null : '1' });
+}
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 70) return 'rating-hi';
+  if (r >= 50) return 'rating-mid';
+  return 'rating-lo';
+}
+function sortedSubs(subs: string[]) {
+  return [...subs].sort((a, b) => a === 'Sketchy' ? -1 : b === 'Sketchy' ? 1 : 0);
+}
+function subgenreHref(s: string) {
+  const next = subgenres.includes(s) ? subgenres.filter(x => x !== s) : [...subgenres, s];
+  return buildParams({ subgenre: next });
+}
+function yearChipLabel() {
+  if (yearFrom && yearTo) return `${yearFrom}–${yearTo}`;
+  if (yearFrom) return `${yearFrom}+`;
+  return `≤${yearTo}`;
+}
+
+const activeFilterCount = [
+  !!country, !!(yearFrom || yearTo), !!(ratingMin || ratingMax),
+  !!rated, !!genre, subgenres.length > 0, excludes.length > 0,
+].filter(Boolean).length;
+
+const hasAnyFilter = !!(q || country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length || excludes.length || recommended);
+const countryChipCC = country ? countryCode(country).toLowerCase() : '';
+---
+
+<Layout title={`${displayName}'s Library`}>
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:10px">
+      {profileUser.avatar_url && <img src={profileUser.avatar_url} class="profile-avatar" alt="" />}
+      <h1>
+        <a href={base}>{displayName}'s Library</a>
+        {!profileUser.is_private && <span class="count">({albums.length} albums)</span>}
+      </h1>
+    </div>
+    {Astro.locals.user
+      ? <a href="/" class="btn">← My Library</a>
+      : <a href="/auth/login" class="btn">Sign In</a>
+    }
+  </div>
+
+  {profileUser.is_private ? (
+    <div class="empty-state">
+      <p>{displayName} has set their library to private.</p>
+    </div>
+  ) : (
+    <>
+      <form class="filters" method="get" action={base}>
+        <input type="hidden" name="sort" value={safeSort} />
+        <input type="hidden" name="dir"  value={safeDir.toLowerCase()} />
+
+        <div class="filter-bar">
+          <input class="search-input" type="text" name="q"
+            placeholder="Search artist or album..." value={q} autocomplete="off" />
+          <button type="button" id="fp-toggle"
+            class={`btn fp-toggle-btn${activeFilterCount > 0 ? ' btn-active' : ''}`}>
+            {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Filters'}
+          </button>
+          <a href={recToggleHref()} class={`btn${recommended ? ' btn-active' : ''}`}>★ Rec</a>
+          {hasAnyFilter && <a href={base} class="btn">Clear</a>}
+        </div>
+
+        {(country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length > 0 || excludes.length > 0) && (
+          <div class="filter-chips">
+            {country && (
+              <span class="fchip">
+                {countryChipCC && <span class={`fi fi-${countryChipCC}`} style="margin-right:3px;font-size:12px" />}
+                {country}
+                <a href={buildParams({ country: null })} class="chip-remove">×</a>
+              </span>
+            )}
+            {(yearFrom || yearTo) && (
+              <span class="fchip">
+                {yearChipLabel()}
+                <a href={buildParams({ year_from: null, year_to: null })} class="chip-remove">×</a>
+              </span>
+            )}
+            {(ratingMin || ratingMax) && (
+              <span class="fchip">
+                {ratingMin && ratingMax ? `${ratingMin}–${ratingMax}` : ratingMin ? `≥${ratingMin}` : `≤${ratingMax}`}
+                <a href={buildParams({ rating_min: null, rating_max: null })} class="chip-remove">×</a>
+              </span>
+            )}
+            {rated && (
+              <span class="fchip">
+                {rated === 'yes' ? 'Has rating' : 'Unrated only'}
+                <a href={buildParams({ rated: null })} class="chip-remove">×</a>
+              </span>
+            )}
+            {genre && (
+              <span class="fchip">
+                {genre}
+                <a href={buildParams({ genre: null, subgenre: [], excl: [] })} class="chip-remove">×</a>
+              </span>
+            )}
+            {subgenres.map(s => (
+              <span class="fchip">
+                {s}
+                <a href={buildParams({ subgenre: subgenres.filter(x => x !== s) })} class="chip-remove">×</a>
+              </span>
+            ))}
+            {excludes.map(s => (
+              <span class="fchip fchip-excl">
+                ∅ {s}
+                <a href={buildParams({ excl: excludes.filter(x => x !== s) })} class="chip-remove">×</a>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div class="filter-panel" id="fp-panel" hidden>
+          <div class="fp-grid">
+            <div class="fp-field-fixed">
+              <label class="fp-label">Country</label>
+              <Combobox id="fp-country" name="country" options={libraryCountries} value={country} placeholder="Search country..." />
+            </div>
+            <div class="fp-field">
+              <label class="fp-label">Year</label>
+              <div class="year-range-inputs">
+                <input type="number" name="year_from" class="fp-year-input" placeholder="From" value={yearFrom} min="1900" max="2099" />
+                <span class="year-sep">–</span>
+                <input type="number" name="year_to" class="fp-year-input" placeholder="To" value={yearTo} min="1900" max="2099" />
+              </div>
+            </div>
+            <div class="fp-field">
+              <label class="fp-label">Rating</label>
+              <div class="year-range-inputs">
+                <input type="number" name="rating_min" class="fp-year-input" placeholder="Min" value={ratingMin} min="0" max="100" />
+                <span class="year-sep">–</span>
+                <input type="number" name="rating_max" class="fp-year-input" placeholder="Max" value={ratingMax} min="0" max="100" />
+              </div>
+            </div>
+            <div class="fp-field-fixed">
+              <label class="fp-label">Rated</label>
+              <Combobox id="fp-rated" name="rated" value={rated}
+                labeledOptions={[
+                  { label: 'Has rating',   value: 'yes' },
+                  { label: 'Unrated only', value: 'no'  },
+                ]}
+                placeholder="All albums" />
+            </div>
+            <div class="fp-field-fixed">
+              <label class="fp-label">Genre</label>
+              <Combobox id="fp-genre" name="genre" options={GENRES} value={genre} placeholder="Search genre..." />
+            </div>
+          </div>
+
+          <div id="fp-sub-sections"
+               style={genre ? '' : 'display:none'}
+               data-includes={JSON.stringify(subgenres)}
+               data-excludes={JSON.stringify(excludes)}>
+            <div class="fp-sub-chips" id="fp-sub-chips"></div>
+            <div id="fp-sub-inputs"></div>
+            <p class="fp-sub-hint">click to include · again to exclude · again to clear</p>
+          </div>
+
+          <div class="fp-footer">
+            <button type="submit" class="btn btn-primary">Apply</button>
+            <a href={base} class="btn">Clear All</a>
+          </div>
+        </div>
+      </form>
+
+      {albums.length === 0 ? (
+        <div class="empty-state">
+          <p>No albums match the current filters.</p>
+        </div>
+      ) : (
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th><a href={sortHref('artist')} class={safeSort === 'artist' ? 'active' : ''}>Artist{sortArrow('artist')}</a></th>
+                <th></th>
+                <th><a href={sortHref('album')} class={safeSort === 'album' ? 'active' : ''}>Album{sortArrow('album')}</a></th>
+                <th><a href={sortHref('year')} class={safeSort === 'year' ? 'active' : ''}>Year{sortArrow('year')}</a></th>
+                <th><a href={sortHref('genre')} class={safeSort === 'genre' ? 'active' : ''}>Genre{sortArrow('genre')}</a></th>
+                <th>Subgenres</th>
+                <th><a href={sortHref('rating')} class={safeSort === 'rating' ? 'active' : ''}>Rating{sortArrow('rating')}</a></th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {albums.map(a => {
+                const subs: string[] = JSON.parse(a.subgenres || '[]');
+                const cc = countryCode(a.country).toLowerCase();
+                return (
+                  <tr>
+                    <td>
+                      <div class="cover-thumb" style="background:#000;overflow:hidden">
+                        {a.cover_url && (
+                          <img src={a.cover_url} alt="" loading="lazy"
+                               style="width:100%;height:100%;object-fit:cover;display:block"
+                               onerror="this.style.display='none'" />
+                        )}
+                      </div>
+                    </td>
+                    <td><a href={`${base}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
+                    <td>
+                      {a.country
+                        ? <a href={buildParams({ country: a.country === country ? null : a.country })}
+                             class="flag-link"
+                             title={a.country === country ? `Remove filter: ${a.country}` : `Filter: ${a.country}`}>
+                            {cc
+                              ? <span class={`fi fi-${cc} country-flag${a.country === country ? ' flag-active' : ''}`} />
+                              : <span class={`flag-text${a.country === country ? ' flag-active' : ''}`}>{a.country}</span>
+                            }
+                          </a>
+                        : null
+                      }
+                    </td>
+                    <td>
+                      <a href={`/${username}/album/${a.slug}`}>
+                        {a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
+                      </a>
+                    </td>
+                    <td>{a.year ?? ''}</td>
+                    <td>
+                      {a.genre && (
+                        <a href={buildParams({ genre: a.genre === genre ? null : a.genre, subgenre: [], excl: [] })}
+                           class="genre-link">{a.genre}</a>
+                      )}
+                    </td>
+                    <td>
+                      {sortedSubs(subs).map(s => (
+                        <a href={subgenreHref(s)}
+                           class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}${subgenres.includes(s) ? ' tag-filtered' : ''}`}
+                        >{s}</a>
+                      ))}
+                    </td>
+                    <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                    <td class="notes-cell">
+                      <span class="notes-text">{a.notes}</span>
+                      {a.notes && <span class="notes-tip-body">{a.notes}</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )}
+</Layout>
+
+<style>
+.filters { display: block; margin-bottom: 20px; }
+.filter-bar { display: flex; gap: 8px; align-items: center; }
+.fp-toggle-btn { white-space: nowrap; }
+
+.filter-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.fchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 10px; border-radius: 3px; background: var(--bg-hover); border: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+.fchip-excl { border-color: #7a3030; background: rgba(180,40,40,0.10); color: #c06060; }
+.chip-remove { color: var(--text-muted); text-decoration: none; font-size: 14px; line-height: 1; opacity: 0.7; margin-left: 2px; }
+
+.filter-panel { margin-top: 10px; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; width: fit-content; max-width: 100%; }
+.fp-grid { display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 12px; align-items: flex-start; }
+.fp-field { display: flex; flex-direction: column; gap: 5px; }
+.fp-field-fixed { display: flex; flex-direction: column; gap: 5px; min-width: 160px; max-width: 250px; flex: 1 1 160px; }
+#fp-sub-sections { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.fp-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+.year-range-inputs { display: flex; align-items: center; gap: 6px; }
+.fp-year-input { width: 72px; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 4px; font-size: 13px; font-family: inherit; -moz-appearance: textfield; appearance: textfield; }
+.fp-year-input::-webkit-inner-spin-button, .fp-year-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.year-sep { color: var(--text-muted); font-size: 13px; }
+.filter-panel :global(.combo-input) { width: 100%; box-sizing: border-box; }
+.filter-panel :global(.combo) { width: 100%; }
+.fp-footer { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+
+.flag-link { text-decoration: none; display: inline-flex; align-items: center; border-radius: 3px; transition: opacity 0.15s; }
+.flag-link:hover { opacity: 0.75; }
+.flag-active { outline: 1px solid var(--accent); border-radius: 2px; }
+.profile-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+</style>
+
+<script>
+const SUBGENRE_MAP: Record<string, string[]> = {
+  'Black Metal':       ['Sketchy', 'Melodic', 'Raw', 'Atmospheric', 'Symphonic', 'Depressive', 'DSBM', 'Folk', 'Viking', 'Pagan', 'Ambient', 'Industrial', 'Blackgaze'],
+  'Death Metal':       ['Technical', 'Brutal', 'Melodic', 'Death/Doom', 'Progressive', 'Blackened', 'Slam', 'Deathgrind', 'Old School'],
+  'Black/Death':       ['Blackened', 'War Metal', 'Bestial', 'Blasphemic'],
+  'Doom Metal':        ['Traditional', 'Funeral', 'Atmospheric', 'Sludge', 'Stoner', 'Death/Doom', 'Gothic', 'Epic', 'Drone'],
+  'Thrash Metal':      ['Bay Area', 'German', 'Technical', 'Crossover', 'Blackened', 'Speed'],
+  'Speed Metal':       ['NWOBHM', 'Thrash-Adjacent', 'Heavy/Speed', 'Power/Speed'],
+  'Heavy Metal':       ['NWOBHM', 'Traditional', 'Epic', 'Speed', 'Power'],
+  'Power Metal':       ['Symphonic', 'Progressive', 'Folk', 'Epic', 'Speed'],
+  'Progressive Metal': ['Djent', 'Technical', 'Atmospheric', 'Jazz-Influenced', 'Math Metal'],
+  'Post-Metal':        ['Atmospheric', 'Sludge', 'Post-Rock Influenced'],
+  'Folk Metal':        ['Pagan', 'Viking', 'Celtic', 'Medieval'],
+  'Gothic Metal':      ['Doom/Gothic', 'Symphonic', 'Romantic'],
+  'Grindcore':         ['Goregrind', 'Powerviolence', 'Noisecore', 'Death-Grind'],
+  'Industrial Metal':  ['Electronic', 'EBM', 'Noise'],
+  'Sludge Metal':      ['Stoner', 'Post-Metal', 'Southern'],
+  'Alternative Metal': ['Nu-Metal', 'Groove', 'Post-Grunge'],
+  'Metalcore':         ['Melodic', 'Post-Hardcore', 'Mathcore'],
+  'Deathcore':         ['Slam', 'Brutal', 'Melodic', 'Technical'],
+  'Stoner Rock':       ['Psychedelic', 'Fuzz', 'Desert Rock', 'Southern'],
+  'Rock':              ['Classic', 'Hard Rock', 'Garage', 'Psychedelic', 'Art Rock', 'Indie', 'Alternative'],
+  'Post-Rock':         ['Instrumental', 'Atmospheric', 'Post-Metal Adjacent', 'Cinematic'],
+  'Noise Rock':        ['No Wave', 'Sludge', 'Experimental', 'Post-Punk Adjacent'],
+  'Shoegaze':          ['Dream Pop', 'Blackgaze', 'Lo-Fi', 'Neo-Shoegaze'],
+  'Post-Punk':         ['Darkwave', 'Cold Wave', 'Goth Rock', 'New Wave', 'Proto-Punk'],
+  'Punk':              ['Hardcore', 'Anarcho', 'Crust', 'Oi!', 'Street Punk', 'D-Beat'],
+  'Electronic':        ['Ambient', 'Industrial', 'EBM', 'Dark Electro', 'Synthwave', 'Noise', 'IDM'],
+  'Ambient':           ['Dark Ambient', 'Drone', 'Isolationism', 'Post-Industrial', 'New Age'],
+  'Darkwave':          ['Ethereal', 'Coldwave', 'Goth Rock', 'Neoclassical', 'Industrial'],
+  'Neofolk':           ['Apocalyptic Folk', 'Dark Folk', 'Folk Noir', 'Military Pop'],
+  'Pop':               ['Indie Pop', 'Synth-Pop', 'Art Pop', 'Chamber Pop', 'Dream Pop', 'Electropop', 'Baroque Pop', 'Folk Pop'],
+  'Country':           ['Alt-Country', 'Outlaw', 'Bluegrass', 'Americana', 'Classic Country', 'Folk Country', 'Cowpunk'],
+  'Hip-Hop / Rap':     ['East Coast', 'West Coast', 'Conscious', 'Trap', 'Boom Bap', 'Southern', 'Alternative', 'Horrorcore'],
+  'R&B / Soul':        ['Classic Soul', 'Neo-Soul', 'Funk', 'Gospel', 'Contemporary R&B', 'Motown'],
+  'Reggae':            ['Roots', 'Dancehall', 'Ska', 'Dub', 'Rocksteady'],
+  'Jazz':              ['Bebop', 'Free Jazz', 'Fusion', 'Hard Bop', 'Modal', 'Post-Bop', 'Cool Jazz', 'Big Band', 'Avant-Garde'],
+  'Classical':         ['Baroque', 'Romantic', 'Contemporary', 'Minimalist', 'Chamber', 'Symphony'],
+  'Blues':             ['Delta', 'Chicago', 'Electric', 'Country Blues', 'Boogie'],
+  'Folk':              ['Singer-Songwriter', 'Freak Folk', 'Indie Folk', 'Celtic', 'Americana'],
+  'World Music':       ['African', 'Latin', 'Caribbean', 'Afrobeat', 'Celtic', 'Middle Eastern', 'Asian'],
+  'Experimental':      ['Avant-Garde', 'Noise', 'Musique Concrète', 'Free Improvisation', 'Electroacoustic'],
+};
+
+function esc(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const fpToggle      = document.getElementById('fp-toggle')!;
+const fpPanel       = document.getElementById('fp-panel') as HTMLElement;
+const fpGenre       = document.getElementById('fp-genre') as HTMLInputElement;
+const fpSubSections = document.getElementById('fp-sub-sections') as HTMLElement;
+const fpSubChips    = document.getElementById('fp-sub-chips')!;
+const fpSubInputs   = document.getElementById('fp-sub-inputs')!;
+
+fpToggle.addEventListener('click', () => { fpPanel.hidden = !fpPanel.hidden; });
+
+const subStates = new Map<string, 'include' | 'exclude'>();
+(JSON.parse(fpSubSections.dataset.includes || '[]') as string[]).forEach(s => subStates.set(s, 'include'));
+(JSON.parse(fpSubSections.dataset.excludes || '[]') as string[]).forEach(s => subStates.set(s, 'exclude'));
+
+function syncSubInputs() {
+  fpSubInputs.innerHTML = '';
+  for (const [sub, state] of subStates) {
+    const inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = state === 'include' ? 'subgenre' : 'excl';
+    inp.value = sub;
+    fpSubInputs.appendChild(inp);
+  }
+}
+
+function renderSubChips() {
+  const subs = SUBGENRE_MAP[fpGenre.value] ?? [];
+  if (!subs.length) { fpSubSections.style.display = 'none'; return; }
+  fpSubSections.style.display = '';
+  fpSubChips.innerHTML = subs.map(s => {
+    const st = subStates.get(s) ?? 'neutral';
+    const label = st === 'include' ? `+ ${esc(s)}` : st === 'exclude' ? `∅ ${esc(s)}` : esc(s);
+    return `<button type="button" class="sub-chip" data-sub="${esc(s)}" data-state="${st}">${label}</button>`;
+  }).join('');
+  fpSubChips.querySelectorAll<HTMLButtonElement>('.sub-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sub = btn.dataset.sub!;
+      const cur = subStates.get(sub) ?? 'neutral';
+      const next = cur === 'neutral' ? 'include' : cur === 'include' ? 'exclude' : 'neutral';
+      if (next === 'neutral') { subStates.delete(sub); btn.textContent = sub; }
+      else { subStates.set(sub, next); btn.textContent = (next === 'include' ? '+ ' : '∅ ') + sub; }
+      btn.dataset.state = next;
+      syncSubInputs();
+    });
+  });
+  syncSubInputs();
+}
+
+fpGenre.addEventListener('change', () => { subStates.clear(); renderSubChips(); });
+renderSubChips();
+</script>
