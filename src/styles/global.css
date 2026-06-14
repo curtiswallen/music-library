@@ -511,6 +511,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .view-panel.hidden { display: none; }
 .edit-panel { display: none; }
 .edit-panel.visible { display: block; }
+.edit-panel {width: 60vw;}
 
 /* ── Breadcrumb ── */
 .breadcrumb {
