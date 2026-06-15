@@ -6,6 +6,7 @@ interface Props {
   albums: LibraryEntry[];
   base: string;
   isOwner?: boolean;
+  showAddedAt?: boolean;
   safeSort: string;
   currentGenre: string;
   currentCountry: string;
@@ -22,6 +23,7 @@ const {
   albums,
   base,
   isOwner = false,
+  showAddedAt = false,
   safeSort,
   currentGenre,
   currentCountry,
@@ -62,7 +64,7 @@ const {
           </span></span>
         </th>
         <th>Notes</th>
-        {isOwner && <th><a href={sortHref('added')} class={safeSort === 'added' ? 'active' : ''}>Added{sortArrow('added')}</a></th>}
+        {showAddedAt && <th><a href={sortHref('added')} class={safeSort === 'added' ? 'active' : ''}>Added{sortArrow('added')}</a></th>}
         {isOwner && <th></th>}
       </tr>
     </thead>
@@ -119,7 +121,7 @@ const {
               <span class="notes-text">{a.notes}</span>
               {a.notes && <span class="notes-tip-body">{a.notes}</span>}
             </td>
-            {isOwner && <td class="added-cell">{a.added_at ? a.added_at.slice(0, 10) : ''}</td>}
+            {showAddedAt && <td class="added-cell">{a.added_at ? a.added_at.slice(0, 10) : ''}</td>}
             {isOwner && <td>{a.is_hidden ? <span class="hidden-badge" title="Hidden from public profile">🔒</span> : null}</td>}
           </tr>
         );

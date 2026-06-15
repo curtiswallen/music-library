@@ -12,16 +12,18 @@ let errors: Record<string, string> = {};
 let saved = false;
 
 // Values to re-populate form on error
-let formDisplayName = user.display_name ?? '';
-let formProfileUrl  = user.profile_url  ?? '';
-let formIsPrivate   = user.is_private;
+let formDisplayName  = user.display_name  ?? '';
+let formProfileUrl   = user.profile_url   ?? '';
+let formIsPrivate    = user.is_private;
+let formHideAddedAt  = user.hide_added_at ?? 0;
 
 if (Astro.request.method === 'POST') {
   const data = await Astro.request.formData();
 
   formDisplayName = ((data.get('display_name') as string) ?? '').trim();
   formProfileUrl  = ((data.get('profile_url')  as string) ?? '').trim().toLowerCase();
-  formIsPrivate   = data.get('is_private') === '1' ? 1 : 0;
+  formIsPrivate   = data.get('is_private')    === '1' ? 1 : 0;
+  formHideAddedAt = data.get('hide_added_at') === '1' ? 1 : 0;
 
   // Validate display_name
   if (formDisplayName.length > 50) {
@@ -46,12 +48,13 @@ if (Astro.request.method === 'POST') {
   if (Object.keys(errors).length === 0) {
     await db.prepare(`
       UPDATE users
-      SET display_name = ?, profile_url = ?, is_private = ?
+      SET display_name = ?, profile_url = ?, is_private = ?, hide_added_at = ?
       WHERE id = ?
     `).bind(
       formDisplayName || null,
       formProfileUrl  || null,
       formIsPrivate,
+      formHideAddedAt,
       user.id,
     ).run();
 
@@ -65,7 +68,7 @@ if (Astro.url.searchParams.get('saved') === '1') saved = true;
 <Layout title="Settings">
   <div class="page-header">
     <h1>Settings</h1>
-    <a href="/" class="btn">← Library</a>
+    <a href={`/${user.profile_url}`} class="btn">← Library</a>
   </div>
 
   {saved && <p class="flash-ok">Settings saved.</p>}
@@ -108,6 +111,20 @@ if (Astro.url.searchParams.get('saved') === '1') saved = true;
           </label>
         </div>
         <span class="field-hint">Albums you've individually hidden will remain hidden even if you switch back to Public.</span>
+      </div>
+
+      <div class="form-group">
+        <label>Added Dates</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="hide_added_at" value="0" checked={formHideAddedAt === 0} />
+            Visible — show when albums were added on your public profile
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="hide_added_at" value="1" checked={formHideAddedAt === 1} />
+            Hidden — don't show added dates to other users
+          </label>
+        </div>
       </div>
     </div>
 

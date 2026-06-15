@@ -75,7 +75,8 @@ export interface User {
   username: string;
   display_name: string | null;
   profile_url: string | null;
-  is_private: number;   // 0 | 1
+  is_private: number;     // 0 | 1
+  hide_added_at: number;  // 0 | 1
   avatar_url: string | null;
   is_admin: number;     // 0 | 1
   created_at: string;

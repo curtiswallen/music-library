@@ -12,11 +12,11 @@ if (!username) return Astro.redirect('/');
 const db = env.DB;
 
 const profileUser = await db.prepare(`
-  SELECT id, username, display_name, profile_url, is_private, avatar_url
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, avatar_url
   FROM users WHERE profile_url = ?
 `).bind(username).first<{
   id: number; username: string; display_name: string | null;
-  profile_url: string; is_private: number; avatar_url: string | null;
+  profile_url: string; is_private: number; hide_added_at: number; avatar_url: string | null;
 }>();
 
 if (!profileUser) return new Response(null, { status: 404 });
@@ -38,8 +38,8 @@ const excludes    = Astro.url.searchParams.getAll('excl');
 const ratingMin   = Astro.url.searchParams.get('rating_min')  ?? '';
 const ratingMax   = Astro.url.searchParams.get('rating_max')  ?? '';
 const rated       = Astro.url.searchParams.get('rated')       ?? '';
-const sort        = Astro.url.searchParams.get('sort')        ?? 'artist';
-const dir         = Astro.url.searchParams.get('dir')         ?? 'asc';
+const sort        = Astro.url.searchParams.get('sort')        ?? 'added';
+const dir         = Astro.url.searchParams.get('dir')         ?? 'desc';
 
 const VALID_SORTS: Record<string, string> = {
   artist: 'a.artist', album: 'a.album', year: 'a.year',
@@ -348,6 +348,7 @@ const clearFiltersHref = buildParams({
           albums={albums}
           base={base}
           isOwner={isOwner}
+          showAddedAt={isOwner || !profileUser.hide_added_at}
           safeSort={safeSort}
           currentGenre={genre}
           currentCountry={country}
