@@ -221,9 +221,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 .notes-tip-body {
   display: none;
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 2px);
+  position: fixed;
   min-width: 220px;
   max-width: 360px;
   max-height: min(320px, 60vh);
@@ -240,7 +238,6 @@ tr:hover td { background: var(--bg-hover); }
   font-size: 12px;
   line-height: 1.55;
 }
-.notes-cell:hover .notes-tip-body { display: block; }
 
 /* Cover art upload */
 .cover-file-input { display: none; }

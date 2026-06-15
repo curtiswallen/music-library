@@ -129,3 +129,25 @@ const {
     </tbody>
   </table>
 </div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.notes-cell').forEach(cell => {
+    const tip = cell.querySelector<HTMLElement>('.notes-tip-body');
+    if (!tip) return;
+    cell.addEventListener('mouseenter', () => {
+      const r = cell.getBoundingClientRect();
+      tip.style.left = r.left + 'px';
+      if (r.top > window.innerHeight / 2) {
+        tip.style.top = '';
+        tip.style.bottom = (window.innerHeight - r.top + 2) + 'px';
+      } else {
+        tip.style.top = (r.bottom + 2) + 'px';
+        tip.style.bottom = '';
+      }
+      tip.style.display = 'block';
+    });
+    cell.addEventListener('mouseleave', () => {
+      tip.style.display = 'none';
+    });
+  });
+</script>
