@@ -30,6 +30,31 @@ export async function generateUniqueSlug(
   }
 }
 
+const RESERVED_PROFILE_URLS = new Set([
+  'add', 'album', 'artist', 'auth', 'api', 'settings', 'admin', 'login', 'logout',
+]);
+
+export async function generateUniqueProfileUrl(
+  db: import('@cloudflare/workers-types').D1Database,
+  name: string,
+): Promise<string> {
+  // Slugify, strip trailing hyphens, cap at 26 chars to leave room for a "-NN" suffix
+  let base = slugify(name).replace(/-+$/, '').slice(0, 26).replace(/-+$/, '');
+  // Ensure minimum 3 chars
+  if (base.length < 3) base = (base + '000').slice(0, 3);
+
+  let url = base;
+  let n = 2;
+  while (true) {
+    const isReserved = RESERVED_PROFILE_URLS.has(url);
+    const clash = isReserved || !!(await db.prepare(
+      'SELECT id FROM users WHERE profile_url = ?'
+    ).bind(url).first());
+    if (!clash) return url;
+    url = `${base}-${n++}`;
+  }
+}
+
 export const GENRES: string[] = [
   // Metal
   'Black Metal', 'Death Metal', 'Black/Death', 'Doom Metal', 'Thrash Metal',

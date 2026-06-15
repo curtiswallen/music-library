@@ -31,18 +31,18 @@ if (Astro.request.method === 'POST') {
   }
 
   // Validate profile_url
-  if (formProfileUrl) {
-    if (!URL_RE.test(formProfileUrl)) {
-      errors.profile_url = 'URL must be 3–30 characters: lowercase letters, numbers, hyphens, and underscores only.';
-    } else if (RESERVED.has(formProfileUrl)) {
-      errors.profile_url = `"${formProfileUrl}" is a reserved word and cannot be used as a URL.`;
-    } else {
-      // Uniqueness check (exclude current user)
-      const clash = await db.prepare(
-        'SELECT id FROM users WHERE profile_url = ? AND id != ?'
-      ).bind(formProfileUrl, user.id).first<{ id: number }>();
-      if (clash) errors.profile_url = 'That URL is already taken.';
-    }
+  if (!formProfileUrl) {
+    errors.profile_url = 'Profile URL is required.';
+  } else if (!URL_RE.test(formProfileUrl)) {
+    errors.profile_url = 'URL must be 3–30 characters: lowercase letters, numbers, hyphens, and underscores only.';
+  } else if (RESERVED.has(formProfileUrl)) {
+    errors.profile_url = `"${formProfileUrl}" is a reserved word and cannot be used as a URL.`;
+  } else {
+    // Uniqueness check (exclude current user)
+    const clash = await db.prepare(
+      'SELECT id FROM users WHERE profile_url = ? AND id != ?'
+    ).bind(formProfileUrl, user.id).first<{ id: number }>();
+    if (clash) errors.profile_url = 'That URL is already taken.';
   }
 
   if (Object.keys(errors).length === 0) {
@@ -94,7 +94,7 @@ if (Astro.url.searchParams.get('saved') === '1') saved = true;
                  pattern="[a-z0-9][a-z0-9_\-]{1,28}[a-z0-9]|[a-z0-9]{3}"
                  maxlength="30" autocomplete="off" spellcheck="false" />
         </div>
-        <span class="field-hint">3–30 characters: lowercase letters, numbers, hyphens, underscores. Leave empty to disable your public profile.</span>
+        <span class="field-hint">3–30 characters: lowercase letters, numbers, hyphens, underscores.</span>
         {errors.profile_url && <span class="field-error">{errors.profile_url}</span>}
       </div>
 
@@ -118,11 +118,11 @@ if (Astro.url.searchParams.get('saved') === '1') saved = true;
         <div class="radio-group">
           <label class="radio-label">
             <input type="radio" name="hide_added_at" value="0" checked={formHideAddedAt === 0} />
-            Visible — show when albums were added on your public profile
+            Visible — show dates when albums were logged on your public profile
           </label>
           <label class="radio-label">
             <input type="radio" name="hide_added_at" value="1" checked={formHideAddedAt === 1} />
-            Hidden — don't show added dates to other users
+            Hidden — don't show logged dates to other users
           </label>
         </div>
       </div>

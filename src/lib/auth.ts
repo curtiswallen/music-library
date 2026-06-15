@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { User } from '../types';
-import { slugify } from './utils';
+import { generateUniqueProfileUrl, slugify } from './utils';
 
 const SESSION_COOKIE = 'session';
 const SESSION_TTL    = 60 * 60 * 24 * 30; // 30 days in seconds
@@ -74,15 +74,24 @@ export async function findOrCreateUser(
 
   const existing = await db.prepare('SELECT * FROM users WHERE google_id = ?')
     .bind(googleId).first<User>();
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.profile_url) {
+      const profileUrl = await generateUniqueProfileUrl(db, username);
+      await db.prepare('UPDATE users SET profile_url = ? WHERE id = ?')
+        .bind(profileUrl, existing.id).run();
+      existing.profile_url = profileUrl;
+    }
+    return existing;
+  }
 
   const { results: [{ c }] } = await db.prepare('SELECT COUNT(*) as c FROM users')
     .all<{ c: number }>();
   const isAdmin = Number(c) === 0 ? 1 : 0;
 
+  const profileUrl = await generateUniqueProfileUrl(db, username);
   const result = await db.prepare(
-    'INSERT INTO users (google_id, email, username, avatar_url, is_admin) VALUES (?, ?, ?, ?, ?)'
-  ).bind(googleId, email, username, avatarUrl, isAdmin).run();
+    'INSERT INTO users (google_id, email, username, avatar_url, is_admin, profile_url) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(googleId, email, username, avatarUrl, isAdmin, profileUrl).run();
 
   return db.prepare('SELECT * FROM users WHERE id = ?')
     .bind(result.meta.last_row_id).first<User>();
