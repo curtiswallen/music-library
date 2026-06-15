@@ -15,6 +15,6 @@ database_id = "cc935107-ee3a-4dbc-96f2-f972c7a1dfd7"
 # Google OAuth — Client ID is public; Client Secret goes in .dev.vars (local) or `wrangler secret put` (prod)
 GOOGLE_CLIENT_ID = "1013442807833-dutbpt0s2r9ukev81abbtvg4h7144ah1.apps.googleusercontent.com"
 # Comma-separated list of Google account emails allowed to sign in (leave empty to allow all)
-ALLOWED_EMAILS = "curtiswallen@gmail.com"
+ALLOWED_EMAILS = "curtiswallen@gmail.com,peter.c.wiley@gmail.com"
 # Set after enabling r2.dev public access: Cloudflare Dashboard → R2 → music-library-covers → Settings → Public Access
 COVERS_PUBLIC_URL = "https://pub-008a29329fd740048bc6b9effed1b0da.r2.dev"
