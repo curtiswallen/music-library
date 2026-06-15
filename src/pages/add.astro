@@ -96,14 +96,14 @@ if (Astro.request.method === 'POST') {
     data.get('is_hidden') === 'on' ? 1 : 0,
   ).run();
 
-  return Astro.redirect(`/album/${albumSlug}`);
+  return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
 }
 ---
 
 <Layout title="Add Album">
   <div class="page-header">
     <h1>Add Album</h1>
-    <a href="/" class="btn">← Back</a>
+    <a href={`/${user.profile_url}`} class="btn">← Back</a>
   </div>
 
   <div id="add-wrapper">
@@ -116,7 +116,7 @@ if (Astro.request.method === 'POST') {
       <div class="mb-results" id="mb-results"></div>
     </div>
 
-    <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref="/" />
+    <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} />
   </div>
 </Layout>
 

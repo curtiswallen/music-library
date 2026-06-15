@@ -92,6 +92,16 @@ function getRatingDesc(v: number) {
 }
 
 export function initAlbumForm() {
+  // Guard: return no-ops if the form isn't on this page
+  if (!document.getElementById('f-genre')) {
+    return {
+      renderTracks:       () => {},
+      renderSubgenreWidget: () => {},
+      setSelectedSubs:    (_: string[]) => {},
+      setTracks:          (_: TrackData[]) => {},
+    };
+  }
+
   // ── Subgenre widget ──────────────────────────────────────────────────────────
   const genreInput  = document.getElementById('f-genre')       as HTMLInputElement;
   const chipsEl     = document.getElementById('subgenre-chips')!;

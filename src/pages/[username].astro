@@ -21,9 +21,10 @@ const profileUser = await db.prepare(`
 
 if (!profileUser) return new Response(null, { status: 404 });
 
+const loggedInUser = Astro.locals.user;
+const isOwner      = loggedInUser?.id === profileUser.id;
 const displayName  = profileUser.display_name || profileUser.username;
-const isOwnProfile = Astro.locals.user?.id === profileUser.id;
-if (isOwnProfile) return Astro.redirect('/');
+const base         = `/${username}`;
 
 // ── URL params ────────────────────────────────────────────────────────────────
 const q           = Astro.url.searchParams.get('q')           ?? '';
@@ -49,7 +50,7 @@ const safeSortCol = VALID_SORTS[safeSort];
 const safeDir     = dir === 'desc' ? 'DESC' : 'ASC';
 
 // ── Filter SQL ────────────────────────────────────────────────────────────────
-const clauses: string[] = ['ua.is_hidden = 0'];
+const clauses: string[] = isOwner ? [] : ['ua.is_hidden = 0'];
 const params:  (string | number)[] = [];
 
 if (q) { clauses.push('(a.artist LIKE ? OR a.album LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
@@ -68,8 +69,8 @@ if (recommended)     clauses.push('ua.recommended = 1');
 let albums: LibraryEntry[] = [];
 let libraryCountries: string[] = [];
 
-if (!profileUser.is_private) {
-  const where = `AND ${clauses.join(' AND ')}`;
+if (isOwner || !profileUser.is_private) {
+  const where = clauses.length ? `AND ${clauses.join(' AND ')}` : '';
   const { results } = await db.prepare(`
     SELECT a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
            ua.genre, ua.subgenres, ua.rating, ua.notes, ua.recommended, ua.is_hidden, ua.added_at
@@ -80,16 +81,16 @@ if (!profileUser.is_private) {
   `).bind(profileUser.id, ...params).all<LibraryEntry>();
   albums = results;
 
+  const hiddenFilter = isOwner ? '' : 'AND ua.is_hidden = 0';
   const { results: countryRows } = await db.prepare(`
     SELECT DISTINCT a.country FROM albums a
     JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-    WHERE a.country != '' AND ua.is_hidden = 0
+    WHERE a.country != '' ${hiddenFilter}
     ORDER BY a.country
   `).bind(profileUser.id).all<{ country: string }>();
   libraryCountries = countryRows.map(r => r.country);
 }
 
-// ── Genres ────────────────────────────────────────────────────────────────────
 const GENRES = [
   'Black Metal', 'Death Metal', 'Black/Death', 'Doom Metal', 'Thrash Metal',
   'Speed Metal', 'Heavy Metal', 'Power Metal', 'Progressive Metal', 'Post-Metal',
@@ -104,18 +105,17 @@ const GENRES = [
 ];
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
-const base = `/${username}`;
 
 function buildParams(o: Record<string, string | string[] | null | undefined> = {}) {
   const defaults: Record<string, string | string[]> = {};
-  if (q)                defaults.q            = q;
-  if (country)          defaults.country      = country;
-  if (yearFrom)         defaults.year_from    = yearFrom;
-  if (yearTo)           defaults.year_to      = yearTo;
-  if (ratingMin)        defaults.rating_min   = ratingMin;
-  if (ratingMax)        defaults.rating_max   = ratingMax;
-  if (rated)            defaults.rated        = rated;
-  if (genre)            defaults.genre        = genre;
+  if (q)               defaults.q            = q;
+  if (country)         defaults.country      = country;
+  if (yearFrom)        defaults.year_from    = yearFrom;
+  if (yearTo)          defaults.year_to      = yearTo;
+  if (ratingMin)       defaults.rating_min   = ratingMin;
+  if (ratingMax)       defaults.rating_max   = ratingMax;
+  if (rated)           defaults.rated        = rated;
+  if (genre)           defaults.genre        = genre;
   defaults.sort = safeSort;
   defaults.dir  = safeDir.toLowerCase();
   if (recommended)       defaults.recommended  = '1';
@@ -171,22 +171,37 @@ const hasAnyFilter = !!(q || country || yearFrom || yearTo || ratingMin || ratin
 const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 ---
 
-<Layout title={`${displayName}'s Library`}>
+<Layout title={isOwner ? 'My Library' : `${displayName}'s Library`}>
   <div class="page-header">
     <div style="display:flex;align-items:center;gap:10px">
       {profileUser.avatar_url && <img src={profileUser.avatar_url} class="profile-avatar" alt="" />}
       <h1>
-        <a href={base}>{displayName}'s Library</a>
-        {!profileUser.is_private && <span class="count">({albums.length} albums)</span>}
+        {isOwner ? 'My Library' : `${displayName}'s Library`}
+        {(isOwner || !profileUser.is_private) && <span class="count">({albums.length} albums)</span>}
       </h1>
     </div>
-    {Astro.locals.user
-      ? <a href="/" class="btn">← My Library</a>
-      : <a href="/auth/login" class="btn">Sign In</a>
-    }
+    <div style="display:flex;gap:8px;align-items:center">
+      {isOwner ? (
+        <>
+          <span class="user-chip">
+            {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
+            {loggedInUser!.display_name || loggedInUser!.username}
+          </span>
+          <a href="/settings" class="btn" title="Settings">⚙</a>
+          <form method="post" action="/auth/logout" style="margin:0">
+            <button class="btn" type="submit">Sign out</button>
+          </form>
+          <a href="/add" class="btn">+ Add Album</a>
+        </>
+      ) : (
+        loggedInUser
+          ? <a href={`/${loggedInUser.profile_url}`} class="btn">← My Library</a>
+          : <a href="/auth/login" class="btn">Sign In</a>
+      )}
+    </div>
   </div>
 
-  {profileUser.is_private ? (
+  {(!isOwner && !!profileUser.is_private) ? (
     <div class="empty-state">
       <p>{displayName} has set their library to private.</p>
     </div>
@@ -310,13 +325,16 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 
       {albums.length === 0 ? (
         <div class="empty-state">
-          <p>No albums match the current filters.</p>
+          {isOwner
+            ? <p>No albums found. <a href="/add">Add your first album →</a></p>
+            : <p>No albums match the current filters.</p>
+          }
         </div>
       ) : (
         <LibraryTable
           albums={albums}
           base={base}
-          isOwner={false}
+          isOwner={isOwner}
           safeSort={safeSort}
           currentGenre={genre}
           currentCountry={country}
@@ -335,6 +353,13 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 
 <style>
 .filters { display: block; margin-bottom: 20px; }
+.user-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-muted); padding-right: 10px;
+}
+.user-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.profile-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+
 .filter-bar { display: flex; gap: 8px; align-items: center; }
 .fp-toggle-btn { white-space: nowrap; }
 
@@ -342,6 +367,7 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 .fchip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 10px; border-radius: 3px; background: var(--bg-hover); border: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
 .fchip-excl { border-color: #7a3030; background: rgba(180,40,40,0.10); color: #c06060; }
 .chip-remove { color: var(--text-muted); text-decoration: none; font-size: 14px; line-height: 1; opacity: 0.7; margin-left: 2px; }
+.chip-remove:hover { opacity: 1; color: var(--text); }
 
 .filter-panel { margin-top: 10px; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; width: fit-content; max-width: 100%; }
 .fp-grid { display: flex; flex-direction: row; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 12px; align-items: flex-start; }
@@ -357,10 +383,15 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 .filter-panel :global(.combo) { width: 100%; }
 .fp-footer { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 
+.added-cell { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+.album-hidden { opacity: 0.5; }
+.hidden-badge { font-size: 11px; opacity: 0.6; cursor: default; }
+
 .flag-link { text-decoration: none; display: inline-flex; align-items: center; border-radius: 3px; transition: opacity 0.15s; }
 .flag-link:hover { opacity: 0.75; }
 .flag-active { outline: 1px solid var(--accent); border-radius: 2px; }
-.profile-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.flag-text { font-size: 11px; color: var(--text-muted); }
+.flag-text.flag-active { color: var(--accent); }
 </style>
 
 <script>
@@ -390,7 +421,7 @@ const SUBGENRE_MAP: Record<string, string[]> = {
   'Shoegaze':          ['Dream Pop', 'Blackgaze', 'Lo-Fi', 'Neo-Shoegaze'],
   'Post-Punk':         ['Darkwave', 'Cold Wave', 'Goth Rock', 'New Wave', 'Proto-Punk'],
   'Punk':              ['Hardcore', 'Anarcho', 'Crust', 'Oi!', 'Street Punk', 'D-Beat'],
-  'Electronic':        ['Ambient', 'Industrial', 'EBM', 'Dark Electro', 'Synthwave', 'Noise', 'IDM'],
+  'Electronic':        ['Ambient', 'Industrial', 'EBM', 'Dark Electro', 'Dungeon Synth', 'Synthwave', 'Noise', 'IDM'],
   'Ambient':           ['Dark Ambient', 'Drone', 'Isolationism', 'Post-Industrial', 'New Age'],
   'Darkwave':          ['Ethereal', 'Coldwave', 'Goth Rock', 'Neoclassical', 'Industrial'],
   'Neofolk':           ['Apocalyptic Folk', 'Dark Folk', 'Folk Noir', 'Military Pop'],

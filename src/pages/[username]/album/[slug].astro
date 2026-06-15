@@ -1,15 +1,15 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
+import AlbumForm from '../../../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
 import type { Album, UserAlbum, Track } from '../../../types';
-import { slugify, countryCode } from '../../../lib/utils';
+import { slugify, generateUniqueSlug, countryCode } from '../../../lib/utils';
 
 const { username, slug: slugParam } = Astro.params;
-if (!username || !slugParam) return Astro.redirect('/');
+if (!username || !slugParam) return new Response(null, { status: 404 });
 
 const db = env.DB;
 
-// Look up the profile owner
 const profileUser = await db.prepare(`
   SELECT id, username, display_name, profile_url, is_private, avatar_url
   FROM users WHERE profile_url = ?
@@ -18,26 +18,92 @@ const profileUser = await db.prepare(`
   profile_url: string; is_private: number; avatar_url: string | null;
 }>();
 
-if (!profileUser || profileUser.is_private) {
-  return new Response(null, { status: 404 });
+if (!profileUser) return new Response(null, { status: 404 });
+
+const loggedInUser = Astro.locals.user;
+const isOwner      = loggedInUser?.id === profileUser.id;
+
+if (profileUser.is_private && !isOwner) return Astro.redirect(`/${username}`);
+
+// ── POST: save edits ──────────────────────────────────────────────────────────
+if (Astro.request.method === 'POST') {
+  if (!isOwner) return new Response('Forbidden', { status: 403 });
+
+  const data      = await Astro.request.formData();
+  const artist    = (data.get('artist') as string) || '';
+  const albumName = (data.get('album') as string) || '';
+
+  const existing = await db.prepare('SELECT id FROM albums WHERE slug = ?')
+    .bind(slugParam).first<{ id: number }>();
+  if (!existing) return Astro.redirect(`/${profileUser.profile_url}`);
+
+  const subgenres = JSON.stringify(
+    ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean)
+  );
+
+  let rawTracks: Array<Record<string, unknown>> = [];
+  try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
+
+  const canonicalTracks = JSON.stringify(rawTracks.map(t => ({
+    pos: t.pos, title: t.title, length: t.length ?? null,
+  })));
+  const tracksData = JSON.stringify(rawTracks.map(t => ({
+    pos: t.pos, rating: t.rating ?? null, notable: t.notable ?? false, note: t.note ?? '',
+  })));
+
+  const newSlug = await generateUniqueSlug(db, artist, albumName, existing.id);
+
+  await db.prepare(`
+    UPDATE albums SET
+      artist = ?, album = ?, country = ?, year = ?,
+      slug = ?, cover_url = ?, mbid = ?, tracks = ?
+    WHERE id = ?
+  `).bind(
+    artist, albumName,
+    (data.get('country') as string) || '',
+    data.get('year') ? parseInt(data.get('year') as string) : null,
+    newSlug,
+    (data.get('cover_url') as string) || null,
+    (data.get('mbid') as string) || null,
+    canonicalTracks,
+    existing.id,
+  ).run();
+
+  await db.prepare(`
+    UPDATE user_albums SET
+      genre = ?, subgenres = ?, rating = ?, notes = ?,
+      tracks_data = ?, recommended = ?, is_hidden = ?
+    WHERE album_id = ? AND user_id = ?
+  `).bind(
+    (data.get('genre') as string) || '',
+    subgenres,
+    data.get('rating') ? parseInt(data.get('rating') as string) : null,
+    (data.get('notes') as string) || '',
+    tracksData,
+    data.get('recommended') === 'on' ? 1 : 0,
+    data.get('is_hidden') === 'on' ? 1 : 0,
+    existing.id,
+    profileUser.id,
+  ).run();
+
+  return Astro.redirect(`/${profileUser.profile_url}/album/${newSlug}`);
 }
 
-const displayName = profileUser.display_name || profileUser.username;
-
-// Fetch album + this profile user's annotation
+// ── GET: fetch album + user data ──────────────────────────────────────────────
 const row = await db.prepare(`
   SELECT
     a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
-    ua.genre, ua.subgenres, ua.rating, ua.notes,
+    ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
     ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-  WHERE a.slug = ? AND ua.is_hidden = 0
+  WHERE a.slug = ?
 `).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string }>();
 
 if (!row) return new Response(null, { status: 404 });
+if (row.is_hidden && !isOwner) return new Response(null, { status: 404 });
 
-const album    = row;
+const album     = row;
 const subgenres: string[] = JSON.parse(album.subgenres || '[]');
 
 type CanonTrack = { pos: number; title: string; length: number | null; rating?: number | null; notable?: boolean; note?: string };
@@ -84,29 +150,29 @@ function sortSubs(subs: string[]) {
   return [...subs].sort((a, b) => a === 'Sketchy' ? -1 : b === 'Sketchy' ? 1 : 0);
 }
 const sortedSubs = sortSubs(subgenres);
-const cc = countryCode(album.country).toLowerCase();
 
-// Other albums by this artist in this user's library
+const libBase     = `/${profileUser.profile_url}`;
+const displayName = profileUser.display_name || profileUser.username;
+
 const { results: artistAlbums } = await db.prepare(`
   SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
          ua.subgenres, ua.rating, ua.recommended
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-  WHERE a.artist = ? AND a.id != ? AND ua.is_hidden = 0
+  WHERE a.artist = ? AND a.id != ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
   ORDER BY a.year ASC NULLS LAST
 `).bind(profileUser.id, album.artist, album.id).all<{
   id: number; slug: string; artist: string; album: string; country: string;
   year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
 }>();
 
-// Similar albums: score by matching subgenres + country, min score 2, top 5
 const albumCountry = countryCode(album.country);
 const { results: candidates } = await db.prepare(`
   SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
          ua.subgenres, ua.rating, ua.recommended
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-  WHERE a.artist != ? AND ua.is_hidden = 0
+  WHERE a.artist != ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
 `).bind(profileUser.id, album.artist).all<{
   id: number; slug: string; artist: string; album: string; country: string;
   year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
@@ -126,108 +192,112 @@ const similar = candidates
 const addedAt = album.added_at
   ? new Date(album.added_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   : null;
-
-const backUrl = `/${username}`;
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
   <div class="page-header">
     <div class="breadcrumb">
-      <h1><a href={backUrl}>{displayName}'s Library</a></h1>
+      <h1><a href={libBase}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a></h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
-      <h1><a href={`/${username}/artist/${slugify(album.artist)}`}>{album.artist}
-        {cc
-          ? <span class={`fi fi-${cc} country-flag`} title={album.country} />
-          : album.country && <span style="color:var(--text-muted);font-size:11px">{album.country}</span>
-        }
-      </a></h1>
+      <h1><a href={`${libBase}/artist/${slugify(album.artist)}`}>{album.artist} {countryCode(album.country)
+                  ? <span class={`fi fi-${countryCode(album.country).toLowerCase()} country-flag`} title={album.country} />
+                  : <span style="color:var(--text-muted);font-size:11px">{album.country}</span>
+                }</a></h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
-      <h1><span class="breadcrumb-current">
-        {album.album}
-        {album.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
-      </span></h1>
+      <h1><span class="breadcrumb-current">{album.album} {album.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span></h1>
     </div>
-    {Astro.locals.user
-      ? <a href="/" class="btn">← My Library</a>
-      : <a href="/auth/login" class="btn">Sign In</a>
-    }
+    <div style="display:flex;gap:8px">
+      {isOwner && (
+        <>
+          <button class="btn" id="edit-btn">Edit</button>
+          <button class="btn btn-danger" id="delete-btn"
+            data-id={album.id} data-back={libBase}>Delete</button>
+          <a href="/add" class="btn">+ Add Album</a>
+        </>
+      )}
+      {!isOwner && loggedInUser && (
+        <a href={`/${loggedInUser.profile_url}`} class="btn">← My Library</a>
+      )}
+      {!isOwner && !loggedInUser && (
+        <a href="/auth/login" class="btn">Sign In</a>
+      )}
+    </div>
   </div>
 
-  <div class="album-hero">
-    <div class="cover-box-lg">
-      {album.cover_url && (
-        <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
-      )}
-    </div>
-    <div class="album-meta">
-      <div class="album-attrs">
-        {album.year && <span>{album.year}</span>}
-        {album.genre && <span class="album-genre-label">{album.genre}</span>}
-        {album.rating != null && (
-          <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
+  <!-- ── View mode ── -->
+  <div class="view-panel" id="view-panel">
+    <div class="album-hero">
+      <div class="cover-box-lg">
+        {album.cover_url && (
+          <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
         )}
       </div>
-
-      {sortedSubs.length > 0 && (
-        <div class="album-tags">
-          {sortedSubs.map(s => (
-            <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
-          ))}
+      <div class="album-meta">
+        <div class="album-attrs">
+          {album.year && <span>{album.year}</span>}
+          {album.genre && <span class="album-genre-label">{album.genre}</span>}
+          {album.rating != null && (
+            <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
+          )}
         </div>
-      )}
-
-      {album.notes && (
-        <div>
-          <p class="attr-label">Notes</p>
-          <p class="album-notes">{album.notes}</p>
-        </div>
-      )}
-
-      {addedAt && <p class="added-at">Logged by {displayName} on {addedAt}</p>}
-
-      {albumTracks.length > 0 && (
-        <div class="tracks-wrap" style="margin-top:16px">
-          <p class="attr-label" style="margin-bottom:6px">Tracks</p>
-          <table class="tracks-table">
-            <thead>
-              <tr>
-                <th class="track-num">#</th>
-                <th class="track-title">Title</th>
-                <th class="track-len">Length</th>
-                <th class="track-rating-cell">Rating</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {albumTracks.map(t => (
+        {sortedSubs.length > 0 && (
+          <div class="album-tags">
+            {sortedSubs.map(s => (
+              <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+            ))}
+          </div>
+        )}
+        {album.notes && (
+          <div>
+            <p class="attr-label">Notes</p>
+            <p class="album-notes">{album.notes}</p>
+          </div>
+        )}
+        {addedAt && (
+          <p class="added-at">Logged on {addedAt}</p>
+        )}
+        {albumTracks.length > 0 && (
+          <div class="tracks-wrap" style="margin-top:16px">
+            <p class="attr-label" style="margin-bottom:6px">Tracks</p>
+            <table class="tracks-table">
+              <thead>
                 <tr>
-                  <td class="track-num">{t.pos}</td>
-                  <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
-                  <td class="track-len">{fmtLen(t.length)}</td>
-                  <td class="track-rating-cell">
-                    {t.rating != null
-                      ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
-                      : <span style="color:var(--text-muted)">—</span>
-                    }
-                  </td>
-                  <td class="track-note-cell">{t.note}</td>
+                  <th class="track-num">#</th>
+                  <th class="track-title">Title</th>
+                  <th class="track-len">Length</th>
+                  <th class="track-rating-cell">Rating</th>
+                  <th>Note</th>
                 </tr>
-              ))}
-            </tbody>
-            {totalAlbumLen && (
-              <tfoot>
-                <tr class="tracks-total-row">
-                  <td class="track-num"></td><td></td>
-                  <td class="track-len tracks-total">{totalAlbumLen}</td>
-                  <td colspan="2"></td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {albumTracks.map(t => (
+                  <tr>
+                    <td class="track-num">{t.pos}</td>
+                    <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
+                    <td class="track-len">{fmtLen(t.length)}</td>
+                    <td class="track-rating-cell">
+                      {t.rating != null
+                        ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
+                        : <span style="color:var(--text-muted)">—</span>
+                      }
+                    </td>
+                    <td class="track-note-cell">{t.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {totalAlbumLen && (
+                <tfoot>
+                  <tr class="tracks-total-row">
+                    <td class="track-num"></td><td></td>
+                    <td class="track-len tracks-total">{totalAlbumLen}</td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
 
-      {(artistAlbums.length > 0 || similar.length > 0) && (
         <section class="related-section">
           {artistAlbums.length > 0 && (
             <div class="more-by">
@@ -237,7 +307,7 @@ const backUrl = `/${username}`;
                   {artistAlbums.map(a => {
                     const aSubs: string[] = JSON.parse(a.subgenres || '[]');
                     return (
-                      <tr style="cursor:pointer" onclick={`window.location='/${username}/album/${a.slug}'`}>
+                      <tr data-href={`${libBase}/album/${a.slug}`}>
                         <td style="width:44px">
                           <div class="cover-thumb" style="background:#000;overflow:hidden">
                             {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
@@ -245,7 +315,7 @@ const backUrl = `/${username}`;
                               onerror="this.style.display='none'" />}
                           </div>
                         </td>
-                        <td><a href={`/${username}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star"> ★</span> : null}</a></td>
+                        <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
                         <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                         <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
                         <td>{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
@@ -264,9 +334,9 @@ const backUrl = `/${username}`;
                 <table><tbody>
                   {similar.map(a => {
                     const aSubs: string[] = JSON.parse(a.subgenres || '[]');
-                    const acc = countryCode(a.country).toLowerCase();
+                    const cc = countryCode(a.country).toLowerCase();
                     return (
-                      <tr style="cursor:pointer" onclick={`window.location='/${username}/album/${a.slug}'`}>
+                      <tr data-href={`${libBase}/album/${a.slug}`}>
                         <td style="width:44px">
                           <div class="cover-thumb" style="background:#000;overflow:hidden">
                             {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
@@ -274,9 +344,9 @@ const backUrl = `/${username}`;
                               onerror="this.style.display='none'" />}
                           </div>
                         </td>
-                        <td style="color:var(--text-muted)"><a href={`/${username}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
-                        <td>{acc && <span class={`fi fi-${acc} country-flag`} title={a.country} />}</td>
-                        <td><a href={`/${username}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star"> ★</span> : null}</a></td>
+                        <td style="color:var(--text-muted)"><a href={`${libBase}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
+                        <td>{cc && <span class={`fi fi-${cc} country-flag`} title={a.country} />}</td>
+                        <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
                         <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                         <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
                         <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
@@ -288,7 +358,62 @@ const backUrl = `/${username}`;
             </div>
           )}
         </section>
-      )}
+      </div>
     </div>
   </div>
+
+  <!-- ── Edit mode (owner only) ── -->
+  {isOwner && (
+    <div class="edit-panel" id="edit-panel">
+      <AlbumForm
+        values={{
+          mbid:        album.mbid,
+          artist:      album.artist,
+          album:       album.album,
+          year:        album.year,
+          country:     album.country,
+          genre:       album.genre,
+          subgenres,
+          rating:      album.rating,
+          notes:       album.notes,
+          cover_url:   album.cover_url,
+          tracks:      JSON.stringify(albumTracks),
+          recommended: album.recommended,
+          is_hidden:   album.is_hidden,
+        }}
+        submitLabel="Save Changes"
+      />
+    </div>
+  )}
 </Layout>
+
+<script>
+import { initAlbumForm } from '../../../lib/album-form';
+
+initAlbumForm();
+
+document.getElementById('edit-btn')?.addEventListener('click', () => {
+  document.getElementById('view-panel')!.classList.add('hidden');
+  document.getElementById('edit-panel')!.classList.add('visible');
+});
+document.getElementById('cancel-btn')?.addEventListener('click', () => {
+  document.getElementById('edit-panel')!.classList.remove('visible');
+  document.getElementById('view-panel')!.classList.remove('hidden');
+});
+
+document.getElementById('delete-btn')?.addEventListener('click', async e => {
+  const btn  = e.currentTarget as HTMLElement;
+  const id   = btn.dataset.id;
+  const back = btn.dataset.back ?? '/';
+  if (!confirm('Remove this album from your library? This cannot be undone.')) return;
+  await fetch(`/api/album/${id}`, { method: 'DELETE' });
+  window.location.href = back;
+});
+
+document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
+  tr.addEventListener('click', e => {
+    if ((e.target as Element).closest('a')) return;
+    window.location.href = tr.dataset.href!;
+  });
+});
+</script>
