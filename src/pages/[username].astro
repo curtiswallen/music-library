@@ -172,6 +172,14 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 ---
 
 <Layout title={isOwner ? 'My Library' : `${displayName}'s Library`}>
+  <script is:inline>
+    try {
+      const k = 'lib:' + location.pathname.split('/')[1] + ':params';
+      const s = sessionStorage.getItem(k);
+      if (!location.search && s) location.replace(location.pathname + s);
+    } catch (_) {}
+  </script>
+
   <div class="page-header">
     <div style="display:flex;align-items:center;gap:10px">
       {profileUser.avatar_url && <img src={profileUser.avatar_url} class="profile-avatar" alt="" />}
@@ -219,7 +227,7 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
             {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Filters'}
           </button>
           <a href={recToggleHref()} class={`btn${recommended ? ' btn-active' : ''}`}>★ Rec</a>
-          {hasAnyFilter && <a href={base} class="btn">Clear</a>}
+          {hasAnyFilter && <a href={base} class="btn" data-clear-filters>Clear</a>}
         </div>
 
         {(country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length > 0 || excludes.length > 0) && (
@@ -318,7 +326,7 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 
           <div class="fp-footer">
             <button type="submit" class="btn btn-primary">Apply</button>
-            <a href={base} class="btn">Clear All</a>
+            <a href={base} class="btn" data-clear-filters>Clear All</a>
           </div>
         </div>
       </form>
@@ -491,4 +499,11 @@ function renderSubChips() {
 
 fpGenre.addEventListener('change', () => { subStates.clear(); renderSubChips(); });
 renderSubChips();
+
+// ── sessionStorage: persist filter/sort state ─────────────────────────────
+const PARAMS_KEY = 'lib:' + location.pathname.split('/')[1] + ':params';
+if (location.search) sessionStorage.setItem(PARAMS_KEY, location.search);
+document.querySelectorAll('[data-clear-filters]').forEach(el => {
+  el.addEventListener('click', () => sessionStorage.removeItem(PARAMS_KEY));
+});
 </script>
