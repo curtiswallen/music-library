@@ -105,7 +105,7 @@ const isHidden      = values.is_hidden   === 1 || values.is_hidden   === true;
       <div id="cover-preview" style={hasCover ? '' : 'display:none'}>
         <label>Cover Art</label>
         <div class="cover-box">
-          <img id="cover-img" src={values.cover_url ?? ''} alt="" onerror="this.style.display='none'" />
+          <img id="cover-img" src={values.cover_url || undefined} alt="" onerror="this.style.display='none'" />
         </div>
         <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
       </div>

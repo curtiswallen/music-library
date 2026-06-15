@@ -230,6 +230,7 @@ function pick(r: MBResult) {
   const img             = document.getElementById('cover-img')        as HTMLImageElement;
   if (r.coverUrl) {
     img.onload  = () => {
+      img.style.display = '';
       set('f-cover-url', r.coverUrl);
       coverPreview.style.display    = 'block';
       coverUploadWrap.style.display = 'none';

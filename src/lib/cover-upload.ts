@@ -39,6 +39,7 @@ export function initCoverUpload() {
       const url = await uploadCover(file);
       (document.getElementById('f-cover-url') as HTMLInputElement).value = url;
       img.onload = () => {
+        img.style.display        = '';
         preview.style.display    = 'block';
         uploadWrap.style.display = 'none';
         statusEl.textContent     = '';
