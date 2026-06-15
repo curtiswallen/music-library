@@ -223,9 +223,11 @@ tr:hover td { background: var(--bg-hover); }
   display: none;
   position: absolute;
   left: 0;
-  top: calc(100% + 2px);
+  bottom: calc(100% + 2px);
   min-width: 220px;
   max-width: 360px;
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 4px;
