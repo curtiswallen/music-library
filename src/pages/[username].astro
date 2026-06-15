@@ -169,6 +169,11 @@ const activeFilterCount = [
 
 const hasAnyFilter = !!(q || country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length || excludes.length || recommended);
 const countryChipCC = country ? countryCode(country).toLowerCase() : '';
+const clearFiltersHref = buildParams({
+  q: null, country: null, year_from: null, year_to: null,
+  rating_min: null, rating_max: null, rated: null,
+  genre: null, subgenre: [], excl: [], recommended: null,
+});
 ---
 
 <Layout title={isOwner ? 'My Library' : `${displayName}'s Library`}>
@@ -227,7 +232,7 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
             {activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Filters'}
           </button>
           <a href={recToggleHref()} class={`btn${recommended ? ' btn-active' : ''}`}>★ Rec</a>
-          {hasAnyFilter && <a href={base} class="btn" data-clear-filters>Clear</a>}
+          {hasAnyFilter && <a href={clearFiltersHref} class="btn">Clear</a>}
         </div>
 
         {(country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length > 0 || excludes.length > 0) && (
@@ -326,7 +331,7 @@ const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 
           <div class="fp-footer">
             <button type="submit" class="btn btn-primary">Apply</button>
-            <a href={base} class="btn" data-clear-filters>Clear All</a>
+            <a href={clearFiltersHref} class="btn">Clear All</a>
           </div>
         </div>
       </form>
@@ -503,7 +508,4 @@ renderSubChips();
 // ── sessionStorage: persist filter/sort state ─────────────────────────────
 const PARAMS_KEY = 'lib:' + location.pathname.split('/')[1] + ':params';
 if (location.search) sessionStorage.setItem(PARAMS_KEY, location.search);
-document.querySelectorAll('[data-clear-filters]').forEach(el => {
-  el.addEventListener('click', () => sessionStorage.removeItem(PARAMS_KEY));
-});
 </script>
