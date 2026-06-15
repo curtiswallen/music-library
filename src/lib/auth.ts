@@ -44,7 +44,7 @@ export function readSessionToken(cookieHeader: string | null): string | null {
 export async function validateSession(db: D1Database, token: string): Promise<User | null> {
   const row = await db.prepare(`
     SELECT u.id, u.google_id, u.email, u.username,
-           u.display_name, u.profile_url, u.is_private,
+           u.display_name, u.profile_url, u.is_private, u.hide_added_at,
            u.avatar_url, u.is_admin, u.created_at
     FROM user_sessions s
     JOIN users u ON u.id = s.user_id

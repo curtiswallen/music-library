@@ -11,11 +11,11 @@ if (!username || !slugParam) return new Response(null, { status: 404 });
 const db = env.DB;
 
 const profileUser = await db.prepare(`
-  SELECT id, username, display_name, profile_url, is_private, avatar_url
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, avatar_url
   FROM users WHERE profile_url = ?
 `).bind(username).first<{
   id: number; username: string; display_name: string | null;
-  profile_url: string; is_private: number; avatar_url: string | null;
+  profile_url: string; is_private: number; hide_added_at: number; avatar_url: string | null;
 }>();
 
 if (!profileUser) return new Response(null, { status: 404 });
@@ -253,7 +253,7 @@ const addedAt = album.added_at
             <p class="album-notes">{album.notes}</p>
           </div>
         )}
-        {addedAt && (
+        {addedAt && (isOwner || !profileUser.hide_added_at) && (
           <p class="added-at">Logged on {addedAt}</p>
         )}
         {albumTracks.length > 0 && (

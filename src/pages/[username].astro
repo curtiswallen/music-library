@@ -38,14 +38,18 @@ const excludes    = Astro.url.searchParams.getAll('excl');
 const ratingMin   = Astro.url.searchParams.get('rating_min')  ?? '';
 const ratingMax   = Astro.url.searchParams.get('rating_max')  ?? '';
 const rated       = Astro.url.searchParams.get('rated')       ?? '';
-const sort        = Astro.url.searchParams.get('sort')        ?? 'added';
-const dir         = Astro.url.searchParams.get('dir')         ?? 'desc';
 
+const showAddedAt = isOwner || !profileUser.hide_added_at;
 const VALID_SORTS: Record<string, string> = {
   artist: 'a.artist', album: 'a.album', year: 'a.year',
-  rating: 'ua.rating', genre: 'ua.genre', added: 'ua.added_at',
+  rating: 'ua.rating', genre: 'ua.genre',
+  ...(showAddedAt ? { added: 'ua.added_at' } : {}),
 };
-const safeSort    = VALID_SORTS[sort] ? sort : 'artist';
+const defaultSort = showAddedAt ? 'added'  : 'artist';
+const defaultDir  = showAddedAt ? 'desc'   : 'asc';
+const sort        = Astro.url.searchParams.get('sort') ?? defaultSort;
+const dir         = Astro.url.searchParams.get('dir')  ?? defaultDir;
+const safeSort    = VALID_SORTS[sort] ? sort : defaultSort;
 const safeSortCol = VALID_SORTS[safeSort];
 const safeDir     = dir === 'desc' ? 'DESC' : 'ASC';
 
@@ -348,7 +352,7 @@ const clearFiltersHref = buildParams({
           albums={albums}
           base={base}
           isOwner={isOwner}
-          showAddedAt={isOwner || !profileUser.hide_added_at}
+          showAddedAt={showAddedAt}
           safeSort={safeSort}
           currentGenre={genre}
           currentCountry={country}
