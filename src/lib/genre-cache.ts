@@ -30,8 +30,9 @@ export async function buildGenreCache(db: D1Database): Promise<GenreCacheEntry> 
 }
 
 export async function getGenreCache(
-  kv: KVNamespace, db: D1Database
+  kv: KVNamespace | undefined, db: D1Database
 ): Promise<GenreCacheEntry> {
+  if (!kv) return buildGenreCache(db);
   const cached = await kv.get(KV_KEY, 'json') as GenreCacheEntry | null;
   if (cached) return cached;
   const fresh = await buildGenreCache(db);
@@ -39,6 +40,6 @@ export async function getGenreCache(
   return fresh;
 }
 
-export async function invalidateGenreCache(kv: KVNamespace): Promise<void> {
-  await kv.delete(KV_KEY);
+export async function invalidateGenreCache(kv: KVNamespace | undefined): Promise<void> {
+  if (kv) await kv.delete(KV_KEY);
 }
