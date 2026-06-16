@@ -206,6 +206,10 @@ const clearFiltersHref = buildParams({
   rating_min: null, rating_max: null, rated: null,
   genre: null, subgenre: [], excl: [], descriptor: [], recommended: null,
 });
+
+if (!isOwner && !profileUser.is_private) {
+  Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+}
 ---
 
 <Layout title={isOwner ? 'My Library' : `${displayName}'s Library`}>

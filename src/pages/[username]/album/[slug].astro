@@ -200,8 +200,8 @@ const { results: candidates } = await db.prepare(`
          ua.subgenres, ua.rating, ua.recommended, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-  WHERE a.artist != ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
-`).bind(profileUser.id, album.artist).all<{
+  WHERE a.artist != ? AND ua.genre = ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
+`).bind(profileUser.id, album.artist, album.genre ?? '').all<{
   id: number; slug: string; artist: string; album: string; country: string;
   year: number | null; cover_url: string | null; subgenres: string; rating: number | null;
   recommended: boolean; descriptors: string;
@@ -250,6 +250,10 @@ for (const row of genreRows) {
   if (row.sub) genreMap[row.genre].push(row.sub);
 }
 groupedGenres.sort((a, b) => a.group.localeCompare(b.group));
+
+if (!isOwner && !profileUser.is_private) {
+  Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+}
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
