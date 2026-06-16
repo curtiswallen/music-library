@@ -2,6 +2,11 @@ name = "music-library"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "./dist"
 
+[[kv_namespaces]]
+binding = "GENRE_CACHE"
+id = "e124fd0bc2b3416d872d564b600eddbf"
+preview_id = "d2bb353566ca46c8b558f0f688bcfc85"
+
 [[r2_buckets]]
 binding = "COVERS"
 bucket_name = "music-library-covers"

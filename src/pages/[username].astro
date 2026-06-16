@@ -75,6 +75,8 @@ if (recommended)     clauses.push('ua.recommended = 1');
 let albums: LibraryEntry[] = [];
 let libraryCountries: string[] = [];
 let allDescriptors: string[] = [];
+let librarySubMap: Record<string, string[]> = {};
+const libraryGenreSet = new Set<string>();
 
 if (isOwner || !profileUser.is_private) {
   const where = clauses.length ? `AND ${clauses.join(' AND ')}` : '';
@@ -88,50 +90,51 @@ if (isOwner || !profileUser.is_private) {
   `).bind(profileUser.id, ...params).all<LibraryEntry>();
   albums = results;
 
+  // One query replaces separate country, descriptor, and library-genre queries
   const hiddenFilter = isOwner ? '' : 'AND ua.is_hidden = 0';
-  const { results: countryRows } = await db.prepare(`
-    SELECT DISTINCT a.country FROM albums a
-    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-    WHERE a.country != '' ${hiddenFilter}
-    ORDER BY a.country
-  `).bind(profileUser.id).all<{ country: string }>();
-  libraryCountries = countryRows.map(r => r.country);
+  const { results: overviewRows } = await db.prepare(`
+    SELECT a.country, ua.genre, ua.subgenres, ua.descriptors
+    FROM user_albums ua
+    JOIN albums a ON a.id = ua.album_id
+    WHERE ua.user_id = ? ${hiddenFilter}
+  `).bind(profileUser.id).all<{ country: string; genre: string; subgenres: string; descriptors: string }>();
 
-  const { results: descRows } = await db.prepare(
-    `SELECT descriptors FROM user_albums WHERE user_id = ? ${hiddenFilter.replace('ua.', '')}`
-  ).bind(profileUser.id).all<{ descriptors: string }>();
-  allDescriptors = [...new Set(
-    descRows.flatMap(r => { try { return JSON.parse(r.descriptors) as string[]; } catch { return []; } })
-  )].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  const countrySet = new Set<string>();
+  const descriptorSet = new Set<string>();
+  for (const row of overviewRows) {
+    if (row.country) countrySet.add(row.country);
+    if (row.genre) {
+      libraryGenreSet.add(row.genre);
+      if (!librarySubMap[row.genre]) librarySubMap[row.genre] = [];
+      try {
+        for (const s of JSON.parse(row.subgenres || '[]') as string[]) {
+          if (s && !librarySubMap[row.genre].includes(s)) librarySubMap[row.genre].push(s);
+        }
+      } catch {}
+    }
+    try {
+      for (const d of JSON.parse(row.descriptors || '[]') as string[]) {
+        if (d) descriptorSet.add(d);
+      }
+    } catch {}
+  }
+  libraryCountries = [...countrySet].sort();
+  allDescriptors   = [...descriptorSet].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  for (const g of Object.keys(librarySubMap)) librarySubMap[g].sort();
 }
 
-const { results: genreRows } = await db.prepare(`
-  SELECT g.name AS genre, g.genre_group, s.name AS sub
-  FROM genres g
-  LEFT JOIN subgenres s ON s.genre_id = g.id
-  ORDER BY g.name ASC, s.name ASC
-`).all<{ genre: string; genre_group: string | null; sub: string | null }>();
-const genreMap: Record<string, string[]> = {};
-for (const row of genreRows) {
-  if (!genreMap[row.genre]) genreMap[row.genre] = [];
-  if (row.sub) genreMap[row.genre].push(row.sub);
-}
+// Lightweight genre-groups query (no subgenres join) for the grouped filter dropdown
+const { results: genreGroupRows } = await db.prepare(`
+  SELECT name, genre_group FROM genres ORDER BY name ASC
+`).all<{ name: string; genre_group: string | null }>();
 
-// Library-only grouped genres for the filter dropdown
-const { results: libraryGenreRows } = await db.prepare(`
-  SELECT DISTINCT ua.genre FROM user_albums ua
-  WHERE ua.user_id = ? AND ua.genre != ''
-  ORDER BY ua.genre ASC
-`).bind(profileUser.id).all<{ genre: string }>();
-const libraryGenreSet = new Set(libraryGenreRows.map(r => r.genre));
 const groupedFilterGenres: Array<{ group: string; options: string[] }> = [];
-for (const row of genreRows) {
-  if (!libraryGenreSet.has(row.genre)) continue;
-  if (groupedFilterGenres.some(g => g.options.includes(row.genre))) continue;
+for (const row of genreGroupRows) {
+  if (!libraryGenreSet.has(row.name)) continue;
   const g = row.genre_group ?? 'Other';
   let grp = groupedFilterGenres.find(x => x.group === g);
   if (!grp) { grp = { group: g, options: [] }; groupedFilterGenres.push(grp); }
-  grp.options.push(row.genre);
+  grp.options.push(row.name);
 }
 groupedFilterGenres.sort((a, b) => a.group.localeCompare(b.group));
 
@@ -213,7 +216,7 @@ if (!isOwner && !profileUser.is_private) {
 ---
 
 <Layout title={isOwner ? 'My Library' : `${displayName}'s Library`}>
-  <script type="application/json" id="genre-map-data" is:inline set:html={JSON.stringify(genreMap)}></script>
+  <script type="application/json" id="library-sub-map" is:inline set:html={JSON.stringify(librarySubMap)}></script>
   <script is:inline>
     try {
       const k = 'lib:' + location.pathname.split('/')[1] + ':params';
@@ -473,9 +476,9 @@ if (!isOwner && !profileUser.is_private) {
 </style>
 
 <script>
-function readGenreMap(): Record<string, string[]> {
+function readLibrarySubMap(): Record<string, string[]> {
   try {
-    const el = document.getElementById('genre-map-data');
+    const el = document.getElementById('library-sub-map');
     return el?.textContent ? (JSON.parse(el.textContent) as Record<string, string[]>) : {};
   } catch { return {}; }
 }
@@ -509,7 +512,7 @@ function syncSubInputs() {
 }
 
 function renderSubChips() {
-  const subs = readGenreMap()[fpGenre.value] ?? [];
+  const subs = readLibrarySubMap()[fpGenre.value] ?? [];
   if (!subs.length) { fpSubSections.style.display = 'none'; return; }
   fpSubSections.style.display = '';
   fpSubChips.innerHTML = subs.map(s => {

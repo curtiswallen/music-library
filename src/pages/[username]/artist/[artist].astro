@@ -59,6 +59,10 @@ const { results: albums } = await db.prepare(`
   genre: string; subgenres: string; descriptors: string; rating: number | null; notes: string; recommended: number;
 }>();
 
+if (!isOwner && !profileUser.is_private) {
+  Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+}
+
 const libBase = `/${profileUser.profile_url}`;
 
 function ratingClass(r: number | null) {

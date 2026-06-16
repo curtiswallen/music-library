@@ -3,9 +3,11 @@ import Layout from '../layouts/Layout.astro';
 import AlbumForm from '../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
 import { generateUniqueSlug } from '../lib/utils';
+import { getGenreCache } from '../lib/genre-cache';
 
 const user = Astro.locals.user!;
 const db   = env.DB;
+const kv   = env.GENRE_CACHE;
 
 if (Astro.request.method === 'POST') {
   const data      = await Astro.request.formData();
@@ -22,8 +24,11 @@ if (Astro.request.method === 'POST') {
   let descriptorsList: string[] = [];
   try { descriptorsList = JSON.parse((data.get('descriptors') as string) || '[]'); } catch {}
   const descriptorsJson = JSON.stringify(descriptorsList.filter(Boolean));
-  for (const d of descriptorsList) {
-    if (d.trim()) await db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d.trim()).run();
+  const newDescriptors = descriptorsList.map(d => d.trim()).filter(Boolean);
+  if (newDescriptors.length) {
+    await db.batch(newDescriptors.map(d =>
+      db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d)
+    ));
   }
   await db.prepare(`
     DELETE FROM descriptors
@@ -115,25 +120,7 @@ if (Astro.request.method === 'POST') {
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
 }
 
-const { results: genreRows } = await db.prepare(`
-  SELECT g.name AS genre, g.genre_group, s.name AS sub
-  FROM genres g
-  LEFT JOIN subgenres s ON s.genre_id = g.id
-  ORDER BY g.name ASC, s.name ASC
-`).all<{ genre: string; genre_group: string | null; sub: string | null }>();
-const genreMap: Record<string, string[]> = {};
-const groupedGenres: Array<{ group: string; options: string[] }> = [];
-for (const row of genreRows) {
-  if (!genreMap[row.genre]) {
-    genreMap[row.genre] = [];
-    const g = row.genre_group ?? 'Other';
-    let grp = groupedGenres.find(x => x.group === g);
-    if (!grp) { grp = { group: g, options: [] }; groupedGenres.push(grp); }
-    grp.options.push(row.genre);
-  }
-  if (row.sub) genreMap[row.genre].push(row.sub);
-}
-groupedGenres.sort((a, b) => a.group.localeCompare(b.group));
+const { genreMap, groupedGenres } = await getGenreCache(kv, db);
 ---
 
 <Layout title="Add Album">

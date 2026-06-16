@@ -4,6 +4,7 @@
 declare namespace Cloudflare {
   interface Env {
     DB: D1Database;
+    GENRE_CACHE: KVNamespace;
     COVERS: R2Bucket;
     COVERS_PUBLIC_URL: string;
     GOOGLE_CLIENT_ID: string;

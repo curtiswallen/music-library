@@ -1,11 +1,13 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
+import { invalidateGenreCache } from '../../lib/genre-cache';
 
 const user = Astro.locals.user;
 if (!user || !user.is_admin) return new Response(null, { status: 403 });
 
 const db = env.DB;
+const kv = env.GENRE_CACHE;
 
 // ── POST handlers ─────────────────────────────────────────────────────────────
 if (Astro.request.method === 'POST') {
@@ -71,6 +73,7 @@ if (Astro.request.method === 'POST') {
     }
   }
 
+  await invalidateGenreCache(kv);
   return Astro.redirect('/admin');
 }
 
