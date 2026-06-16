@@ -470,9 +470,6 @@ export function initAlbumForm() {
         } else {
           addDescriptorTag(dinput.value);
         }
-      } else if (e.key === 'Backspace' && !dinput.value) {
-        const last = chips.querySelector<HTMLElement>('.descriptor-chip:last-child');
-        if (last) { last.remove(); _syncDescriptors(); }
       }
     });
 
