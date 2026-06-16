@@ -1,6 +1,6 @@
 ---
 import Combobox from './Combobox.astro';
-import { COUNTRIES, GENRES } from '../lib/utils';
+import { COUNTRIES } from '../lib/utils';
 
 interface FormValues {
   mbid?: string | null;
@@ -24,6 +24,7 @@ interface FormValues {
 
 interface Props {
   values?: FormValues;
+  genreMap?: Record<string, string[]>;
   includeDbAlbumId?: boolean;
   submitLabel?: string;
   cancelHref?: string;
@@ -31,10 +32,12 @@ interface Props {
 
 const {
   values = {},
+  genreMap = {},
   includeDbAlbumId = false,
   submitLabel = 'Save',
   cancelHref,
 } = Astro.props;
+const genreNames = Object.keys(genreMap);
 
 const hasRating          = values.rating != null;
 const hasCover           = !!values.cover_url;
@@ -46,6 +49,7 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
   .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 ---
 
+<script type="application/json" id="genre-map-data" is:inline>{JSON.stringify(genreMap)}</script>
 <form method="post" id="album-form">
   <input type="hidden" name="mbid"          id="f-mbid"          value={values.mbid ?? ''} />
   {includeDbAlbumId && <input type="hidden" name="db_album_id" id="f-db-album-id" />}
@@ -94,7 +98,7 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
     </div>
     <div class="form-group">
       <label for="f-genre">Genre</label>
-      <Combobox id="f-genre" name="genre" options={GENRES}
+      <Combobox id="f-genre" name="genre" options={genreNames}
                 value={values.genre ?? ''} placeholder="Search genre..." />
     </div>
     <div class="form-group">

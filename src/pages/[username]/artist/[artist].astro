@@ -104,7 +104,18 @@ function sortedSubs(subs: string[]) {
           <th>Genre</th>
           <th>Subgenres</th>
           <th>Descriptors</th>
-          <th>Rating</th>
+          <th>Rating <span class="rating-tip">?<span class="rating-tip-body">
+            <div class="rating-tip-row"><strong>100</strong><span>Masterpiece / Perfect</span></div>
+            <div class="rating-tip-row"><strong>90</strong><span>Amazing / Fantastic</span></div>
+            <div class="rating-tip-row"><strong>80</strong><span>Great / Excellent</span></div>
+            <div class="rating-tip-row"><strong>70</strong><span>Very Good / Solid</span></div>
+            <div class="rating-tip-row"><strong>60</strong><span>Good / Serviceable</span></div>
+            <div class="rating-tip-row"><strong>50</strong><span>Decent / Mixed Opinion</span></div>
+            <div class="rating-tip-row"><strong>40</strong><span>Acceptable / Unremarkable</span></div>
+            <div class="rating-tip-row"><strong>30</strong><span>Mediocre / Poor</span></div>
+            <div class="rating-tip-row"><strong>20</strong><span>Bad / Terrible</span></div>
+            <div class="rating-tip-row"><strong>10</strong><span>Abysmal / Worthless</span></div>
+          </span></span></th>
           <th>Notes</th>
         </tr>
       </thead>
@@ -119,7 +130,7 @@ function sortedSubs(subs: string[]) {
                 <div class="cover-thumb" style="background:#000;overflow:hidden">
                   {a.cover_url && (
                     <img src={a.cover_url} alt="" loading="lazy"
-                         style="width:100%;height:100%;object-fit:cover;display:block"
+                         style="width:100%;height:100%;object-fit:contain;display:block"
                          onerror="this.style.display='none'" />
                   )}
                 </div>

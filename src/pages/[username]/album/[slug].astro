@@ -225,6 +225,18 @@ const similar = candidates
 const addedAt = album.added_at
   ? new Date(album.added_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   : null;
+
+const { results: genreRows } = await db.prepare(`
+  SELECT g.name AS genre, s.name AS sub
+  FROM genres g
+  LEFT JOIN subgenres s ON s.genre_id = g.id
+  ORDER BY g.sort_order, g.name, s.sort_order, s.name
+`).all<{ genre: string; sub: string | null }>();
+const genreMap: Record<string, string[]> = {};
+for (const row of genreRows) {
+  if (!genreMap[row.genre]) genreMap[row.genre] = [];
+  if (row.sub) genreMap[row.genre].push(row.sub);
+}
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
@@ -456,6 +468,7 @@ const addedAt = album.added_at
           descriptors,
         }}
         submitLabel="Save Changes"
+        genreMap={genreMap}
       />
     </div>
   )}

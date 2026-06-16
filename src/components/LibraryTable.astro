@@ -78,7 +78,7 @@ const {
               <div class="cover-thumb" style="background:#000;overflow:hidden">
                 {a.cover_url && (
                   <img src={a.cover_url} alt="" loading="lazy"
-                       style="width:100%;height:100%;object-fit:cover;display:block"
+                       style="width:100%;height:100%;object-fit:contain;display:block"
                        onerror="this.style.display='none'" />
                 )}
               </div>

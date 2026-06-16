@@ -105,18 +105,18 @@ if (isOwner || !profileUser.is_private) {
   )].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
-const GENRES = [
-  'Black Metal', 'Death Metal', 'Black/Death', 'Doom Metal', 'Thrash Metal',
-  'Speed Metal', 'Heavy Metal', 'Power Metal', 'Progressive Metal', 'Post-Metal',
-  'Folk Metal', 'Gothic Metal', 'Grindcore', 'Industrial Metal', 'Sludge Metal',
-  'Alternative Metal', 'Metalcore', 'Deathcore', 'Stoner Rock',
-  'Rock', 'Post-Rock', 'Noise Rock', 'Shoegaze', 'Post-Punk', 'Punk',
-  'Pop', 'Country',
-  'Electronic', 'Ambient', 'Darkwave', 'Neofolk',
-  'Hip-Hop / Rap', 'R&B / Soul', 'Reggae',
-  'Jazz', 'Classical', 'Blues', 'Folk',
-  'World Music', 'Experimental',
-];
+const { results: genreRows } = await db.prepare(`
+  SELECT g.name AS genre, s.name AS sub
+  FROM genres g
+  LEFT JOIN subgenres s ON s.genre_id = g.id
+  ORDER BY g.sort_order, g.name, s.sort_order, s.name
+`).all<{ genre: string; sub: string | null }>();
+const genreMap: Record<string, string[]> = {};
+for (const row of genreRows) {
+  if (!genreMap[row.genre]) genreMap[row.genre] = [];
+  if (row.sub) genreMap[row.genre].push(row.sub);
+}
+const GENRES = Object.keys(genreMap);
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
 
@@ -192,6 +192,7 @@ const clearFiltersHref = buildParams({
 ---
 
 <Layout title={isOwner ? 'My Library' : `${displayName}'s Library`}>
+  <script type="application/json" id="genre-map-data" is:inline>{JSON.stringify(genreMap)}</script>
   <script is:inline>
     try {
       const k = 'lib:' + location.pathname.split('/')[1] + ':params';
@@ -215,6 +216,7 @@ const clearFiltersHref = buildParams({
             {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
             {loggedInUser!.display_name || loggedInUser!.username}
           </span>
+          {loggedInUser!.is_admin === 1 && <a href="/admin" class="btn" title="Admin">Admin</a>}
           <a href="/settings" class="btn" title="Settings">⚙</a>
           <form method="post" action="/auth/logout" style="margin:0">
             <button class="btn" type="submit">Sign out</button>
@@ -450,48 +452,12 @@ const clearFiltersHref = buildParams({
 </style>
 
 <script>
-const SUBGENRE_MAP: Record<string, string[]> = {
-  'Black Metal':       ['Sketchy', 'Melodic', 'Raw', 'Atmospheric', 'Symphonic', 'Depressive', 'DSBM', 'Folk', 'Viking', 'Pagan', 'Ambient', 'Industrial', 'Blackgaze'],
-  'Death Metal':       ['Technical', 'Brutal', 'Melodic', 'Death/Doom', 'Progressive', 'Blackened', 'Slam', 'Deathgrind', 'Old School'],
-  'Black/Death':       ['Blackened', 'War Metal', 'Bestial', 'Blasphemic'],
-  'Doom Metal':        ['Traditional', 'Funeral', 'Atmospheric', 'Sludge', 'Stoner', 'Death/Doom', 'Gothic', 'Epic', 'Drone'],
-  'Thrash Metal':      ['Bay Area', 'German', 'Technical', 'Crossover', 'Blackened', 'Speed'],
-  'Speed Metal':       ['NWOBHM', 'Thrash-Adjacent', 'Heavy/Speed', 'Power/Speed'],
-  'Heavy Metal':       ['NWOBHM', 'Traditional', 'Epic', 'Speed', 'Power'],
-  'Power Metal':       ['Symphonic', 'Progressive', 'Folk', 'Epic', 'Speed'],
-  'Progressive Metal': ['Djent', 'Technical', 'Atmospheric', 'Jazz-Influenced', 'Math Metal'],
-  'Post-Metal':        ['Atmospheric', 'Sludge', 'Post-Rock Influenced'],
-  'Folk Metal':        ['Pagan', 'Viking', 'Celtic', 'Medieval'],
-  'Gothic Metal':      ['Doom/Gothic', 'Symphonic', 'Romantic'],
-  'Grindcore':         ['Goregrind', 'Powerviolence', 'Noisecore', 'Death-Grind'],
-  'Industrial Metal':  ['Electronic', 'EBM', 'Noise'],
-  'Sludge Metal':      ['Stoner', 'Post-Metal', 'Southern'],
-  'Alternative Metal': ['Nu-Metal', 'Groove', 'Post-Grunge'],
-  'Metalcore':         ['Melodic', 'Post-Hardcore', 'Mathcore'],
-  'Deathcore':         ['Slam', 'Brutal', 'Melodic', 'Technical'],
-  'Stoner Rock':       ['Psychedelic', 'Fuzz', 'Desert Rock', 'Southern'],
-  'Rock':              ['Classic', 'Hard Rock', 'Garage', 'Psychedelic', 'Art Rock', 'Indie', 'Alternative'],
-  'Post-Rock':         ['Instrumental', 'Atmospheric', 'Post-Metal Adjacent', 'Cinematic'],
-  'Noise Rock':        ['No Wave', 'Sludge', 'Experimental', 'Post-Punk Adjacent'],
-  'Shoegaze':          ['Dream Pop', 'Blackgaze', 'Lo-Fi', 'Neo-Shoegaze'],
-  'Post-Punk':         ['Darkwave', 'Cold Wave', 'Goth Rock', 'New Wave', 'Proto-Punk'],
-  'Punk':              ['Hardcore', 'Anarcho', 'Crust', 'Oi!', 'Street Punk', 'D-Beat'],
-  'Electronic':        ['Ambient', 'Industrial', 'EBM', 'Dark Electro', 'Dungeon Synth', 'Synthwave', 'Noise', 'IDM'],
-  'Ambient':           ['Dark Ambient', 'Drone', 'Isolationism', 'Post-Industrial', 'New Age'],
-  'Darkwave':          ['Ethereal', 'Coldwave', 'Goth Rock', 'Neoclassical', 'Industrial'],
-  'Neofolk':           ['Apocalyptic Folk', 'Dark Folk', 'Folk Noir', 'Military Pop'],
-  'Pop':               ['Indie Pop', 'Synth-Pop', 'Art Pop', 'Chamber Pop', 'Dream Pop', 'Electropop', 'Baroque Pop', 'Folk Pop'],
-  'Country':           ['Alt-Country', 'Outlaw', 'Bluegrass', 'Americana', 'Classic Country', 'Folk Country', 'Cowpunk'],
-  'Hip-Hop / Rap':     ['East Coast', 'West Coast', 'Conscious', 'Trap', 'Boom Bap', 'Southern', 'Alternative', 'Horrorcore'],
-  'R&B / Soul':        ['Classic Soul', 'Neo-Soul', 'Funk', 'Gospel', 'Contemporary R&B', 'Motown'],
-  'Reggae':            ['Roots', 'Dancehall', 'Ska', 'Dub', 'Rocksteady'],
-  'Jazz':              ['Bebop', 'Free Jazz', 'Fusion', 'Hard Bop', 'Modal', 'Post-Bop', 'Cool Jazz', 'Big Band', 'Avant-Garde'],
-  'Classical':         ['Baroque', 'Romantic', 'Contemporary', 'Minimalist', 'Chamber', 'Symphony'],
-  'Blues':             ['Delta', 'Chicago', 'Electric', 'Country Blues', 'Boogie'],
-  'Folk':              ['Singer-Songwriter', 'Freak Folk', 'Indie Folk', 'Celtic', 'Americana'],
-  'World Music':       ['African', 'Latin', 'Caribbean', 'Afrobeat', 'Celtic', 'Middle Eastern', 'Asian'],
-  'Experimental':      ['Avant-Garde', 'Noise', 'Musique Concrète', 'Free Improvisation', 'Electroacoustic'],
-};
+function readGenreMap(): Record<string, string[]> {
+  try {
+    const el = document.getElementById('genre-map-data');
+    return el?.textContent ? (JSON.parse(el.textContent) as Record<string, string[]>) : {};
+  } catch { return {}; }
+}
 
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -522,7 +488,7 @@ function syncSubInputs() {
 }
 
 function renderSubChips() {
-  const subs = SUBGENRE_MAP[fpGenre.value] ?? [];
+  const subs = readGenreMap()[fpGenre.value] ?? [];
   if (!subs.length) { fpSubSections.style.display = 'none'; return; }
   fpSubSections.style.display = '';
   fpSubChips.innerHTML = subs.map(s => {

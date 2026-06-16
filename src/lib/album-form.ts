@@ -9,54 +9,11 @@ export interface TrackData {
   note: string;
 }
 
-export const SUBGENRE_MAP: Record<string, string[]> = {
-  'Black Metal':       ['Sketchy', 'Melodic', 'Raw', 'Atmospheric', 'Symphonic', 'Depressive', 'Folk', 'Viking', 'Pagan', 'Ambient', 'Industrial', 'Blackgaze'],
-  'Death Metal':       ['Technical', 'Brutal', 'Melodic', 'Death/Doom', 'Progressive', 'Blackened', 'Slam', 'Deathgrind', 'Old School'],
-  'Black/Death':       ['Blackened', 'War Metal', 'Bestial', 'Blasphemic'],
-  'Doom Metal':        ['Traditional', 'Funeral', 'Atmospheric', 'Sludge', 'Stoner', 'Death/Doom', 'Gothic', 'Epic', 'Drone'],
-  'Thrash Metal':      ['Bay Area', 'German', 'Technical', 'Crossover', 'Blackened', 'Speed'],
-  'Speed Metal':       ['NWOBHM', 'Thrash-Adjacent', 'Heavy/Speed', 'Power/Speed'],
-  'Heavy Metal':       ['NWOBHM', 'Traditional', 'Epic', 'Speed', 'Power'],
-  'Power Metal':       ['Symphonic', 'Progressive', 'Folk', 'Epic', 'Speed'],
-  'Progressive Metal': ['Djent', 'Technical', 'Atmospheric', 'Jazz-Influenced', 'Math Metal'],
-  'Post-Metal':        ['Atmospheric', 'Sludge', 'Post-Rock Influenced'],
-  'Folk Metal':        ['Pagan', 'Viking', 'Celtic', 'Medieval'],
-  'Gothic Metal':      ['Doom/Gothic', 'Symphonic', 'Romantic'],
-  'Grindcore':         ['Goregrind', 'Powerviolence', 'Noisecore', 'Death-Grind'],
-  'Industrial Metal':  ['Electronic', 'EBM', 'Noise'],
-  'Sludge Metal':      ['Stoner', 'Post-Metal', 'Southern'],
-  'Alternative Metal': ['Nu-Metal', 'Groove', 'Post-Grunge'],
-  'Metalcore':         ['Melodic', 'Post-Hardcore', 'Mathcore'],
-  'Deathcore':         ['Slam', 'Brutal', 'Melodic', 'Technical'],
-  'Stoner Rock':       ['Psychedelic', 'Fuzz', 'Desert Rock', 'Southern'],
-  'Rock':              ['Classic', 'Hard Rock', 'Garage', 'Psychedelic', 'Art Rock', 'Indie', 'Alternative'],
-  'Post-Rock':         ['Instrumental', 'Atmospheric', 'Post-Metal Adjacent', 'Cinematic'],
-  'Noise Rock':        ['No Wave', 'Sludge', 'Experimental', 'Post-Punk Adjacent'],
-  'Shoegaze':          ['Dream Pop', 'Blackgaze', 'Lo-Fi', 'Neo-Shoegaze'],
-  'Post-Punk':         ['Darkwave', 'Cold Wave', 'Goth Rock', 'New Wave', 'Proto-Punk'],
-  'Punk':              ['Hardcore', 'Anarcho', 'Crust', 'Oi!', 'Street Punk', 'D-Beat'],
-  'Electronic':        ['Ambient', 'Industrial', 'EBM', 'Dark Electro', 'Dungeon Synth', 'Synthwave', 'Noise', 'IDM'],
-  'Ambient':           ['Dark Ambient', 'Drone', 'Isolationism', 'Post-Industrial', 'New Age'],
-  'Darkwave':          ['Ethereal', 'Coldwave', 'Goth Rock', 'Neoclassical', 'Industrial'],
-  'Neofolk':           ['Apocalyptic Folk', 'Dark Folk', 'Folk Noir', 'Military Pop'],
-  'Pop':               ['Indie Pop', 'Synth-Pop', 'Art Pop', 'Chamber Pop', 'Dream Pop', 'Electropop', 'Baroque Pop', 'Folk Pop'],
-  'Country':           ['Alt-Country', 'Outlaw', 'Bluegrass', 'Americana', 'Classic Country', 'Folk Country', 'Cowpunk'],
-  'Hip-Hop / Rap':     ['East Coast', 'West Coast', 'Conscious', 'Trap', 'Boom Bap', 'Southern', 'Alternative', 'Horrorcore'],
-  'R&B / Soul':        ['Classic Soul', 'Neo-Soul', 'Funk', 'Gospel', 'Contemporary R&B', 'Motown'],
-  'Reggae':            ['Roots', 'Dancehall', 'Ska', 'Dub', 'Rocksteady'],
-  'Jazz':              ['Bebop', 'Free Jazz', 'Fusion', 'Hard Bop', 'Modal', 'Post-Bop', 'Cool Jazz', 'Big Band', 'Avant-Garde'],
-  'Classical':         ['Baroque', 'Romantic', 'Contemporary', 'Minimalist', 'Chamber', 'Symphony'],
-  'Blues':             ['Delta', 'Chicago', 'Electric', 'Country Blues', 'Boogie'],
-  'Folk':              ['Singer-Songwriter', 'Freak Folk', 'Indie Folk', 'Celtic', 'Americana'],
-  'World Music':       ['African', 'Latin', 'Caribbean', 'Afrobeat', 'Celtic', 'Middle Eastern', 'Asian'],
-  'Experimental':      ['Avant-Garde', 'Noise', 'Musique Concrète', 'Free Improvisation', 'Electroacoustic'],
-};
-
-export function getKnownSubs(genre: string): string[] {
-  const key = Object.keys(SUBGENRE_MAP).find(
-    k => k.toLowerCase() === genre.trim().toLowerCase()
-  );
-  return key ? SUBGENRE_MAP[key] : [];
+export function readGenreMap(): Record<string, string[]> {
+  try {
+    const el = document.getElementById('genre-map-data');
+    return el?.textContent ? (JSON.parse(el.textContent) as Record<string, string[]>) : {};
+  } catch { return {}; }
 }
 
 export function esc(s: string): string {
@@ -255,7 +212,7 @@ export function initAlbumForm() {
     .split(',').map(s => s.trim()).filter(Boolean);
 
   function renderSubgenreWidget() {
-    const known = getKnownSubs(genreInput.value);
+    const known = readGenreMap()[genreInput.value] ?? [];
     chipsEl.innerHTML = known.map(s => {
       const active = selectedSubs.includes(s);
       return `<button type="button" class="subgenre-chip${active ? ' active' : ''}" data-sub="${esc(s)}">${esc(s)}</button>`;

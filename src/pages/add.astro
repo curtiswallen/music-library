@@ -114,6 +114,18 @@ if (Astro.request.method === 'POST') {
 
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
 }
+
+const { results: genreRows } = await db.prepare(`
+  SELECT g.name AS genre, s.name AS sub
+  FROM genres g
+  LEFT JOIN subgenres s ON s.genre_id = g.id
+  ORDER BY g.sort_order, g.name, s.sort_order, s.name
+`).all<{ genre: string; sub: string | null }>();
+const genreMap: Record<string, string[]> = {};
+for (const row of genreRows) {
+  if (!genreMap[row.genre]) genreMap[row.genre] = [];
+  if (row.sub) genreMap[row.genre].push(row.sub);
+}
 ---
 
 <Layout title="Add Album">
@@ -133,12 +145,12 @@ if (Astro.request.method === 'POST') {
       <div class="mb-results" id="mb-results"></div>
     </div>
 
-    <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} />
+    <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} genreMap={genreMap} />
   </div>
 </Layout>
 
 <script>
-import { initAlbumForm, setArtists, setDescriptors, populateReleaseSelect, SUBGENRE_MAP } from '../lib/album-form';
+import { initAlbumForm, setArtists, setDescriptors, populateReleaseSelect, readGenreMap } from '../lib/album-form';
 import type { TrackData } from '../lib/album-form';
 
 interface MBResult {
@@ -283,7 +295,7 @@ function resolveGenre(tags: string[]) {
   const genreInput = document.getElementById('f-genre') as HTMLInputElement;
   if (genreInput.value) return;
 
-  const genreNames = Object.keys(SUBGENRE_MAP);
+  const genreNames = Object.keys(readGenreMap());
   // Broad tags that should lose to any specific match
   const GENERIC = new Set(['rock', 'pop', 'electronic', 'folk', 'jazz', 'classical',
                             'blues', 'country', 'world music', 'experimental', 'ambient', 'metal']);
