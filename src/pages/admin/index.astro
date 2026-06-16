@@ -94,6 +94,18 @@ for (const r of subRows) {
   arr.push({ id: r.id, name: r.name });
   subsByGenre.set(r.genre_id, arr);
 }
+
+type GenreRow = { id: number; name: string; genre_group: string | null };
+const genresByGroup = new Map<string, GenreRow[]>();
+for (const g of genres) {
+  const key = g.genre_group ?? 'No Group';
+  const arr = genresByGroup.get(key) ?? [];
+  arr.push(g);
+  genresByGroup.set(key, arr);
+}
+const sortedGroups = [...genresByGroup.keys()].sort((a, b) =>
+  a === 'No Group' ? 1 : b === 'No Group' ? -1 : a.localeCompare(b)
+);
 ---
 
 <Layout title="Admin — Genres & Subgenres">
@@ -110,53 +122,65 @@ for (const r of subRows) {
       <button type="submit" class="btn btn-primary">Add Genre</button>
     </form>
 
-    <!-- Genre list -->
+    <!-- Genre list grouped -->
     <div class="genre-list">
-      {genres.map(g => {
-        const subs = subsByGenre.get(g.id) ?? [];
+      {sortedGroups.map(groupName => {
+        const groupGenres = genresByGroup.get(groupName)!;
         return (
-          <div class="genre-card">
-            <div class="genre-header">
-              <form method="post" action="/admin?action=rename-genre" class="rename-form">
-                <input type="hidden" name="id" value={g.id} />
-                <input name="name" type="text" value={g.name} required class="admin-input genre-name-input" />
-                <button type="submit" class="btn btn-sm">Rename</button>
-              </form>
-              <form method="post" action="/admin?action=set-genre-group" class="group-form">
-                <input type="hidden" name="id" value={g.id} />
-                <select name="group" class="admin-input admin-select" onchange="this.form.submit()">
-                  <option value="">No group</option>
-                  {GENRE_GROUPS.map(grp => (
-                    <option value={grp} selected={g.genre_group === grp}>{grp}</option>
-                  ))}
-                </select>
-              </form>
-              <form method="post" action="/admin?action=delete-genre"
-                    onsubmit={`return confirm('Delete "${g.name}" and all its subgenres?')`}>
-                <input type="hidden" name="id" value={g.id} />
-                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-              </form>
+          <details class="group-section">
+            <summary class="group-summary">
+              {groupName}
+              <span class="group-count">{groupGenres.length}</span>
+            </summary>
+            <div class="group-body">
+              {groupGenres.map(g => {
+                const subs = subsByGenre.get(g.id) ?? [];
+                return (
+                  <div class="genre-card">
+                    <div class="genre-header">
+                      <form method="post" action="/admin?action=rename-genre" class="rename-form">
+                        <input type="hidden" name="id" value={g.id} />
+                        <input name="name" type="text" value={g.name} required class="admin-input genre-name-input" />
+                        <button type="submit" class="btn btn-sm">Rename</button>
+                      </form>
+                      <form method="post" action="/admin?action=set-genre-group" class="group-form">
+                        <input type="hidden" name="id" value={g.id} />
+                        <select name="group" class="admin-input admin-select" onchange="this.form.submit()">
+                          <option value="">No group</option>
+                          {GENRE_GROUPS.map(grp => (
+                            <option value={grp} selected={g.genre_group === grp}>{grp}</option>
+                          ))}
+                        </select>
+                      </form>
+                      <form method="post" action="/admin?action=delete-genre"
+                            onsubmit={`return confirm('Delete "${g.name}" and all its subgenres?')`}>
+                        <input type="hidden" name="id" value={g.id} />
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                      </form>
+                    </div>
+                    <div class="sub-area">
+                      <div class="sub-chips">
+                        {subs.map(s => (
+                          <span class="sub-chip-admin">
+                            <span class="sub-name">{s.name}</span>
+                            <form method="post" action="/admin?action=delete-subgenre" class="inline-form">
+                              <input type="hidden" name="id" value={s.id} />
+                              <button type="submit" class="chip-del" title={`Remove ${s.name}`}>×</button>
+                            </form>
+                          </span>
+                        ))}
+                      </div>
+                      <form method="post" action="/admin?action=add-subgenre" class="add-sub-form">
+                        <input type="hidden" name="genre_id" value={g.id} />
+                        <input name="name" type="text" placeholder="Add subgenre…" required class="admin-input admin-input-sm" />
+                        <button type="submit" class="btn btn-sm">Add</button>
+                      </form>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            <div class="sub-area">
-              <div class="sub-chips">
-                {subs.map(s => (
-                  <span class="sub-chip-admin">
-                    <span class="sub-name">{s.name}</span>
-                    <form method="post" action="/admin?action=delete-subgenre" class="inline-form">
-                      <input type="hidden" name="id" value={s.id} />
-                      <button type="submit" class="chip-del" title={`Remove ${s.name}`}>×</button>
-                    </form>
-                  </span>
-                ))}
-              </div>
-              <form method="post" action="/admin?action=add-subgenre" class="add-sub-form">
-                <input type="hidden" name="genre_id" value={g.id} />
-                <input name="name" type="text" placeholder="Add subgenre…" required class="admin-input admin-input-sm" />
-                <button type="submit" class="btn btn-sm">Add</button>
-              </form>
-            </div>
-          </div>
+          </details>
         );
       })}
     </div>
@@ -178,7 +202,28 @@ for (const r of subRows) {
 .admin-select { padding: 5px 8px; cursor: pointer; }
 .group-form { display: flex; align-items: center; }
 
-.genre-list { display: flex; flex-direction: column; gap: 12px; }
+.genre-list { display: flex; flex-direction: column; gap: 8px; }
+
+.group-section {
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+}
+.group-summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; cursor: pointer; user-select: none;
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted);
+  background: var(--bg-card); list-style: none;
+}
+.group-summary::-webkit-details-marker { display: none; }
+.group-summary::before {
+  content: '▶'; font-size: 9px; transition: transform 0.15s;
+}
+details[open] > .group-summary::before { transform: rotate(90deg); }
+.group-count {
+  margin-left: auto; font-size: 11px; font-weight: 400;
+  color: var(--text-muted); opacity: 0.7;
+}
+.group-body { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
 
 .genre-card {
   background: var(--bg-card); border: 1px solid var(--border);
