@@ -38,13 +38,15 @@ export interface UserAlbum {
   user_id: number;
   album_id: number;
   genre: string;
-  subgenres: string;    // JSON: string[]
+  subgenres: string;      // JSON: string[]
   rating: number | null;
   notes: string;
-  tracks_data: string;  // JSON: TrackAnnotation[]
-  recommended: number;  // 0 | 1
-  is_hidden: number;    // 0 | 1
+  tracks_data: string;    // JSON: TrackAnnotation[]
+  recommended: number;    // 0 | 1
+  is_hidden: number;      // 0 | 1
   added_at: string;
+  release_mbid: string | null;
+  release_title: string | null;
 }
 
 /** Flat JOIN result used in most queries */

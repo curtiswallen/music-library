@@ -9,7 +9,7 @@ const db   = env.DB;
 
 if (Astro.request.method === 'POST') {
   const data      = await Astro.request.formData();
-  const artist    = (data.get('artist') as string) || '';
+  const artist    = (data.getAll('artist') as string[]).map(s => s.trim()).filter(Boolean).join(' / ') || '';
   const album     = (data.get('album') as string) || '';
   const mbid      = (data.get('mbid') as string) || null;
   const dbAlbumId = (data.get('db_album_id') as string)
@@ -82,8 +82,9 @@ if (Astro.request.method === 'POST') {
   }
 
   await db.prepare(`
-    INSERT OR IGNORE INTO user_albums (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO user_albums
+      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
     albumId,
@@ -94,6 +95,8 @@ if (Astro.request.method === 'POST') {
     tracksData,
     data.get('recommended') === 'on' ? 1 : 0,
     data.get('is_hidden') === 'on' ? 1 : 0,
+    (data.get('release_mbid') as string) || null,
+    (data.get('release_title') as string) || null,
   ).run();
 
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
@@ -121,13 +124,14 @@ if (Astro.request.method === 'POST') {
 </Layout>
 
 <script>
-import { initAlbumForm, SUBGENRE_MAP } from '../lib/album-form';
+import { initAlbumForm, setArtists, populateReleaseSelect, SUBGENRE_MAP } from '../lib/album-form';
 import type { TrackData } from '../lib/album-form';
 
 interface MBResult {
   mbid: string;
   title: string;
   artist: string;
+  artists: string[];
   artistId: string;
   year: string;
   tags: string[];
@@ -196,7 +200,7 @@ function renderResults(items: MBResult[]) {
 function pick(r: MBResult) {
   set('f-mbid',        r.mbid ?? '');
   set('f-db-album-id', r.dbId ? String(r.dbId) : '');
-  set('f-artist', r.artist);
+  setArtists(r.artists?.length ? r.artists : r.artist.split(' / '));
   set('f-album',  r.title);
   set('f-year',   r.year);
   searchInput.value = `${r.artist} — ${r.title}`;
@@ -223,6 +227,17 @@ function pick(r: MBResult) {
       .then(data => { setTracks(data as TrackData[]); })
       .catch(() => {})
       .finally(() => { loadingEl.hidden = true; });
+  }
+
+  // Reset release select, then fetch releases if we have an MBID
+  populateReleaseSelect([]);
+  set('f-release-mbid', '');
+  set('f-release-title', '');
+  if (r.mbid) {
+    fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(r.mbid)}`)
+      .then(res => res.json())
+      .then(data => { populateReleaseSelect(data as Array<{ id: string; label: string }>); })
+      .catch(() => {});
   }
 
   const coverPreview    = document.getElementById('cover-preview')    as HTMLElement;

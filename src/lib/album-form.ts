@@ -91,16 +91,103 @@ function getRatingDesc(v: number) {
   return RATING_SCALE[v === 100 ? 100 : Math.floor(v / 10) * 10] ?? '';
 }
 
+// ── Multi-artist widget ──────────────────────────────────────────────────────
+
+function _addArtistRow(list: HTMLElement, value: string): void {
+  const row   = document.createElement('div');
+  row.className = 'artist-row';
+  const input = document.createElement('input');
+  input.type  = 'text';
+  input.name  = 'artist';
+  input.className = 'artist-input';
+  input.value = value;
+  input.placeholder = 'Artist name';
+  const btn   = document.createElement('button');
+  btn.type    = 'button';
+  btn.className = 'remove-artist-btn';
+  btn.setAttribute('aria-label', 'Remove artist');
+  btn.textContent = '−';
+  btn.addEventListener('click', () => { row.remove(); _syncRemoveBtns(list); });
+  row.appendChild(input);
+  row.appendChild(btn);
+  list.appendChild(row);
+}
+
+function _syncRemoveBtns(list: HTMLElement): void {
+  const rows = list.querySelectorAll<HTMLElement>('.artist-row');
+  rows.forEach(r => {
+    const btn = r.querySelector<HTMLElement>('.remove-artist-btn');
+    if (btn) btn.style.display = rows.length > 1 ? '' : 'none';
+  });
+}
+
+function _initArtistList(): void {
+  const list   = document.getElementById('artist-list') as HTMLElement | null;
+  const addBtn = document.getElementById('add-artist-btn');
+  if (!list) return;
+  list.querySelectorAll<HTMLButtonElement>('.remove-artist-btn').forEach(btn => {
+    btn.addEventListener('click', () => { btn.closest('.artist-row')?.remove(); _syncRemoveBtns(list); });
+  });
+  addBtn?.addEventListener('click', () => { _addArtistRow(list, ''); _syncRemoveBtns(list); });
+  _syncRemoveBtns(list);
+}
+
+export function setArtists(names: string[]): void {
+  const list = document.getElementById('artist-list') as HTMLElement | null;
+  if (!list) return;
+  list.innerHTML = '';
+  const toAdd = names.filter(Boolean);
+  if (!toAdd.length) toAdd.push('');
+  toAdd.forEach(name => _addArtistRow(list, name));
+  _syncRemoveBtns(list);
+}
+
+// ── Release select ────────────────────────────────────────────────────────────
+
+export function populateReleaseSelect(
+  releases: Array<{ id: string; label: string }>,
+  currentMbid = '',
+): void {
+  const wrap = document.getElementById('release-select-wrap');
+  const sel  = document.getElementById('f-release-select') as HTMLSelectElement | null;
+  if (!sel) return;
+  sel.innerHTML = '<option value="">No specific release</option>';
+  if (!releases.length) { if (wrap) wrap.style.display = 'none'; return; }
+  releases.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.label;
+    if (r.id === currentMbid) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  if (wrap) wrap.style.display = '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function initAlbumForm() {
   // Guard: return no-ops if the form isn't on this page
   if (!document.getElementById('f-genre')) {
     return {
-      renderTracks:       () => {},
+      renderTracks:         () => {},
       renderSubgenreWidget: () => {},
-      setSelectedSubs:    (_: string[]) => {},
-      setTracks:          (_: TrackData[]) => {},
+      setSelectedSubs:      (_: string[]) => {},
+      setTracks:            (_: TrackData[]) => {},
     };
   }
+
+  _initArtistList();
+
+  // Wire release-select → hidden inputs
+  const relSel   = document.getElementById('f-release-select') as HTMLSelectElement | null;
+  const relMbid  = document.getElementById('f-release-mbid')   as HTMLInputElement  | null;
+  const relTitle = document.getElementById('f-release-title')  as HTMLInputElement  | null;
+  relSel?.addEventListener('change', () => {
+    if (relMbid)  relMbid.value  = relSel.value;
+    if (relTitle) relTitle.value = relSel.value
+      ? (relSel.options[relSel.selectedIndex]?.textContent ?? '')
+      : '';
+  });
 
   // ── Subgenre widget ──────────────────────────────────────────────────────────
   const genreInput  = document.getElementById('f-genre')       as HTMLInputElement;

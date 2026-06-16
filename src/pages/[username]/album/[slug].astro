@@ -30,7 +30,7 @@ if (Astro.request.method === 'POST') {
   if (!isOwner) return new Response('Forbidden', { status: 403 });
 
   const data      = await Astro.request.formData();
-  const artist    = (data.get('artist') as string) || '';
+  const artist    = (data.getAll('artist') as string[]).map(s => s.trim()).filter(Boolean).join(' / ') || '';
   const albumName = (data.get('album') as string) || '';
 
   const existing = await db.prepare('SELECT id FROM albums WHERE slug = ?')
@@ -72,7 +72,8 @@ if (Astro.request.method === 'POST') {
   await db.prepare(`
     UPDATE user_albums SET
       genre = ?, subgenres = ?, rating = ?, notes = ?,
-      tracks_data = ?, recommended = ?, is_hidden = ?
+      tracks_data = ?, recommended = ?, is_hidden = ?,
+      release_mbid = ?, release_title = ?
     WHERE album_id = ? AND user_id = ?
   `).bind(
     (data.get('genre') as string) || '',
@@ -82,6 +83,8 @@ if (Astro.request.method === 'POST') {
     tracksData,
     data.get('recommended') === 'on' ? 1 : 0,
     data.get('is_hidden') === 'on' ? 1 : 0,
+    (data.get('release_mbid') as string) || null,
+    (data.get('release_title') as string) || null,
     existing.id,
     profileUser.id,
   ).run();
@@ -94,7 +97,8 @@ const row = await db.prepare(`
   SELECT
     a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
     ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
-    ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at
+    ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at,
+    ua.release_mbid, ua.release_title
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.slug = ?
@@ -256,6 +260,9 @@ const addedAt = album.added_at
         {addedAt && (isOwner || !profileUser.hide_added_at) && (
           <p class="added-at">Logged on {addedAt}</p>
         )}
+        {album.release_title && (
+          <p class="added-at">Release: {album.release_title}</p>
+        )}
         {albumTracks.length > 0 && (
           <div class="tracks-wrap" style="margin-top:16px">
             <p class="attr-label" style="margin-bottom:6px">Tracks</p>
@@ -367,19 +374,21 @@ const addedAt = album.added_at
     <div class="edit-panel" id="edit-panel">
       <AlbumForm
         values={{
-          mbid:        album.mbid,
-          artist:      album.artist,
-          album:       album.album,
-          year:        album.year,
-          country:     album.country,
-          genre:       album.genre,
+          mbid:          album.mbid,
+          artist:        album.artist,
+          album:         album.album,
+          year:          album.year,
+          country:       album.country,
+          genre:         album.genre,
           subgenres,
-          rating:      album.rating,
-          notes:       album.notes,
-          cover_url:   album.cover_url,
-          tracks:      JSON.stringify(albumTracks),
-          recommended: album.recommended,
-          is_hidden:   album.is_hidden,
+          rating:        album.rating,
+          notes:         album.notes,
+          cover_url:     album.cover_url,
+          tracks:        JSON.stringify(albumTracks),
+          recommended:   album.recommended,
+          is_hidden:     album.is_hidden,
+          release_mbid:  album.release_mbid,
+          release_title: album.release_title,
         }}
         submitLabel="Save Changes"
       />
@@ -388,13 +397,24 @@ const addedAt = album.added_at
 </Layout>
 
 <script>
-import { initAlbumForm } from '../../../lib/album-form';
+import { initAlbumForm, populateReleaseSelect } from '../../../lib/album-form';
 
 initAlbumForm();
 
 document.getElementById('edit-btn')?.addEventListener('click', () => {
   document.getElementById('view-panel')!.classList.add('hidden');
   document.getElementById('edit-panel')!.classList.add('visible');
+
+  const mbid = (document.getElementById('f-mbid') as HTMLInputElement | null)?.value;
+  const currentReleaseMbid = (document.getElementById('f-release-mbid') as HTMLInputElement | null)?.value ?? '';
+  if (mbid) {
+    fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(mbid)}`)
+      .then(r => r.json())
+      .then((releases: Array<{ id: string; label: string }>) => {
+        populateReleaseSelect(releases, currentReleaseMbid);
+      })
+      .catch(() => {});
+  }
 });
 document.getElementById('cancel-btn')?.addEventListener('click', () => {
   document.getElementById('edit-panel')!.classList.remove('visible');

@@ -45,6 +45,7 @@ export const GET: APIRoute = async (context) => {
         mbid:     row.mbid ?? '',
         title:    row.album,
         artist:   row.artist,
+        artists:  row.artist.split(' / ').map((s: string) => s.trim()).filter(Boolean),
         artistId: '',
         year:     row.year ? String(row.year) : '',
         tags:     [],
@@ -67,11 +68,15 @@ export const GET: APIRoute = async (context) => {
       const data = (await res.json()) as MBResponse;
       for (const rg of (data['release-groups'] ?? []).slice(0, 8)) {
         if (seenMbids.has(rg.id)) continue;
+        const ac = rg['artist-credit'] ?? [];
+        const artist = ac.map(c => (c.artist?.name ?? '') + (c.joinphrase ?? '')).join('').trim()
+          || (ac[0]?.artist?.name ?? '');
         results.push({
           mbid:     rg.id,
           title:    rg.title,
-          artist:   rg['artist-credit']?.[0]?.artist?.name ?? '',
-          artistId: rg['artist-credit']?.[0]?.artist?.id ?? '',
+          artist,
+          artists:  ac.map(c => c.artist?.name ?? '').filter(Boolean),
+          artistId: ac[0]?.artist?.id ?? '',
           year:     rg['first-release-date']?.slice(0, 4) ?? '',
           tags:     (rg.genres ?? rg.tags ?? [])
                       .sort((a, b) => b.count - a.count)
@@ -95,6 +100,7 @@ interface SearchResult {
   mbid: string;
   title: string;
   artist: string;
+  artists: string[];
   artistId: string;
   year: string;
   tags: string[];
@@ -127,7 +133,7 @@ interface MBResponse {
     id: string;
     title: string;
     'first-release-date'?: string;
-    'artist-credit'?: Array<{ artist: { id: string; name: string } }>;
+    'artist-credit'?: Array<{ artist: { id: string; name: string }; joinphrase?: string }>;
     genres?: Array<{ name: string; count: number }>;
     tags?:   Array<{ name: string; count: number }>;
   }>;
