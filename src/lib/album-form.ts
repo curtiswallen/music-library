@@ -368,8 +368,12 @@ export function initAlbumForm() {
   const descChips  = document.getElementById('descriptor-chips')   as HTMLElement | null;
 
   if (descInput && descChips && descDrop) {
+    const chips: HTMLElement      = descChips;
+    const drop:  HTMLElement      = descDrop;
+    const dinput: HTMLInputElement = descInput;
+
     // Wire remove buttons on server-rendered chips (edit mode)
-    descChips.querySelectorAll<HTMLElement>('.descriptor-chip').forEach(chip => {
+    chips.querySelectorAll<HTMLElement>('.descriptor-chip').forEach(chip => {
       chip.querySelector('.descriptor-chip-remove')?.addEventListener('click', () => {
         chip.remove(); _syncDescriptors();
       });
@@ -377,54 +381,73 @@ export function initAlbumForm() {
     _syncDescriptors();
 
     let descTimer: ReturnType<typeof setTimeout>;
+    let fetchToken = 0;
+
+    function getGenre(): string {
+      const genreEl = document.getElementById('f-genre');
+      return genreEl?.closest('.combo')?.querySelector<HTMLInputElement>('.combo-hidden')?.value ?? '';
+    }
+
+    function getExistingTags(): Set<string> {
+      return new Set(
+        Array.from(chips.querySelectorAll<HTMLElement>('[data-tag]')).map(el => el.dataset.tag ?? '')
+      );
+    }
+
+    async function fetchAndShow(q: string): Promise<void> {
+      const token = ++fetchToken;
+      const genre = getGenre();
+      const params = new URLSearchParams();
+      if (q)     params.set('q', q);
+      if (genre) params.set('genre', genre);
+      try {
+        const res      = await fetch(`/api/descriptors?${params}`);
+        if (token !== fetchToken) return;
+        const all      = (await res.json()) as string[];
+        const existing = getExistingTags();
+        const opts     = all.filter(r => !existing.has(r.toLowerCase()));
+        if (!opts.length) { drop.innerHTML = ''; drop.classList.remove('open'); return; }
+        drop.innerHTML = opts.map(r => `<div class="descriptor-opt">${esc(r)}</div>`).join('');
+        drop.classList.add('open');
+        drop.querySelectorAll<HTMLElement>('.descriptor-opt').forEach(el => {
+          el.addEventListener('mousedown', ev => { ev.preventDefault(); addDescriptorTag(el.textContent ?? ''); });
+        });
+      } catch {}
+    }
 
     const addDescriptorTag = (val: string) => {
       const tag = val.trim();
       if (tag.length < 2) return;
-      const existing = Array.from(descChips.querySelectorAll<HTMLElement>('[data-tag]'))
-        .map(el => el.dataset.tag ?? '');
-      if (existing.includes(tag.toLowerCase())) { descInput.value = ''; return; }
-      descChips.appendChild(_makeDescriptorChip(tag));
-      // Re-sort chips alphabetically
-      const allChips = Array.from(descChips.querySelectorAll<HTMLElement>('.descriptor-chip'));
+      if (getExistingTags().has(tag.toLowerCase())) { dinput.value = ''; return; }
+      chips.appendChild(_makeDescriptorChip(tag));
+      const allChips = Array.from(chips.querySelectorAll<HTMLElement>('.descriptor-chip'));
       allChips.sort((a, b) => (a.dataset.tag ?? '').localeCompare(b.dataset.tag ?? '', undefined, { sensitivity: 'base' }));
-      allChips.forEach(c => descChips.appendChild(c));
+      allChips.forEach(c => chips.appendChild(c));
       _syncDescriptors();
-      descInput.value = '';
-      descDrop.innerHTML = '';
-      descDrop.classList.remove('open');
+      dinput.value = '';
+      fetchAndShow('');
     };
 
-    descInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    dinput.addEventListener('focus', () => fetchAndShow(dinput.value.trim()));
+    dinput.addEventListener('click', () => fetchAndShow(dinput.value.trim()));
+
+    dinput.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ',') {
         e.preventDefault();
-        addDescriptorTag(descInput.value);
-      } else if (e.key === 'Backspace' && !descInput.value) {
-        const last = descChips.querySelector<HTMLElement>('.descriptor-chip:last-child');
+        addDescriptorTag(dinput.value);
+      } else if (e.key === 'Backspace' && !dinput.value) {
+        const last = chips.querySelector<HTMLElement>('.descriptor-chip:last-child');
         if (last) { last.remove(); _syncDescriptors(); }
       }
     });
 
-    descInput.addEventListener('input', () => {
+    dinput.addEventListener('input', () => {
       clearTimeout(descTimer);
-      const q = descInput.value.trim();
-      if (q.length < 2) { descDrop.innerHTML = ''; descDrop.classList.remove('open'); return; }
-      descTimer = setTimeout(async () => {
-        try {
-          const res     = await fetch(`/api/descriptors?q=${encodeURIComponent(q)}`);
-          const results = (await res.json()) as string[];
-          if (!results.length) { descDrop.innerHTML = ''; descDrop.classList.remove('open'); return; }
-          descDrop.innerHTML = results.map(r => `<div class="descriptor-opt">${esc(r)}</div>`).join('');
-          descDrop.classList.add('open');
-          descDrop.querySelectorAll<HTMLElement>('.descriptor-opt').forEach(el => {
-            el.addEventListener('mousedown', ev => { ev.preventDefault(); addDescriptorTag(el.textContent ?? ''); });
-          });
-        } catch {}
-      }, 250);
+      descTimer = setTimeout(() => fetchAndShow(dinput.value.trim()), 250);
     });
 
-    descInput.addEventListener('blur', () => {
-      setTimeout(() => { descDrop.innerHTML = ''; descDrop.classList.remove('open'); }, 150);
+    dinput.addEventListener('blur', () => {
+      setTimeout(() => { drop.innerHTML = ''; drop.classList.remove('open'); }, 150);
     });
   }
 
