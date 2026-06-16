@@ -25,7 +25,7 @@ const wranglerPath = 'dist/server/wrangler.json';
 const cfg = JSON.parse(readFileSync(wranglerPath, 'utf8'));
 
 const REMOVE = [
-  'assets', 'images', 'kv_namespaces', 'previews',
+  'assets', 'images', 'previews',
   'main', 'rules', 'pages_build_output_dir',
   'configPath', 'userConfigPath', 'topLevelName',
   'definedEnvironments', 'legacy_env',
@@ -41,6 +41,12 @@ const REMOVE = [
   'logfwdr', 'python_modules', 'dev',
 ];
 for (const key of REMOVE) delete cfg[key];
+
+// Strip KV namespaces without an id (adapter-generated placeholders like SESSION)
+if (Array.isArray(cfg.kv_namespaces)) {
+  cfg.kv_namespaces = cfg.kv_namespaces.filter(ns => ns.id);
+  if (!cfg.kv_namespaces.length) delete cfg.kv_namespaces;
+}
 
 // Point Pages to dist/ (one level up from dist/server/)
 cfg.pages_build_output_dir = '..';
