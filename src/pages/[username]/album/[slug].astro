@@ -216,7 +216,12 @@ const similar = candidates
     const dMatch = descriptors.filter(d =>
       aDescs.some(ad => ad.toLowerCase() === d.toLowerCase())
     ).length;
-    return { ...a, _score: cMatch + sMatch + dMatch };
+    const ratingPenalty = a.rating == null ? 0
+      : a.rating < 25 ? 2
+      : a.rating < 50 ? 1
+      : a.rating < 75 ? 0.5
+      : 0;
+    return { ...a, _score: cMatch + sMatch + dMatch - ratingPenalty };
   })
   .filter(a => a._score >= 2)
   .sort((a, b) => b._score - a._score)

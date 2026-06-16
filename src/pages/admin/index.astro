@@ -85,7 +85,7 @@ const { results: genres } = await db.prepare(`
 `).all<{ id: number; name: string; genre_group: string | null }>();
 
 const { results: subRows } = await db.prepare(`
-  SELECT id, genre_id, name FROM subgenres ORDER BY genre_id, sort_order, name
+  SELECT id, genre_id, name FROM subgenres ORDER BY genre_id, name ASC
 `).all<{ id: number; genre_id: number; name: string }>();
 
 const subsByGenre = new Map<number, Array<{ id: number; name: string }>>();
