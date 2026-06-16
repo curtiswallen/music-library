@@ -504,6 +504,11 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   margin-bottom: 12px;
   line-height: 1.2;
 }
+.album-upper-wrapper {
+  display: flex;
+  flex-direction: row;
+  gap: 26px;
+}
 .album-attrs {
   display: flex;
   flex-wrap: wrap;
@@ -535,32 +540,33 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   color: var(--text-muted);
   margin-bottom: 16px;
 }
+.cover-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
 .release-detail {
-  margin-bottom: 16px;
+  width: 200px;
 }
 .release-name {
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: 4px;
 }
-.release-grid {
-  display: inline-grid;
-  grid-template-columns: repeat(3, max-content);
-  gap: 8px 28px;
-  margin-top: 6px;
+.release-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 10px;
+  font-size: 11px;
 }
-.rg-cell dt {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.release-dl dt {
   color: var(--text-muted);
-  margin-bottom: 2px;
+  white-space: nowrap;
 }
-.rg-cell dd {
-  font-size: 12px;
+.release-dl dd {
   color: var(--text);
   margin: 0;
+  word-break: break-word;
 }
 .attr-label {
   font-size: 11px;

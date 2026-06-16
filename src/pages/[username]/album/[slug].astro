@@ -265,49 +265,53 @@ const addedAt = album.added_at
   <!-- ── View mode ── -->
   <div class="view-panel" id="view-panel">
     <div class="album-hero">
-      <div class="cover-box-lg">
-        {album.cover_url && (
-          <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
-        )}
-      </div>
-      <div class="album-meta">
-        <div class="album-attrs">
-          {album.year && <span>{album.year}</span>}
-          {album.genre && <span class="album-genre-label">{album.genre}</span>}
-          {album.rating != null && (
-            <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
+      <div class="cover-col">
+        <div class="cover-box-lg">
+          {album.cover_url && (
+            <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
           )}
         </div>
-        {sortedSubs.length > 0 && (
-          <div class="album-tags">
-            {sortedSubs.map(s => (
-              <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
-            ))}
-          </div>
-        )}
-        {descriptors.length > 0 && (
-          <div class="album-tags">
-            {descriptors.map(d => <span class="tag descriptor-tag">{d}</span>)}
-          </div>
-        )}
-
         {(releaseInfo || album.release_title) && (
           <div class="release-detail">
-            <p class="attr-label">Release</p>
             {releaseInfo ? (
-              <div class="release-grid">
-                {releaseInfo.format         && <div class="rg-cell"><dt>Format</dt><dd>{releaseInfo.format}</dd></div>}
-                {releaseInfo.date           && <div class="rg-cell"><dt>Released</dt><dd>{releaseInfo.date}</dd></div>}
-                {releaseInfo.country        && <div class="rg-cell"><dt>Country</dt><dd>{releaseInfo.country}</dd></div>}
-                {releaseInfo.labels.map(l  => <div class="rg-cell"><dt>Label</dt><dd>{l.name}{l.catalog ? ` — ${l.catalog}` : ''}</dd></div>)}
-                {releaseInfo.barcode        && <div class="rg-cell"><dt>Barcode</dt><dd>{releaseInfo.barcode}</dd></div>}
-                {releaseInfo.disambiguation && <div class="rg-cell"><dt>Edition</dt><dd>{releaseInfo.disambiguation}</dd></div>}
-              </div>
+              <dl class="release-dl">
+                {releaseInfo.format         && <><dt>Format</dt><dd>{releaseInfo.format}</dd></>}
+                {releaseInfo.date           && <><dt>Released</dt><dd>{releaseInfo.date}</dd></>}
+                {releaseInfo.country        && <><dt>Country</dt><dd>{releaseInfo.country}</dd></>}
+                {releaseInfo.labels.map(l  => <><dt>Label</dt><dd>{l.name}{l.catalog ? ` — ${l.catalog}` : ''}</dd></>)}
+                {releaseInfo.barcode        && <><dt>Barcode</dt><dd>{releaseInfo.barcode}</dd></>}
+                {releaseInfo.disambiguation && <><dt>Edition</dt><dd>{releaseInfo.disambiguation}</dd></>}
+              </dl>
             ) : (
               <p class="release-name">{album.release_title}</p>
             )}
           </div>
         )}
+      </div>
+      <div class="album-meta">
+        <div class="album-upper-wrapper">
+          <div class="album-header">
+            <div class="album-attrs">
+              {album.year && <span>{album.year}</span>}
+              {album.genre && <span class="album-genre-label">{album.genre}</span>}
+              {album.rating != null && (
+                <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
+              )}
+            </div>
+            {sortedSubs.length > 0 && (
+              <div class="album-tags">
+                {sortedSubs.map(s => (
+                  <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+                ))}
+              </div>
+            )}
+            {descriptors.length > 0 && (
+              <div class="album-tags">
+                {descriptors.map(d => <span class="tag descriptor-tag">{d}</span>)}
+              </div>
+            )}
+          </div>
+        </div>
   
         {album.notes && (
           <div>
