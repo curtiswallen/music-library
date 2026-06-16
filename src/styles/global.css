@@ -562,7 +562,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .breadcrumb a:hover { color: var(--text); }
 .breadcrumb-sep { color: var(--text-muted); user-select: none; }
 .breadcrumb-current { color: var(--text); }
-.breadcrumb h1 { display: flex; flex-direction: row; align-items: center; gap: 5px;}
+.breadcrumb h1, .breadcrumb h1 * { display: flex; flex-direction: row; align-items: center; gap: 5px;}
 
 /* ── Filter chip remove ── */
 .chip-remove { color: var(--text-muted); font-size: 14px; line-height: 1; text-decoration: none; padding: 0 2px; }
