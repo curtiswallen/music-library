@@ -42,7 +42,7 @@ const {
     <thead>
       <tr>
         <th></th>
-        <th><a href={sortHref('artist')} class={safeSort === 'artist' ? 'active' : ''}>Artist{sortArrow('artist')}</a></th>
+        <th class="col-artist"><a href={sortHref('artist')} class={safeSort === 'artist' ? 'active' : ''}>Artist{sortArrow('artist')}</a></th>
         <th></th>
         <th class="col-album"><a href={sortHref('album')}  class={safeSort === 'album'  ? 'active' : ''}>Album{sortArrow('album')}</a></th>
         <th><a href={sortHref('year')}   class={safeSort === 'year'   ? 'active' : ''}>Year{sortArrow('year')}</a></th>
@@ -83,7 +83,7 @@ const {
                 )}
               </div>
             </td>
-            <td>
+            <td class="col-artist">
               {a.artist.split(' / ').map((p, i, arr) => (
                 <>{i > 0 && <span class="artist-sep"> / </span>}<a href={`${base}/artist/${slugify(p.trim())}`}>{p.trim()}</a></>
               ))}

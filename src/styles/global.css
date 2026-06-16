@@ -181,7 +181,8 @@ tr:hover td { background: var(--bg-hover); }
 
 .rec-star { color: var(--yellow); font-size: 11px; }
 
-/* Library table column classes: col-album, col-genre, col-subgenres */
+/* Library table column classes */
+.col-artist { max-width: 150px; }
 .col-album { max-width: 300px; }
 .col-album a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .col-genre { width: 150px; min-width: 150px; }

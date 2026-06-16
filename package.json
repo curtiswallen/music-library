@@ -12,9 +12,11 @@
     "db:migrate:remote": "wrangler d1 execute music-library --remote --file=./schema.sql"
   },
   "dependencies": {
+    "@astrojs/check": "^0.9.9",
     "@astrojs/cloudflare": "^13.7.0",
     "arctic": "^3.7.0",
-    "astro": "^6.4.6"
+    "astro": "^6.4.6",
+    "typescript": "^6.0.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",

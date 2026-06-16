@@ -420,8 +420,8 @@ document.getElementById('edit-btn')?.addEventListener('click', () => {
   if (mbid) {
     fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(mbid)}`)
       .then(r => r.json())
-      .then((releases: Array<{ id: string; label: string }>) => {
-        populateReleaseSelect(releases, currentReleaseMbid);
+      .then(data => {
+        populateReleaseSelect(data as Array<{ id: string; label: string }>, currentReleaseMbid);
       })
       .catch(() => {});
   }
