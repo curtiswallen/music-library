@@ -160,7 +160,7 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
     </div>
     <div class="form-group" id="release-select-wrap"
          style={values.release_mbid ? '' : 'display:none'}>
-      <label for="f-release-select">Specific Release <span class="field-hint-inline">(optional)</span></label>
+      <label for="f-release-select">Specific Release</label>
       <select id="f-release-select">
         <option value="">No specific release</option>
         {values.release_mbid && values.release_title && (
