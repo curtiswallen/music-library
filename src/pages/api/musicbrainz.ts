@@ -86,7 +86,7 @@ export const GET: APIRoute = async (context) => {
         year:     rg['first-release-date']?.slice(0, 4) ?? '',
         tags:     (rg.genres ?? rg.tags ?? [])
                     .sort((a, b) => b.count - a.count)
-                    .slice(0, 3)
+                    .slice(0, 8)
                     .map(t => t.name),
         coverUrl: `https://coverartarchive.org/release-group/${rg.id}/front-250`,
       });

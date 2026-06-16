@@ -186,21 +186,29 @@ export function populateReleaseSelect(
   releases: Array<{ id: string; label: string; data?: unknown }>,
   currentMbid = '',
 ): void {
-  const wrap    = document.getElementById('release-select-wrap');
-  const sel     = document.getElementById('f-release-select') as HTMLSelectElement | null;
-  const relData = document.getElementById('f-release-data')   as HTMLInputElement  | null;
+  const wrap     = document.getElementById('release-select-wrap');
+  const sel      = document.getElementById('f-release-select') as HTMLSelectElement | null;
+  const relMbid  = document.getElementById('f-release-mbid')   as HTMLInputElement  | null;
+  const relTitle = document.getElementById('f-release-title')  as HTMLInputElement  | null;
+  const relData  = document.getElementById('f-release-data')   as HTMLInputElement  | null;
   if (!sel) return;
   sel.innerHTML = '<option value="">No specific release</option>';
   if (!releases.length) { if (wrap) wrap.style.display = 'none'; return; }
+
+  // Auto-select when there's exactly one release and nothing was previously selected
+  const autoSelect = releases.length === 1 && !currentMbid;
+
   let selectedData = '';
   releases.forEach(r => {
     const opt = document.createElement('option');
     opt.value = r.id;
     opt.textContent = r.label;
     if (r.data !== undefined) opt.dataset.releaseData = JSON.stringify(r.data);
-    if (r.id === currentMbid) {
+    if (r.id === currentMbid || autoSelect) {
       opt.selected = true;
       selectedData = r.data !== undefined ? JSON.stringify(r.data) : '';
+      if (relMbid)  relMbid.value  = r.id;
+      if (relTitle) relTitle.value = r.label;
     }
     sel.appendChild(opt);
   });

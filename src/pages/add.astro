@@ -219,7 +219,7 @@ function pick(r: MBResult) {
   set('f-year',   r.year);
   searchInput.value = `${r.artist} — ${r.title}`;
 
-  if (r.tags?.length) resolveGenre(r.tags[0]);
+  if (r.tags?.length) resolveGenre(r.tags);
 
   if (r.country) {
     set('f-country', r.country);
@@ -279,31 +279,46 @@ function pick(r: MBResult) {
   closeResults();
 }
 
-function resolveGenre(mbTag: string) {
+function resolveGenre(tags: string[]) {
   const genreInput = document.getElementById('f-genre') as HTMLInputElement;
   if (genreInput.value) return;
 
-  const tag = mbTag.trim().toLowerCase();
   const genreNames = Object.keys(SUBGENRE_MAP);
+  // Broad tags that should lose to any specific match
+  const GENERIC = new Set(['rock', 'pop', 'electronic', 'folk', 'jazz', 'classical',
+                            'blues', 'country', 'world music', 'experimental', 'ambient', 'metal']);
 
-  const exactKey = genreNames.find(k => k.toLowerCase() === tag);
-  if (exactKey) {
-    set('f-genre', exactKey);
+  // Collect exact matches across all tags (tags are ordered by MB vote count)
+  const exactMatches: string[] = [];
+  for (const t of tags) {
+    const key = genreNames.find(k => k.toLowerCase() === t.trim().toLowerCase());
+    if (key && !exactMatches.includes(key)) exactMatches.push(key);
+  }
+
+  // Prefer specific over generic; fall back to first exact match
+  const best = exactMatches.find(k => !GENERIC.has(k.toLowerCase())) ?? exactMatches[0];
+  if (best) {
+    set('f-genre', best);
     setSelectedSubs([]);
     return;
   }
 
-  const matchKey = genreNames.find(k => tag.includes(k.toLowerCase()));
-  if (matchKey) {
-    set('f-genre', matchKey);
-    const prefix = tag.replace(matchKey.toLowerCase(), '').trim();
-    setSelectedSubs([]);
-    renderSubgenreWidget();
-    if (prefix) {
-      const prefixTitle = prefix.replace(/\b\w/g, c => c.toUpperCase());
-      const chips = document.querySelectorAll<HTMLButtonElement>('.subgenre-chip');
-      const match = Array.from(chips).find(c => c.dataset.sub?.toLowerCase() === prefixTitle.toLowerCase());
-      if (match) match.click();
+  // No exact match: try partial match across all tags (handles "melodic black metal" → genre + subgenre)
+  for (const t of tags) {
+    const tag = t.trim().toLowerCase();
+    const matchKey = genreNames.find(k => tag.includes(k.toLowerCase()));
+    if (matchKey) {
+      set('f-genre', matchKey);
+      const prefix = tag.replace(matchKey.toLowerCase(), '').trim();
+      setSelectedSubs([]);
+      renderSubgenreWidget();
+      if (prefix) {
+        const prefixTitle = prefix.replace(/\b\w/g, c => c.toUpperCase());
+        const subChips = document.querySelectorAll<HTMLButtonElement>('.subgenre-chip');
+        const match = Array.from(subChips).find(c => c.dataset.sub?.toLowerCase() === prefixTitle.toLowerCase());
+        if (match) match.click();
+      }
+      return;
     }
   }
 }
