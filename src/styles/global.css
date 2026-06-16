@@ -288,7 +288,7 @@ tr:hover td { background: var(--bg-hover); }
 .combo-opt.focused,
 .combo-opt:hover { background: var(--bg-hover); }
 .combo-clear { color: var(--text-muted); font-style: italic; }
-#fp-country, #fp-genre, #fp-rated {padding-top: 5px; padding-bottom: 5px; background: var(--bg);}
+#fp-country, #fp-genre, #fp-rated, #fp-desc-input {padding-top: 5px; padding-bottom: 5px; background: var(--bg);}
 
 /* ── MusicBrainz search ── */
 .mb-wrap { position: relative; max-width: 480px; margin-bottom: 32px; }

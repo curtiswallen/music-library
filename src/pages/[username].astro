@@ -345,6 +345,7 @@ const clearFiltersHref = buildParams({
                style={genre ? '' : 'display:none'}
                data-includes={JSON.stringify(subgenres)}
                data-excludes={JSON.stringify(excludes)}>
+            <div class="fp-label" style="margin-bottom: 5px;">Subgenres</div>
             <div class="fp-sub-chips" id="fp-sub-chips"></div>
             <div id="fp-sub-inputs"></div>
             <p class="fp-sub-hint">click to include · again to exclude · again to clear</p>
@@ -356,10 +357,11 @@ const clearFiltersHref = buildParams({
                  data-all={JSON.stringify(allDescriptors)}
                  data-selected={JSON.stringify(descriptorFilters)}>
               <label class="fp-label" style="display:block;margin-bottom:6px">Descriptors</label>
-              <div id="fp-desc-chips" class="descriptor-chips" style="margin-bottom:6px"></div>
+              <div id="fp-desc-chips" class="descriptor-chips"
+                   style={descriptorFilters.length > 0 ? 'margin-bottom:6px' : 'display:none;margin-bottom:6px'}></div>
               <div class="descriptor-input-wrap" style="max-width:320px">
                 <input type="text" id="fp-desc-input" class="descriptor-input"
-                       placeholder="Search descriptors…" autocomplete="off" />
+                       placeholder="Search descriptors..." autocomplete="off" />
                 <div id="fp-desc-dropdown" class="descriptor-dropdown"></div>
               </div>
               <div id="fp-desc-inputs"></div>
@@ -566,6 +568,7 @@ if (descWrap) {
 
   function renderDescChips() {
     descChipsEl.innerHTML = '';
+    descChipsEl.style.display = selectedDescs.size > 0 ? '' : 'none';
     [...selectedDescs].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
       .forEach(d => {
         const chip = document.createElement('span');
@@ -591,8 +594,8 @@ if (descWrap) {
         ev.preventDefault();
         selectedDescs.add(el.textContent!);
         descInputEl.value = '';
-        descDropEl.innerHTML = ''; descDropEl.classList.remove('open');
         renderDescChips(); syncDescInputs();
+        showDescDropdown('');
       });
     });
   }
