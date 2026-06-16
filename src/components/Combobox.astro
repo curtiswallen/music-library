@@ -4,10 +4,11 @@ interface Props {
   name: string;
   options?: string[];
   labeledOptions?: { label: string; value: string }[];
+  groupedOptions?: Array<{ group: string; options: string[] }>;
   value?: string;
   placeholder?: string;
 }
-const { id, name, options = [], labeledOptions, value = '', placeholder = 'Search...' } = Astro.props;
+const { id, name, options = [], labeledOptions, groupedOptions, value = '', placeholder = 'Search...' } = Astro.props;
 
 // When using labeledOptions, show the label for the current value in the text input
 const displayValue = labeledOptions
@@ -27,13 +28,22 @@ const displayValue = labeledOptions
   />
   <div class="combo-dropdown" role="listbox" hidden>
     <div class="combo-opt combo-clear" role="option" data-val="">Clear</div>
-    {labeledOptions
-      ? labeledOptions.map(opt => (
-          <div class="combo-opt" role="option" data-val={opt.value}>{opt.label}</div>
+    {groupedOptions
+      ? groupedOptions.map(grp => (
+          <>
+            <div class="combo-group-header">{grp.group}</div>
+            {grp.options.map(opt => (
+              <div class="combo-opt" role="option" data-val={opt}>{opt}</div>
+            ))}
+          </>
         ))
-      : options.map(opt => (
-          <div class="combo-opt" role="option" data-val={opt}>{opt}</div>
-        ))
+      : labeledOptions
+        ? labeledOptions.map(opt => (
+            <div class="combo-opt" role="option" data-val={opt.value}>{opt.label}</div>
+          ))
+        : options.map(opt => (
+            <div class="combo-opt" role="option" data-val={opt}>{opt}</div>
+          ))
     }
   </div>
   <input type="hidden" name={name} class="combo-hidden" value={value} />
@@ -45,9 +55,24 @@ document.querySelectorAll<HTMLDivElement>('.combo').forEach(wrap => {
   const dropdown = wrap.querySelector<HTMLDivElement>('.combo-dropdown')!;
   const hidden   = wrap.querySelector<HTMLInputElement>('.combo-hidden')!;
   const allOpts  = Array.from(dropdown.querySelectorAll<HTMLDivElement>('.combo-opt'));
+  const headers  = Array.from(dropdown.querySelectorAll<HTMLDivElement>('.combo-group-header'));
   let focusedIdx = -1;
 
   function getVisible() { return allOpts.filter(o => !o.hidden); }
+
+  function syncHeaders() {
+    headers.forEach(header => {
+      let sibling = header.nextElementSibling as Element | null;
+      let anyVisible = false;
+      while (sibling && !sibling.classList.contains('combo-group-header')) {
+        if (!sibling.hasAttribute('hidden') && sibling.classList.contains('combo-opt')) {
+          anyVisible = true;
+        }
+        sibling = sibling.nextElementSibling;
+      }
+      header.hidden = !anyVisible;
+    });
+  }
 
   // Display text for an option: empty string for the clear option, label text otherwise
   function displayOf(opt: HTMLDivElement) {
@@ -72,6 +97,7 @@ document.querySelectorAll<HTMLDivElement>('.combo').forEach(wrap => {
 
   function showAll() {
     allOpts.forEach(o => o.hidden = false);
+    headers.forEach(h => h.hidden = false);
     dropdown.hidden = false;
     focusedIdx = -1;
   }
@@ -82,6 +108,7 @@ document.querySelectorAll<HTMLDivElement>('.combo').forEach(wrap => {
       const label = opt.textContent?.trim().toLowerCase() ?? '';
       opt.hidden = opt.dataset.val !== '' && !label.includes(lq);
     });
+    syncHeaders();
     dropdown.hidden = getVisible().length === 0;
     focusedIdx = -1;
   }

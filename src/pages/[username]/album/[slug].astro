@@ -227,16 +227,24 @@ const addedAt = album.added_at
   : null;
 
 const { results: genreRows } = await db.prepare(`
-  SELECT g.name AS genre, s.name AS sub
+  SELECT g.name AS genre, g.genre_group, s.name AS sub
   FROM genres g
   LEFT JOIN subgenres s ON s.genre_id = g.id
-  ORDER BY g.sort_order, g.name, s.sort_order, s.name
-`).all<{ genre: string; sub: string | null }>();
+  ORDER BY g.name ASC, s.name ASC
+`).all<{ genre: string; genre_group: string | null; sub: string | null }>();
 const genreMap: Record<string, string[]> = {};
+const groupedGenres: Array<{ group: string; options: string[] }> = [];
 for (const row of genreRows) {
-  if (!genreMap[row.genre]) genreMap[row.genre] = [];
+  if (!genreMap[row.genre]) {
+    genreMap[row.genre] = [];
+    const g = row.genre_group ?? 'Other';
+    let grp = groupedGenres.find(x => x.group === g);
+    if (!grp) { grp = { group: g, options: [] }; groupedGenres.push(grp); }
+    grp.options.push(row.genre);
+  }
   if (row.sub) genreMap[row.genre].push(row.sub);
 }
+groupedGenres.sort((a, b) => a.group.localeCompare(b.group));
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
@@ -469,6 +477,7 @@ for (const row of genreRows) {
         }}
         submitLabel="Save Changes"
         genreMap={genreMap}
+        groupedGenres={groupedGenres}
       />
     </div>
   )}

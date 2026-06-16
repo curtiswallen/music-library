@@ -25,6 +25,7 @@ interface FormValues {
 interface Props {
   values?: FormValues;
   genreMap?: Record<string, string[]>;
+  groupedGenres?: Array<{ group: string; options: string[] }>;
   includeDbAlbumId?: boolean;
   submitLabel?: string;
   cancelHref?: string;
@@ -33,6 +34,7 @@ interface Props {
 const {
   values = {},
   genreMap = {},
+  groupedGenres,
   includeDbAlbumId = false,
   submitLabel = 'Save',
   cancelHref,
@@ -49,7 +51,7 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
   .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 ---
 
-<script type="application/json" id="genre-map-data" is:inline>{JSON.stringify(genreMap)}</script>
+<script type="application/json" id="genre-map-data" is:inline set:html={JSON.stringify(genreMap)}></script>
 <form method="post" id="album-form">
   <input type="hidden" name="mbid"          id="f-mbid"          value={values.mbid ?? ''} />
   {includeDbAlbumId && <input type="hidden" name="db_album_id" id="f-db-album-id" />}
@@ -98,7 +100,9 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
     </div>
     <div class="form-group">
       <label for="f-genre">Genre</label>
-      <Combobox id="f-genre" name="genre" options={genreNames}
+      <Combobox id="f-genre" name="genre"
+                groupedOptions={groupedGenres}
+                options={groupedGenres ? undefined : genreNames}
                 value={values.genre ?? ''} placeholder="Search genre..." />
     </div>
     <div class="form-group">

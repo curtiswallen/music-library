@@ -62,15 +62,27 @@ if (Astro.request.method === 'POST') {
     if (id) {
       await db.prepare('DELETE FROM subgenres WHERE id = ?').bind(id).run();
     }
+
+  } else if (action === 'set-genre-group') {
+    const id    = parseInt(data.get('id') as string);
+    const group = (data.get('group') as string)?.trim() || null;
+    if (id) {
+      await db.prepare('UPDATE genres SET genre_group = ? WHERE id = ?').bind(group, id).run();
+    }
   }
 
   return Astro.redirect('/admin');
 }
 
+const GENRE_GROUPS = [
+  'Electronic', 'Folk, Blues & Jazz', 'Hip-Hop, R&B & Reggae',
+  'Metal', 'Pop & Country', 'Rock & Punk', 'World & Experimental',
+];
+
 // ── GET: load genres + subgenres ──────────────────────────────────────────────
 const { results: genres } = await db.prepare(`
-  SELECT id, name FROM genres ORDER BY sort_order, name
-`).all<{ id: number; name: string }>();
+  SELECT id, name, genre_group FROM genres ORDER BY genre_group NULLS LAST, name ASC
+`).all<{ id: number; name: string; genre_group: string | null }>();
 
 const { results: subRows } = await db.prepare(`
   SELECT id, genre_id, name FROM subgenres ORDER BY genre_id, sort_order, name
@@ -109,6 +121,15 @@ for (const r of subRows) {
                 <input type="hidden" name="id" value={g.id} />
                 <input name="name" type="text" value={g.name} required class="admin-input genre-name-input" />
                 <button type="submit" class="btn btn-sm">Rename</button>
+              </form>
+              <form method="post" action="/admin?action=set-genre-group" class="group-form">
+                <input type="hidden" name="id" value={g.id} />
+                <select name="group" class="admin-input admin-select" onchange="this.form.submit()">
+                  <option value="">No group</option>
+                  {GENRE_GROUPS.map(grp => (
+                    <option value={grp} selected={g.genre_group === grp}>{grp}</option>
+                  ))}
+                </select>
               </form>
               <form method="post" action="/admin?action=delete-genre"
                     onsubmit={`return confirm('Delete "${g.name}" and all its subgenres?')`}>
@@ -154,6 +175,8 @@ for (const r of subRows) {
   padding: 5px 10px; border-radius: 4px; font-size: 13px; font-family: inherit;
 }
 .admin-input-sm { width: 160px; }
+.admin-select { padding: 5px 8px; cursor: pointer; }
+.group-form { display: flex; align-items: center; }
 
 .genre-list { display: flex; flex-direction: column; gap: 12px; }
 

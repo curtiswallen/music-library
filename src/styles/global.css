@@ -295,6 +295,12 @@ tr:hover td { background: var(--bg-hover); }
 .combo-opt.focused,
 .combo-opt:hover { background: var(--bg-hover); }
 .combo-clear { color: var(--text-muted); font-style: italic; }
+.combo-group-header {
+  padding: 6px 12px 3px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted);
+  border-top: 1px solid var(--border); margin-top: 2px; pointer-events: none;
+}
+.combo-group-header:first-child { border-top: none; margin-top: 0; }
 #fp-country, #fp-genre, #fp-rated, #fp-desc-input {padding-top: 5px; padding-bottom: 5px; background: var(--bg);}
 
 /* ── MusicBrainz search ── */

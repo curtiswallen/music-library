@@ -106,17 +106,34 @@ if (isOwner || !profileUser.is_private) {
 }
 
 const { results: genreRows } = await db.prepare(`
-  SELECT g.name AS genre, s.name AS sub
+  SELECT g.name AS genre, g.genre_group, s.name AS sub
   FROM genres g
   LEFT JOIN subgenres s ON s.genre_id = g.id
-  ORDER BY g.sort_order, g.name, s.sort_order, s.name
-`).all<{ genre: string; sub: string | null }>();
+  ORDER BY g.name ASC, s.name ASC
+`).all<{ genre: string; genre_group: string | null; sub: string | null }>();
 const genreMap: Record<string, string[]> = {};
 for (const row of genreRows) {
   if (!genreMap[row.genre]) genreMap[row.genre] = [];
   if (row.sub) genreMap[row.genre].push(row.sub);
 }
-const GENRES = Object.keys(genreMap);
+
+// Library-only grouped genres for the filter dropdown
+const { results: libraryGenreRows } = await db.prepare(`
+  SELECT DISTINCT ua.genre FROM user_albums ua
+  WHERE ua.user_id = ? AND ua.genre != ''
+  ORDER BY ua.genre ASC
+`).bind(profileUser.id).all<{ genre: string }>();
+const libraryGenreSet = new Set(libraryGenreRows.map(r => r.genre));
+const groupedFilterGenres: Array<{ group: string; options: string[] }> = [];
+for (const row of genreRows) {
+  if (!libraryGenreSet.has(row.genre)) continue;
+  if (groupedFilterGenres.some(g => g.options.includes(row.genre))) continue;
+  const g = row.genre_group ?? 'Other';
+  let grp = groupedFilterGenres.find(x => x.group === g);
+  if (!grp) { grp = { group: g, options: [] }; groupedFilterGenres.push(grp); }
+  grp.options.push(row.genre);
+}
+groupedFilterGenres.sort((a, b) => a.group.localeCompare(b.group));
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
 
@@ -192,7 +209,7 @@ const clearFiltersHref = buildParams({
 ---
 
 <Layout title={isOwner ? 'My Library' : `${displayName}'s Library`}>
-  <script type="application/json" id="genre-map-data" is:inline>{JSON.stringify(genreMap)}</script>
+  <script type="application/json" id="genre-map-data" is:inline set:html={JSON.stringify(genreMap)}></script>
   <script is:inline>
     try {
       const k = 'lib:' + location.pathname.split('/')[1] + ':params';
@@ -339,7 +356,7 @@ const clearFiltersHref = buildParams({
             </div>
             <div class="fp-field-fixed">
               <label class="fp-label">Genre</label>
-              <Combobox id="fp-genre" name="genre" options={GENRES} value={genre} placeholder="Search genre..." />
+              <Combobox id="fp-genre" name="genre" groupedOptions={groupedFilterGenres} value={genre} placeholder="Search genre..." />
             </div>
           </div>
 
