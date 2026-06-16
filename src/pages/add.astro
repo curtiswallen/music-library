@@ -90,8 +90,8 @@ if (Astro.request.method === 'POST') {
 
   await db.prepare(`
     INSERT OR IGNORE INTO user_albums
-      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, descriptors)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, release_data, descriptors)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
     albumId,
@@ -104,6 +104,7 @@ if (Astro.request.method === 'POST') {
     data.get('is_hidden') === 'on' ? 1 : 0,
     (data.get('release_mbid') as string) || null,
     (data.get('release_title') as string) || null,
+    (data.get('release_data') as string) || null,
     descriptorsJson,
   ).run();
 
@@ -245,7 +246,7 @@ function pick(r: MBResult) {
   if (r.mbid) {
     fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(r.mbid)}`)
       .then(res => res.json())
-      .then(data => { populateReleaseSelect(data as Array<{ id: string; label: string }>); })
+      .then(data => { populateReleaseSelect(data as Array<{ id: string; label: string; data?: unknown }>); })
       .catch(() => {});
   }
 
@@ -326,6 +327,7 @@ document.getElementById('clear-form-btn')?.addEventListener('click', () => {
   set('f-cover-url', '');
   set('f-release-mbid', '');
   set('f-release-title', '');
+  set('f-release-data', '');
   setDescriptors([]);
   setTracks([]);
   populateReleaseSelect([]);

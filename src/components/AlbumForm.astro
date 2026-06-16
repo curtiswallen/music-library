@@ -18,6 +18,7 @@ interface FormValues {
   is_hidden?: number | boolean | null;
   release_mbid?: string | null;
   release_title?: string | null;
+  release_data?: string | null;
   descriptors?: string[] | null;
 }
 
@@ -51,6 +52,7 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
   <input type="hidden" name="cover_url"     id="f-cover-url"     value={values.cover_url ?? ''} />
   <input type="hidden" name="release_mbid"  id="f-release-mbid"  value={values.release_mbid ?? ''} />
   <input type="hidden" name="release_title" id="f-release-title" value={values.release_title ?? ''} />
+  <input type="hidden" name="release_data"  id="f-release-data"  value={values.release_data ?? ''} />
 
   <div class="form-grid">
     <div class="form-group">

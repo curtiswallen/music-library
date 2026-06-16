@@ -80,7 +80,7 @@ if (Astro.request.method === 'POST') {
     UPDATE user_albums SET
       genre = ?, subgenres = ?, rating = ?, notes = ?,
       tracks_data = ?, recommended = ?, is_hidden = ?,
-      release_mbid = ?, release_title = ?, descriptors = ?
+      release_mbid = ?, release_title = ?, release_data = ?, descriptors = ?
     WHERE album_id = ? AND user_id = ?
   `).bind(
     (data.get('genre') as string) || '',
@@ -92,6 +92,7 @@ if (Astro.request.method === 'POST') {
     data.get('is_hidden') === 'on' ? 1 : 0,
     (data.get('release_mbid') as string) || null,
     (data.get('release_title') as string) || null,
+    (data.get('release_data') as string) || null,
     descriptorsJson,
     existing.id,
     profileUser.id,
@@ -106,7 +107,7 @@ const row = await db.prepare(`
     a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
     ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
     ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at,
-    ua.release_mbid, ua.release_title, ua.descriptors
+    ua.release_mbid, ua.release_title, ua.release_data, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.slug = ?
@@ -119,6 +120,14 @@ const album       = row;
 const subgenres:   string[] = JSON.parse(album.subgenres  || '[]');
 const descriptors: string[] = (JSON.parse(album.descriptors || '[]') as string[])
   .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+interface ReleaseInfo {
+  format: string; date: string; country: string; disambiguation: string;
+  barcode: string; trackCount: number;
+  labels: Array<{ name: string; catalog: string }>;
+}
+let releaseInfo: ReleaseInfo | null = null;
+try { if (album.release_data) releaseInfo = JSON.parse(album.release_data) as ReleaseInfo; } catch {}
 
 type CanonTrack = { pos: number; title: string; length: number | null; rating?: number | null; notable?: boolean; note?: string };
 type AnnoTrack  = { pos: number; rating: number | null; notable?: boolean; note: string };
@@ -265,8 +274,22 @@ const addedAt = album.added_at
             <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
           )}
         </div>
-        {album.release_title && (
-          <p class="release">Release: {album.release_title}</p>
+        {(releaseInfo || album.release_title) && (
+          <div class="release-detail">
+            <p class="attr-label">Release</p>
+            {releaseInfo ? (
+              <dl class="release-dl">
+                {releaseInfo.format        && <><dt>Format</dt><dd>{releaseInfo.format}</dd></>}
+                {releaseInfo.date          && <><dt>Released</dt><dd>{releaseInfo.date}</dd></>}
+                {releaseInfo.country       && <><dt>Country</dt><dd>{releaseInfo.country}</dd></>}
+                {releaseInfo.labels.map(l  => <><dt>Label</dt><dd>{l.name}{l.catalog ? ` — ${l.catalog}` : ''}</dd></>)}
+                {releaseInfo.barcode       && <><dt>Barcode</dt><dd>{releaseInfo.barcode}</dd></>}
+                {releaseInfo.disambiguation && <><dt>Edition</dt><dd>{releaseInfo.disambiguation}</dd></>}
+              </dl>
+            ) : (
+              <p class="release-name">{album.release_title}</p>
+            )}
+          </div>
         )}
         {sortedSubs.length > 0 && (
           <div class="album-tags">
@@ -419,6 +442,7 @@ const addedAt = album.added_at
           is_hidden:     album.is_hidden,
           release_mbid:  album.release_mbid,
           release_title: album.release_title,
+          release_data:  album.release_data,
           descriptors,
         }}
         submitLabel="Save Changes"
@@ -442,7 +466,7 @@ document.getElementById('edit-btn')?.addEventListener('click', () => {
     fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(mbid)}`)
       .then(r => r.json())
       .then(data => {
-        populateReleaseSelect(data as Array<{ id: string; label: string }>, currentReleaseMbid);
+        populateReleaseSelect(data as Array<{ id: string; label: string; data?: unknown }>, currentReleaseMbid);
       })
       .catch(() => {});
   }

@@ -10,7 +10,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   try {
     const res = await fetch(
-      `${MB}/release?release-group=${rgId}&fmt=json&limit=25&inc=media`,
+      `${MB}/release?release-group=${rgId}&fmt=json&limit=25&inc=media+labels`,
       { headers: HDR }
     );
     if (!res.ok) return json([]);
@@ -19,24 +19,53 @@ export const GET: APIRoute = async ({ url }) => {
     const releases = (data.releases ?? []).filter(r => !r.status || r.status === 'Official');
     if (releases.length < 2) return json([]);
 
-    return json(releases.map(r => ({ id: r.id, label: buildLabel(r) })));
+    return json(releases.map(r => ({
+      id:    r.id,
+      label: buildLabel(r),
+      data:  buildData(r),
+    })));
   } catch {
     return json([]);
   }
 };
 
 function buildLabel(r: MBRelease): string {
-  if (r.disambiguation) return r.disambiguation;
   const parts: string[] = [];
-  if (r.date) parts.push(r.date.slice(0, 4));
-  if (r.country === 'XW') {
-    parts.push('Worldwide');
-  } else if (r.country) {
-    parts.push(ISO_NAMES[r.country] ?? r.country);
-  }
   const formats = [...new Set((r.media ?? []).map(m => m.format).filter((f): f is string => !!f))];
   if (formats.length) parts.push(formats.join('+'));
+  if (r.disambiguation) parts.push(r.disambiguation);
+  if (r.date) parts.push(r.date.slice(0, 4));
+  if (r.country === 'XW') parts.push('Worldwide');
+  else if (r.country) parts.push(ISO_NAMES[r.country] ?? r.country);
   return parts.join(' · ') || r.id.slice(0, 8);
+}
+
+function buildData(r: MBRelease): ReleaseData {
+  const formats    = [...new Set((r.media ?? []).map(m => m.format).filter((f): f is string => !!f))];
+  const trackCount = (r.media ?? []).reduce((n, m) => n + (m['track-count'] ?? 0), 0);
+  const labelInfo  = (r['label-info'] ?? []).filter(li => li.label?.name);
+  return {
+    format:         formats.join(' + '),
+    date:           r.date           ?? '',
+    country:        r.country        ?? '',
+    disambiguation: r.disambiguation ?? '',
+    barcode:        r.barcode        ?? '',
+    trackCount,
+    labels: labelInfo.map(li => ({
+      name:    li.label!.name!,
+      catalog: li['catalog-number'] ?? '',
+    })),
+  };
+}
+
+export interface ReleaseData {
+  format:         string;
+  date:           string;
+  country:        string;
+  disambiguation: string;
+  barcode:        string;
+  trackCount:     number;
+  labels:         Array<{ name: string; catalog: string }>;
 }
 
 const ISO_NAMES: Record<string, string> = {
@@ -54,10 +83,15 @@ const json = (data: unknown) =>
   new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
 
 interface MBRelease {
-  id: string;
-  status?: string;
-  date?: string;
-  country?: string;
+  id:             string;
+  status?:        string;
+  date?:          string;
+  country?:       string;
   disambiguation?: string;
-  media?: Array<{ format?: string }>;
+  barcode?:       string;
+  media?:         Array<{ format?: string; 'track-count'?: number }>;
+  'label-info'?:  Array<{
+    'catalog-number'?: string;
+    label?: { name?: string };
+  }>;
 }

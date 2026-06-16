@@ -183,21 +183,28 @@ export function setDescriptors(tags: string[]): void {
 // ── Release select ────────────────────────────────────────────────────────────
 
 export function populateReleaseSelect(
-  releases: Array<{ id: string; label: string }>,
+  releases: Array<{ id: string; label: string; data?: unknown }>,
   currentMbid = '',
 ): void {
-  const wrap = document.getElementById('release-select-wrap');
-  const sel  = document.getElementById('f-release-select') as HTMLSelectElement | null;
+  const wrap    = document.getElementById('release-select-wrap');
+  const sel     = document.getElementById('f-release-select') as HTMLSelectElement | null;
+  const relData = document.getElementById('f-release-data')   as HTMLInputElement  | null;
   if (!sel) return;
   sel.innerHTML = '<option value="">No specific release</option>';
   if (!releases.length) { if (wrap) wrap.style.display = 'none'; return; }
+  let selectedData = '';
   releases.forEach(r => {
     const opt = document.createElement('option');
     opt.value = r.id;
     opt.textContent = r.label;
-    if (r.id === currentMbid) opt.selected = true;
+    if (r.data !== undefined) opt.dataset.releaseData = JSON.stringify(r.data);
+    if (r.id === currentMbid) {
+      opt.selected = true;
+      selectedData = r.data !== undefined ? JSON.stringify(r.data) : '';
+    }
     sel.appendChild(opt);
   });
+  if (relData) relData.value = selectedData;
   if (wrap) wrap.style.display = '';
 }
 
@@ -220,10 +227,14 @@ export function initAlbumForm() {
   const relSel   = document.getElementById('f-release-select') as HTMLSelectElement | null;
   const relMbid  = document.getElementById('f-release-mbid')   as HTMLInputElement  | null;
   const relTitle = document.getElementById('f-release-title')  as HTMLInputElement  | null;
+  const relData  = document.getElementById('f-release-data')   as HTMLInputElement  | null;
   relSel?.addEventListener('change', () => {
     if (relMbid)  relMbid.value  = relSel.value;
     if (relTitle) relTitle.value = relSel.value
       ? (relSel.options[relSel.selectedIndex]?.textContent ?? '')
+      : '';
+    if (relData)  relData.value  = relSel.value
+      ? (relSel.options[relSel.selectedIndex]?.dataset.releaseData ?? '')
       : '';
   });
 
