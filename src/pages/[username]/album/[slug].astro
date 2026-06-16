@@ -286,6 +286,9 @@ const addedAt = album.added_at
             <p class="album-notes">{album.notes}</p>
           </div>
         )}
+        {addedAt && (isOwner || !profileUser.hide_added_at) && (
+          <p class="added-at">Logged on {addedAt}</p>
+        )}
         {albumTracks.length > 0 && (
           <div class="tracks-wrap" style="margin-top:16px">
             <p class="attr-label" style="margin-bottom:6px">Tracks</p>
@@ -325,9 +328,6 @@ const addedAt = album.added_at
                 </tfoot>
               )}
             </table>
-            {addedAt && (isOwner || !profileUser.hide_added_at) && (
-              <p class="added-at">Logged on {addedAt}</p>
-            )}
           </div>
         )}
 
