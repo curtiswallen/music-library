@@ -19,6 +19,13 @@ if (Astro.request.method === 'POST') {
     ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean)
   );
 
+  let descriptorsList: string[] = [];
+  try { descriptorsList = JSON.parse((data.get('descriptors') as string) || '[]'); } catch {}
+  const descriptorsJson = JSON.stringify(descriptorsList.filter(Boolean));
+  for (const d of descriptorsList) {
+    if (d.trim()) await db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d.trim()).run();
+  }
+
   let rawTracks: Array<Record<string, unknown>> = [];
   try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
 
@@ -83,8 +90,8 @@ if (Astro.request.method === 'POST') {
 
   await db.prepare(`
     INSERT OR IGNORE INTO user_albums
-      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, descriptors)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
     albumId,
@@ -97,6 +104,7 @@ if (Astro.request.method === 'POST') {
     data.get('is_hidden') === 'on' ? 1 : 0,
     (data.get('release_mbid') as string) || null,
     (data.get('release_title') as string) || null,
+    descriptorsJson,
   ).run();
 
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
@@ -115,6 +123,7 @@ if (Astro.request.method === 'POST') {
       <div class="mb-input-row">
         <input id="mb-search" type="text" placeholder="Artist, album title..." autocomplete="off" />
         <span class="spinner" id="mb-spinner"></span>
+        <button type="button" id="clear-form-btn" class="btn">Clear</button>
       </div>
       <div class="mb-results" id="mb-results"></div>
     </div>
@@ -124,7 +133,7 @@ if (Astro.request.method === 'POST') {
 </Layout>
 
 <script>
-import { initAlbumForm, setArtists, populateReleaseSelect, SUBGENRE_MAP } from '../lib/album-form';
+import { initAlbumForm, setArtists, setDescriptors, populateReleaseSelect, SUBGENRE_MAP } from '../lib/album-form';
 import type { TrackData } from '../lib/album-form';
 
 interface MBResult {
@@ -302,6 +311,41 @@ function set(id: string, val: string) {
   if (hidden) hidden.value = val ?? '';
 }
 function closeResults() { resultsEl.classList.remove('open'); resultsEl.innerHTML = ''; }
+
+document.getElementById('clear-form-btn')?.addEventListener('click', () => {
+  searchInput.value = '';
+  closeResults();
+  setArtists(['']);
+  set('f-mbid', '');
+  set('f-db-album-id', '');
+  set('f-album', '');
+  set('f-year', '');
+  set('f-country', '');
+  set('f-genre', '');
+  setSelectedSubs([]);
+  set('f-cover-url', '');
+  set('f-release-mbid', '');
+  set('f-release-title', '');
+  setDescriptors([]);
+  setTracks([]);
+  populateReleaseSelect([]);
+  const notes = document.getElementById('f-notes') as HTMLTextAreaElement | null;
+  if (notes) notes.value = '';
+  (document.getElementById('clear-rating') as HTMLButtonElement | null)?.click();
+  const img = document.getElementById('cover-img') as HTMLImageElement | null;
+  if (img) img.src = '';
+  const coverPreview    = document.getElementById('cover-preview')     as HTMLElement | null;
+  const coverUploadWrap = document.getElementById('cover-upload-wrap') as HTMLElement | null;
+  if (coverPreview)    coverPreview.style.display    = 'none';
+  if (coverUploadWrap) coverUploadWrap.style.display = '';
+  const recommended = document.querySelector<HTMLInputElement>('[name="recommended"]');
+  const isHidden    = document.querySelector<HTMLInputElement>('[name="is_hidden"]');
+  if (recommended) recommended.checked = false;
+  if (isHidden)    isHidden.checked    = false;
+  const loadingEl = document.getElementById('tracks-loading') as HTMLElement | null;
+  if (loadingEl) loadingEl.hidden = true;
+});
+
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

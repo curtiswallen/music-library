@@ -18,6 +18,7 @@ interface FormValues {
   is_hidden?: number | boolean | null;
   release_mbid?: string | null;
   release_title?: string | null;
+  descriptors?: string[] | null;
 }
 
 interface Props {
@@ -34,12 +35,13 @@ const {
   cancelHref,
 } = Astro.props;
 
-const hasRating     = values.rating != null;
-const hasCover      = !!values.cover_url;
-const isRecommended = values.recommended === 1 || values.recommended === true;
-const isHidden      = values.is_hidden   === 1 || values.is_hidden   === true;
-const initialArtists = (values.artist ?? '').split(' / ').map(s => s.trim()).filter(Boolean);
+const hasRating          = values.rating != null;
+const hasCover           = !!values.cover_url;
+const isRecommended      = values.recommended === 1 || values.recommended === true;
+const isHidden           = values.is_hidden   === 1 || values.is_hidden   === true;
+const initialArtists     = (values.artist ?? '').split(' / ').map(s => s.trim()).filter(Boolean);
 if (!initialArtists.length) initialArtists.push('');
+const initialDescriptors = (values.descriptors ?? []).filter(Boolean);
 ---
 
 <form method="post" id="album-form">
@@ -144,6 +146,28 @@ if (!initialArtists.length) initialArtists.push('');
         )}
       </select>
     </div>
+  </div>
+
+  <div class="form-group">
+    <label>Descriptors</label>
+    <div class="descriptor-widget">
+      <div id="descriptor-chips" class="descriptor-chips">
+        {initialDescriptors.map(tag => (
+          <span class="descriptor-chip" data-tag={tag.toLowerCase()}>
+            <span>{tag}</span>
+            <button type="button" class="descriptor-chip-remove">×</button>
+          </span>
+        ))}
+      </div>
+      <div class="descriptor-input-wrap">
+        <input type="text" id="descriptor-input" class="descriptor-input"
+               placeholder="Type to search or add…" autocomplete="off" />
+        <div class="descriptor-dropdown" id="descriptor-dropdown"></div>
+      </div>
+    </div>
+    <span class="field-hint">Press Enter or comma to add. Backspace removes the last tag.</span>
+    <input type="hidden" name="descriptors" id="f-descriptors"
+           value={JSON.stringify(initialDescriptors)} />
   </div>
 
   <div class="form-group">

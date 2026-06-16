@@ -142,6 +142,42 @@ export function setArtists(names: string[]): void {
   _syncRemoveBtns(list);
 }
 
+// ── Descriptor tag widget ────────────────────────────────────────────────────
+
+function _makeDescriptorChip(tag: string): HTMLElement {
+  const chip  = document.createElement('span');
+  chip.className = 'descriptor-chip';
+  chip.dataset.tag = tag.toLowerCase();
+  const label = document.createElement('span');
+  label.textContent = tag;
+  const btn   = document.createElement('button');
+  btn.type    = 'button';
+  btn.className = 'descriptor-chip-remove';
+  btn.textContent = '×';
+  btn.addEventListener('click', () => { chip.remove(); _syncDescriptors(); });
+  chip.appendChild(label);
+  chip.appendChild(btn);
+  return chip;
+}
+
+function _syncDescriptors(): void {
+  const chipsEl    = document.getElementById('descriptor-chips') as HTMLElement | null;
+  const hiddenInput = document.getElementById('f-descriptors')   as HTMLInputElement | null;
+  if (!chipsEl || !hiddenInput) return;
+  const tags = Array.from(chipsEl.querySelectorAll<HTMLElement>('[data-tag]'))
+    .map(el => (el.querySelector('span') as HTMLElement)?.textContent || '')
+    .filter(Boolean);
+  hiddenInput.value = JSON.stringify(tags);
+}
+
+export function setDescriptors(tags: string[]): void {
+  const chipsEl = document.getElementById('descriptor-chips') as HTMLElement | null;
+  if (!chipsEl) return;
+  chipsEl.innerHTML = '';
+  tags.filter(Boolean).forEach(tag => chipsEl.appendChild(_makeDescriptorChip(tag)));
+  _syncDescriptors();
+}
+
 // ── Release select ────────────────────────────────────────────────────────────
 
 export function populateReleaseSelect(
@@ -312,6 +348,68 @@ export function initAlbumForm() {
 
   // ── Cover upload ─────────────────────────────────────────────────────────────
   initCoverUpload();
+
+  // ── Descriptor input ─────────────────────────────────────────────────────────
+  const descInput  = document.getElementById('descriptor-input')   as HTMLInputElement | null;
+  const descDrop   = document.getElementById('descriptor-dropdown') as HTMLElement | null;
+  const descChips  = document.getElementById('descriptor-chips')   as HTMLElement | null;
+
+  if (descInput && descChips && descDrop) {
+    // Wire remove buttons on server-rendered chips (edit mode)
+    descChips.querySelectorAll<HTMLElement>('.descriptor-chip').forEach(chip => {
+      chip.querySelector('.descriptor-chip-remove')?.addEventListener('click', () => {
+        chip.remove(); _syncDescriptors();
+      });
+    });
+    _syncDescriptors();
+
+    let descTimer: ReturnType<typeof setTimeout>;
+
+    const addDescriptorTag = (val: string) => {
+      const tag = val.trim();
+      if (tag.length < 2) return;
+      const existing = Array.from(descChips.querySelectorAll<HTMLElement>('[data-tag]'))
+        .map(el => el.dataset.tag ?? '');
+      if (existing.includes(tag.toLowerCase())) { descInput.value = ''; return; }
+      descChips.appendChild(_makeDescriptorChip(tag));
+      _syncDescriptors();
+      descInput.value = '';
+      descDrop.innerHTML = '';
+      descDrop.classList.remove('open');
+    };
+
+    descInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        addDescriptorTag(descInput.value);
+      } else if (e.key === 'Backspace' && !descInput.value) {
+        const last = descChips.querySelector<HTMLElement>('.descriptor-chip:last-child');
+        if (last) { last.remove(); _syncDescriptors(); }
+      }
+    });
+
+    descInput.addEventListener('input', () => {
+      clearTimeout(descTimer);
+      const q = descInput.value.trim();
+      if (q.length < 2) { descDrop.innerHTML = ''; descDrop.classList.remove('open'); return; }
+      descTimer = setTimeout(async () => {
+        try {
+          const res     = await fetch(`/api/descriptors?q=${encodeURIComponent(q)}`);
+          const results = (await res.json()) as string[];
+          if (!results.length) { descDrop.innerHTML = ''; descDrop.classList.remove('open'); return; }
+          descDrop.innerHTML = results.map(r => `<div class="descriptor-opt">${esc(r)}</div>`).join('');
+          descDrop.classList.add('open');
+          descDrop.querySelectorAll<HTMLElement>('.descriptor-opt').forEach(el => {
+            el.addEventListener('mousedown', ev => { ev.preventDefault(); addDescriptorTag(el.textContent ?? ''); });
+          });
+        } catch {}
+      }, 250);
+    });
+
+    descInput.addEventListener('blur', () => {
+      setTimeout(() => { descDrop.innerHTML = ''; descDrop.classList.remove('open'); }, 150);
+    });
+  }
 
   return {
     renderTracks,

@@ -47,6 +47,7 @@ export interface UserAlbum {
   added_at: string;
   release_mbid: string | null;
   release_title: string | null;
+  descriptors: string;     // JSON: string[]
 }
 
 /** Flat JOIN result used in most queries */

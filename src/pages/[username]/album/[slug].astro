@@ -41,6 +41,13 @@ if (Astro.request.method === 'POST') {
     ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean)
   );
 
+  let descriptorsList: string[] = [];
+  try { descriptorsList = JSON.parse((data.get('descriptors') as string) || '[]'); } catch {}
+  const descriptorsJson = JSON.stringify(descriptorsList.filter(Boolean));
+  for (const d of descriptorsList) {
+    if (d.trim()) await db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d.trim()).run();
+  }
+
   let rawTracks: Array<Record<string, unknown>> = [];
   try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
 
@@ -73,7 +80,7 @@ if (Astro.request.method === 'POST') {
     UPDATE user_albums SET
       genre = ?, subgenres = ?, rating = ?, notes = ?,
       tracks_data = ?, recommended = ?, is_hidden = ?,
-      release_mbid = ?, release_title = ?
+      release_mbid = ?, release_title = ?, descriptors = ?
     WHERE album_id = ? AND user_id = ?
   `).bind(
     (data.get('genre') as string) || '',
@@ -85,6 +92,7 @@ if (Astro.request.method === 'POST') {
     data.get('is_hidden') === 'on' ? 1 : 0,
     (data.get('release_mbid') as string) || null,
     (data.get('release_title') as string) || null,
+    descriptorsJson,
     existing.id,
     profileUser.id,
   ).run();
@@ -98,7 +106,7 @@ const row = await db.prepare(`
     a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
     ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
     ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at,
-    ua.release_mbid, ua.release_title
+    ua.release_mbid, ua.release_title, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.slug = ?
@@ -107,8 +115,9 @@ const row = await db.prepare(`
 if (!row) return new Response(null, { status: 404 });
 if (row.is_hidden && !isOwner) return new Response(null, { status: 404 });
 
-const album     = row;
-const subgenres: string[] = JSON.parse(album.subgenres || '[]');
+const album       = row;
+const subgenres:   string[] = JSON.parse(album.subgenres  || '[]');
+const descriptors: string[] = JSON.parse(album.descriptors || '[]');
 
 type CanonTrack = { pos: number; title: string; length: number | null; rating?: number | null; notable?: boolean; note?: string };
 type AnnoTrack  = { pos: number; rating: number | null; notable?: boolean; note: string };
@@ -174,21 +183,26 @@ const { results: artistAlbums } = await db.prepare(`
 const albumCountry = countryCode(album.country);
 const { results: candidates } = await db.prepare(`
   SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
-         ua.subgenres, ua.rating, ua.recommended
+         ua.subgenres, ua.rating, ua.recommended, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.artist != ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
 `).bind(profileUser.id, album.artist).all<{
   id: number; slug: string; artist: string; album: string; country: string;
-  year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
+  year: number | null; cover_url: string | null; subgenres: string; rating: number | null;
+  recommended: boolean; descriptors: string;
 }>();
 
 const similar = candidates
   .map(a => {
-    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+    const aSubs:  string[] = JSON.parse(a.subgenres   || '[]');
+    const aDescs: string[] = JSON.parse(a.descriptors || '[]');
     const cMatch = albumCountry && countryCode(a.country) === albumCountry ? 1 : 0;
     const sMatch = subgenres.filter(s => aSubs.includes(s)).length;
-    return { ...a, _score: cMatch + sMatch };
+    const dMatch = descriptors.filter(d =>
+      aDescs.some(ad => ad.toLowerCase() === d.toLowerCase())
+    ).length;
+    return { ...a, _score: cMatch + sMatch + dMatch };
   })
   .filter(a => a._score >= 2)
   .sort((a, b) => b._score - a._score)
@@ -255,6 +269,11 @@ const addedAt = album.added_at
             {sortedSubs.map(s => (
               <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
             ))}
+          </div>
+        )}
+        {descriptors.length > 0 && (
+          <div class="album-tags">
+            {descriptors.map(d => <span class="tag descriptor-tag">{d}</span>)}
           </div>
         )}
         {album.notes && (
@@ -399,6 +418,7 @@ const addedAt = album.added_at
           is_hidden:     album.is_hidden,
           release_mbid:  album.release_mbid,
           release_title: album.release_title,
+          descriptors,
         }}
         submitLabel="Save Changes"
       />
