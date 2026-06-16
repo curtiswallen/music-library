@@ -34,7 +34,8 @@ const recommended = Astro.url.searchParams.get('recommended') ?? '';
 const country     = Astro.url.searchParams.get('country')     ?? '';
 const yearFrom    = Astro.url.searchParams.get('year_from')   ?? '';
 const yearTo      = Astro.url.searchParams.get('year_to')     ?? '';
-const excludes    = Astro.url.searchParams.getAll('excl');
+const excludes          = Astro.url.searchParams.getAll('excl');
+const descriptorFilters = Astro.url.searchParams.getAll('descriptor');
 const ratingMin   = Astro.url.searchParams.get('rating_min')  ?? '';
 const ratingMax   = Astro.url.searchParams.get('rating_max')  ?? '';
 const rated       = Astro.url.searchParams.get('rated')       ?? '';
@@ -62,8 +63,9 @@ if (country)   { clauses.push('a.country = ?');    params.push(country); }
 if (yearFrom)  { clauses.push('a.year >= ?');      params.push(Number(yearFrom)); }
 if (yearTo)    { clauses.push('a.year <= ?');      params.push(Number(yearTo)); }
 if (genre)     { clauses.push('ua.genre = ?');     params.push(genre); }
-for (const s of subgenres) { clauses.push('ua.subgenres LIKE ?');     params.push(`%"${s}"%`); }
-for (const s of excludes)  { clauses.push('ua.subgenres NOT LIKE ?'); params.push(`%"${s}"%`); }
+for (const s of subgenres)         { clauses.push('ua.subgenres LIKE ?');    params.push(`%"${s}"%`); }
+for (const s of excludes)          { clauses.push('ua.subgenres NOT LIKE ?'); params.push(`%"${s}"%`); }
+for (const d of descriptorFilters) { clauses.push('ua.descriptors LIKE ?');   params.push(`%"${d}"%`); }
 if (ratingMin) { clauses.push('ua.rating >= ?');   params.push(Number(ratingMin)); }
 if (ratingMax) { clauses.push('ua.rating <= ?');   params.push(Number(ratingMax)); }
 if (rated === 'yes') clauses.push('ua.rating IS NOT NULL');
@@ -72,6 +74,7 @@ if (recommended)     clauses.push('ua.recommended = 1');
 
 let albums: LibraryEntry[] = [];
 let libraryCountries: string[] = [];
+let allDescriptors: string[] = [];
 
 if (isOwner || !profileUser.is_private) {
   const where = clauses.length ? `AND ${clauses.join(' AND ')}` : '';
@@ -93,6 +96,13 @@ if (isOwner || !profileUser.is_private) {
     ORDER BY a.country
   `).bind(profileUser.id).all<{ country: string }>();
   libraryCountries = countryRows.map(r => r.country);
+
+  const { results: descRows } = await db.prepare(
+    `SELECT descriptors FROM user_albums WHERE user_id = ? ${hiddenFilter.replace('ua.', '')}`
+  ).bind(profileUser.id).all<{ descriptors: string }>();
+  allDescriptors = [...new Set(
+    descRows.flatMap(r => { try { return JSON.parse(r.descriptors) as string[]; } catch { return []; } })
+  )].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 }
 
 const GENRES = [
@@ -123,8 +133,9 @@ function buildParams(o: Record<string, string | string[] | null | undefined> = {
   defaults.sort = safeSort;
   defaults.dir  = safeDir.toLowerCase();
   if (recommended)       defaults.recommended  = '1';
-  if (subgenres.length)  defaults.subgenre    = subgenres;
-  if (excludes.length)   defaults.excl        = excludes;
+  if (subgenres.length)        defaults.subgenre    = subgenres;
+  if (excludes.length)         defaults.excl        = excludes;
+  if (descriptorFilters.length) defaults.descriptor  = descriptorFilters;
 
   const merged = { ...defaults, ...o };
   const p = new URLSearchParams();
@@ -168,15 +179,15 @@ function yearChipLabel() {
 
 const activeFilterCount = [
   !!country, !!(yearFrom || yearTo), !!(ratingMin || ratingMax),
-  !!rated, !!genre, subgenres.length > 0, excludes.length > 0,
+  !!rated, !!genre, subgenres.length > 0, excludes.length > 0, descriptorFilters.length > 0,
 ].filter(Boolean).length;
 
-const hasAnyFilter = !!(q || country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length || excludes.length || recommended);
+const hasAnyFilter = !!(q || country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length || excludes.length || descriptorFilters.length || recommended);
 const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 const clearFiltersHref = buildParams({
   q: null, country: null, year_from: null, year_to: null,
   rating_min: null, rating_max: null, rated: null,
-  genre: null, subgenre: [], excl: [], recommended: null,
+  genre: null, subgenre: [], excl: [], descriptor: [], recommended: null,
 });
 ---
 
@@ -239,7 +250,7 @@ const clearFiltersHref = buildParams({
           {hasAnyFilter && <a href={clearFiltersHref} class="btn">Clear</a>}
         </div>
 
-        {(country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length > 0 || excludes.length > 0) && (
+        {(country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length > 0 || excludes.length > 0 || descriptorFilters.length > 0) && (
           <div class="filter-chips">
             {country && (
               <span class="fchip">
@@ -282,6 +293,12 @@ const clearFiltersHref = buildParams({
               <span class="fchip fchip-excl">
                 ∅ {s}
                 <a href={buildParams({ excl: excludes.filter(x => x !== s) })} class="chip-remove">×</a>
+              </span>
+            ))}
+            {descriptorFilters.map(d => (
+              <span class="fchip fchip-descriptor">
+                # {d}
+                <a href={buildParams({ descriptor: descriptorFilters.filter(x => x !== d) })} class="chip-remove">×</a>
               </span>
             ))}
           </div>
@@ -332,6 +349,22 @@ const clearFiltersHref = buildParams({
             <div id="fp-sub-inputs"></div>
             <p class="fp-sub-hint">click to include · again to exclude · again to clear</p>
           </div>
+
+          {allDescriptors.length > 0 && (
+            <div class="fp-desc-section"
+                 id="fp-desc-wrap"
+                 data-all={JSON.stringify(allDescriptors)}
+                 data-selected={JSON.stringify(descriptorFilters)}>
+              <label class="fp-label" style="display:block;margin-bottom:6px">Descriptors</label>
+              <div id="fp-desc-chips" class="descriptor-chips" style="margin-bottom:6px"></div>
+              <div class="descriptor-input-wrap" style="max-width:320px">
+                <input type="text" id="fp-desc-input" class="descriptor-input"
+                       placeholder="Search descriptors…" autocomplete="off" />
+                <div id="fp-desc-dropdown" class="descriptor-dropdown"></div>
+              </div>
+              <div id="fp-desc-inputs"></div>
+            </div>
+          )}
 
           <div class="fp-footer">
             <button type="submit" class="btn btn-primary">Apply</button>
@@ -400,6 +433,8 @@ const clearFiltersHref = buildParams({
 .filter-panel :global(.combo-input) { width: 100%; box-sizing: border-box; }
 .filter-panel :global(.combo) { width: 100%; }
 .fp-footer { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.fp-desc-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.fchip-descriptor { border-color: var(--accent); color: var(--accent-hi); background: rgba(33,114,206,0.08); }
 
 .added-cell { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 .album-hidden { opacity: 0.5; }
@@ -509,6 +544,66 @@ function renderSubChips() {
 
 fpGenre.addEventListener('change', () => { subStates.clear(); renderSubChips(); });
 renderSubChips();
+
+// ── Descriptor filter widget ──────────────────────────────────────────────────
+const descWrap = document.getElementById('fp-desc-wrap') as HTMLElement | null;
+if (descWrap) {
+  const allDescs: string[]      = JSON.parse(descWrap.dataset.all      || '[]');
+  const selectedDescs           = new Set<string>(JSON.parse(descWrap.dataset.selected || '[]'));
+  const descChipsEl             = document.getElementById('fp-desc-chips')!;
+  const descInputEl             = document.getElementById('fp-desc-input') as HTMLInputElement;
+  const descDropEl              = document.getElementById('fp-desc-dropdown')!;
+  const descInputsEl            = document.getElementById('fp-desc-inputs')!;
+
+  function syncDescInputs() {
+    descInputsEl.innerHTML = '';
+    for (const d of selectedDescs) {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'descriptor'; inp.value = d;
+      descInputsEl.appendChild(inp);
+    }
+  }
+
+  function renderDescChips() {
+    descChipsEl.innerHTML = '';
+    [...selectedDescs].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      .forEach(d => {
+        const chip = document.createElement('span');
+        chip.className = 'descriptor-chip';
+        const label = document.createElement('span');
+        label.textContent = d;
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'descriptor-chip-remove'; btn.textContent = '×';
+        btn.addEventListener('click', () => { selectedDescs.delete(d); renderDescChips(); syncDescInputs(); });
+        chip.appendChild(label); chip.appendChild(btn);
+        descChipsEl.appendChild(chip);
+      });
+  }
+
+  function showDescDropdown(q: string) {
+    const lower = q.toLowerCase();
+    const matches = allDescs.filter(d => !selectedDescs.has(d) && (q === '' || d.toLowerCase().includes(lower))).slice(0, 12);
+    if (!matches.length) { descDropEl.innerHTML = ''; descDropEl.classList.remove('open'); return; }
+    descDropEl.innerHTML = matches.map(d => `<div class="descriptor-opt">${esc(d)}</div>`).join('');
+    descDropEl.classList.add('open');
+    descDropEl.querySelectorAll<HTMLElement>('.descriptor-opt').forEach(el => {
+      el.addEventListener('mousedown', ev => {
+        ev.preventDefault();
+        selectedDescs.add(el.textContent!);
+        descInputEl.value = '';
+        descDropEl.innerHTML = ''; descDropEl.classList.remove('open');
+        renderDescChips(); syncDescInputs();
+      });
+    });
+  }
+
+  descInputEl.addEventListener('focus',  () => showDescDropdown(descInputEl.value.trim()));
+  descInputEl.addEventListener('input',  () => showDescDropdown(descInputEl.value.trim()));
+  descInputEl.addEventListener('blur',   () => setTimeout(() => { descDropEl.innerHTML = ''; descDropEl.classList.remove('open'); }, 150));
+
+  renderDescChips();
+  syncDescInputs();
+}
 
 // ── sessionStorage: persist filter/sort state ─────────────────────────────
 const PARAMS_KEY = 'lib:' + location.pathname.split('/')[1] + ':params';

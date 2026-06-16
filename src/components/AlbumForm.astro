@@ -41,7 +41,8 @@ const isRecommended      = values.recommended === 1 || values.recommended === tr
 const isHidden           = values.is_hidden   === 1 || values.is_hidden   === true;
 const initialArtists     = (values.artist ?? '').split(' / ').map(s => s.trim()).filter(Boolean);
 if (!initialArtists.length) initialArtists.push('');
-const initialDescriptors = (values.descriptors ?? []).filter(Boolean);
+const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
+  .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 ---
 
 <form method="post" id="album-form">

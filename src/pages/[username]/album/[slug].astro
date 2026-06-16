@@ -117,7 +117,8 @@ if (row.is_hidden && !isOwner) return new Response(null, { status: 404 });
 
 const album       = row;
 const subgenres:   string[] = JSON.parse(album.subgenres  || '[]');
-const descriptors: string[] = JSON.parse(album.descriptors || '[]');
+const descriptors: string[] = (JSON.parse(album.descriptors || '[]') as string[])
+  .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
 type CanonTrack = { pos: number; title: string; length: number | null; rating?: number | null; notable?: boolean; note?: string };
 type AnnoTrack  = { pos: number; rating: number | null; notable?: boolean; note: string };

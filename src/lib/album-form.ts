@@ -174,7 +174,9 @@ export function setDescriptors(tags: string[]): void {
   const chipsEl = document.getElementById('descriptor-chips') as HTMLElement | null;
   if (!chipsEl) return;
   chipsEl.innerHTML = '';
-  tags.filter(Boolean).forEach(tag => chipsEl.appendChild(_makeDescriptorChip(tag)));
+  [...tags].filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+    .forEach(tag => chipsEl.appendChild(_makeDescriptorChip(tag)));
   _syncDescriptors();
 }
 
@@ -372,6 +374,10 @@ export function initAlbumForm() {
         .map(el => el.dataset.tag ?? '');
       if (existing.includes(tag.toLowerCase())) { descInput.value = ''; return; }
       descChips.appendChild(_makeDescriptorChip(tag));
+      // Re-sort chips alphabetically
+      const allChips = Array.from(descChips.querySelectorAll<HTMLElement>('.descriptor-chip'));
+      allChips.sort((a, b) => (a.dataset.tag ?? '').localeCompare(b.dataset.tag ?? '', undefined, { sensitivity: 'base' }));
+      allChips.forEach(c => descChips.appendChild(c));
       _syncDescriptors();
       descInput.value = '';
       descDrop.innerHTML = '';
