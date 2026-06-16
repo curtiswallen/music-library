@@ -32,7 +32,13 @@ const { results: allArtists } = await db.prepare(`
   ${hiddenFilter}
 `).bind(profileUser.id).all<{ artist: string }>();
 
-const artistName = allArtists.find(r => slugify(r.artist) === artistSlug)?.artist;
+// Resolve slug → individual artist name (handles single artists and split parts)
+let artistName: string | undefined;
+for (const row of allArtists) {
+  const parts = row.artist.split(' / ').map((s: string) => s.trim());
+  const match = parts.find(p => slugify(p) === artistSlug);
+  if (match) { artistName = match; break; }
+}
 if (!artistName) return new Response(null, { status: 404 });
 
 const { results: albums } = await db.prepare(`
@@ -40,9 +46,14 @@ const { results: albums } = await db.prepare(`
          ua.genre, ua.subgenres, ua.rating, ua.notes, ua.recommended
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-  WHERE a.artist = ? ${hiddenFilter}
+  WHERE (
+    a.artist = ?
+    OR a.artist LIKE ? || ' / %'
+    OR a.artist LIKE '% / ' || ?
+    OR a.artist LIKE '% / ' || ? || ' / %'
+  ) ${hiddenFilter}
   ORDER BY a.year ASC NULLS LAST
-`).bind(profileUser.id, artistName).all<{
+`).bind(profileUser.id, artistName, artistName, artistName, artistName).all<{
   id: number; slug: string; artist: string; album: string; country: string;
   year: number | null; cover_url: string | null;
   genre: string; subgenres: string; rating: number | null; notes: string; recommended: number;

@@ -83,7 +83,11 @@ const {
                 )}
               </div>
             </td>
-            <td><a href={`${base}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
+            <td>
+              {a.artist.split(' / ').map((p, i, arr) => (
+                <>{i > 0 && <span class="artist-sep"> / </span>}<a href={`${base}/artist/${slugify(p.trim())}`}>{p.trim()}</a></>
+              ))}
+            </td>
             <td>
               {a.country
                 ? <a href={buildParams({ country: a.country === currentCountry ? null : a.country })}

@@ -155,8 +155,9 @@ function sortSubs(subs: string[]) {
 }
 const sortedSubs = sortSubs(subgenres);
 
-const libBase     = `/${profileUser.profile_url}`;
-const displayName = profileUser.display_name || profileUser.username;
+const libBase      = `/${profileUser.profile_url}`;
+const displayName  = profileUser.display_name || profileUser.username;
+const artistParts  = album.artist.split(' / ').map(s => s.trim()).filter(Boolean);
 
 const { results: artistAlbums } = await db.prepare(`
   SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
@@ -203,10 +204,15 @@ const addedAt = album.added_at
     <div class="breadcrumb">
       <h1><a href={libBase}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a></h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
-      <h1><a href={`${libBase}/artist/${slugify(album.artist)}`}>{album.artist} {countryCode(album.country)
-                  ? <span class={`fi fi-${countryCode(album.country).toLowerCase()} country-flag`} title={album.country} />
-                  : <span style="color:var(--text-muted);font-size:11px">{album.country}</span>
-                }</a></h1>
+      <h1>
+        {artistParts.map((p, i) => (
+          <>{i > 0 && <span class="breadcrumb-sep"> / </span>}<a href={`${libBase}/artist/${slugify(p)}`}>{p}</a></>
+        ))}
+        {' '}{countryCode(album.country)
+          ? <span class={`fi fi-${countryCode(album.country).toLowerCase()} country-flag`} title={album.country} />
+          : <span style="color:var(--text-muted);font-size:11px">{album.country}</span>
+        }
+      </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album} {album.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span></h1>
     </div>
@@ -351,7 +357,11 @@ const addedAt = album.added_at
                               onerror="this.style.display='none'" />}
                           </div>
                         </td>
-                        <td style="color:var(--text-muted)"><a href={`${libBase}/artist/${slugify(a.artist)}`}>{a.artist}</a></td>
+                        <td style="color:var(--text-muted)">
+                          {a.artist.split(' / ').map((p: string, i: number) => (
+                            <>{i > 0 && ' / '}<a href={`${libBase}/artist/${slugify(p.trim())}`}>{p.trim()}</a></>
+                          ))}
+                        </td>
                         <td>{cc && <span class={`fi fi-${cc} country-flag`} title={a.country} />}</td>
                         <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
                         <td style="color:var(--text-muted)">{a.year ?? ''}</td>
