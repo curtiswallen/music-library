@@ -543,20 +543,22 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   color: var(--text-muted);
   margin-top: 4px;
 }
-.release-dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 2px 14px;
-  margin-top: 4px;
-  font-size: 12px;
+.release-grid {
+  display: inline-grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 8px 28px;
+  margin-top: 6px;
 }
-.release-dl dt {
+.rg-cell dt {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
-  font-size: 11px;
-  padding-top: 1px;
-  white-space: nowrap;
+  margin-bottom: 2px;
 }
-.release-dl dd {
+.rg-cell dd {
+  font-size: 12px;
   color: var(--text);
   margin: 0;
 }

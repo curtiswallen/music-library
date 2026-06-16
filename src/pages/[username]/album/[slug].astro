@@ -47,6 +47,10 @@ if (Astro.request.method === 'POST') {
   for (const d of descriptorsList) {
     if (d.trim()) await db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d.trim()).run();
   }
+  await db.prepare(`
+    DELETE FROM descriptors
+    WHERE name NOT IN (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors))
+  `).run();
 
   let rawTracks: Array<Record<string, unknown>> = [];
   try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
@@ -274,23 +278,6 @@ const addedAt = album.added_at
             <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
           )}
         </div>
-        {(releaseInfo || album.release_title) && (
-          <div class="release-detail">
-            <p class="attr-label">Release</p>
-            {releaseInfo ? (
-              <dl class="release-dl">
-                {releaseInfo.format        && <><dt>Format</dt><dd>{releaseInfo.format}</dd></>}
-                {releaseInfo.date          && <><dt>Released</dt><dd>{releaseInfo.date}</dd></>}
-                {releaseInfo.country       && <><dt>Country</dt><dd>{releaseInfo.country}</dd></>}
-                {releaseInfo.labels.map(l  => <><dt>Label</dt><dd>{l.name}{l.catalog ? ` — ${l.catalog}` : ''}</dd></>)}
-                {releaseInfo.barcode       && <><dt>Barcode</dt><dd>{releaseInfo.barcode}</dd></>}
-                {releaseInfo.disambiguation && <><dt>Edition</dt><dd>{releaseInfo.disambiguation}</dd></>}
-              </dl>
-            ) : (
-              <p class="release-name">{album.release_title}</p>
-            )}
-          </div>
-        )}
         {sortedSubs.length > 0 && (
           <div class="album-tags">
             {sortedSubs.map(s => (
@@ -303,6 +290,25 @@ const addedAt = album.added_at
             {descriptors.map(d => <span class="tag descriptor-tag">{d}</span>)}
           </div>
         )}
+
+        {(releaseInfo || album.release_title) && (
+          <div class="release-detail">
+            <p class="attr-label">Release</p>
+            {releaseInfo ? (
+              <div class="release-grid">
+                {releaseInfo.format         && <div class="rg-cell"><dt>Format</dt><dd>{releaseInfo.format}</dd></div>}
+                {releaseInfo.date           && <div class="rg-cell"><dt>Released</dt><dd>{releaseInfo.date}</dd></div>}
+                {releaseInfo.country        && <div class="rg-cell"><dt>Country</dt><dd>{releaseInfo.country}</dd></div>}
+                {releaseInfo.labels.map(l  => <div class="rg-cell"><dt>Label</dt><dd>{l.name}{l.catalog ? ` — ${l.catalog}` : ''}</dd></div>)}
+                {releaseInfo.barcode        && <div class="rg-cell"><dt>Barcode</dt><dd>{releaseInfo.barcode}</dd></div>}
+                {releaseInfo.disambiguation && <div class="rg-cell"><dt>Edition</dt><dd>{releaseInfo.disambiguation}</dd></div>}
+              </div>
+            ) : (
+              <p class="release-name">{album.release_title}</p>
+            )}
+          </div>
+        )}
+  
         {album.notes && (
           <div>
             <p class="attr-label">Notes</p>
