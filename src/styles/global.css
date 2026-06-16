@@ -185,7 +185,8 @@ tr:hover td { background: var(--bg-hover); }
 .col-artist { max-width: 150px; }
 .col-album { max-width: 300px; }
 .col-album a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.col-genre { width: 150px; min-width: 150px; }
+.col-genre { max-width: 150px; }
+.col-subgenres { max-width: 150px; }
 .added-cell {
   color: var(--text-muted);
   font-size: 11px;
@@ -501,7 +502,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   font-size: 13px;
   color: var(--text-muted);
 }
@@ -521,6 +522,11 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   font-size: 11px;
   color: var(--text-muted);
   margin-top: 8px;
+}
+.release {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
 }
 .attr-label {
   font-size: 11px;

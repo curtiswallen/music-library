@@ -48,7 +48,7 @@ const {
         <th><a href={sortHref('year')}   class={safeSort === 'year'   ? 'active' : ''}>Year{sortArrow('year')}</a></th>
         <th class="col-genre"><a href={sortHref('genre')}  class={safeSort === 'genre'  ? 'active' : ''}>Genre{sortArrow('genre')}</a></th>
         <th class="col-subgenres">Subgenres</th>
-        <th style="position:relative">
+        <th class="col-rating" style="position:relative">
           <a href={sortHref('rating')} class={safeSort === 'rating' ? 'active' : ''}>Rating{sortArrow('rating')}</a>
           <span class="rating-tip">?<span class="rating-tip-body">
             <div class="rating-tip-row"><strong>100</strong><span>Masterpiece / Perfect</span></div>
@@ -120,7 +120,7 @@ const {
                 >{s}</a>
               ))}
             </td>
-            <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+            <td class="col-rating"><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
             <td class="notes-cell">
               <span class="notes-text">{a.notes}</span>
               {a.notes && <span class="notes-tip-body">{a.notes}</span>}

@@ -264,6 +264,9 @@ const addedAt = album.added_at
             <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
           )}
         </div>
+        {album.release_title && (
+          <p class="release">Release: {album.release_title}</p>
+        )}
         {sortedSubs.length > 0 && (
           <div class="album-tags">
             {sortedSubs.map(s => (
@@ -281,12 +284,6 @@ const addedAt = album.added_at
             <p class="attr-label">Notes</p>
             <p class="album-notes">{album.notes}</p>
           </div>
-        )}
-        {addedAt && (isOwner || !profileUser.hide_added_at) && (
-          <p class="added-at">Logged on {addedAt}</p>
-        )}
-        {album.release_title && (
-          <p class="added-at">Release: {album.release_title}</p>
         )}
         {albumTracks.length > 0 && (
           <div class="tracks-wrap" style="margin-top:16px">
@@ -327,6 +324,9 @@ const addedAt = album.added_at
                 </tfoot>
               )}
             </table>
+            {addedAt && (isOwner || !profileUser.hide_added_at) && (
+              <p class="added-at">Logged on {addedAt}</p>
+            )}
           </div>
         )}
 
