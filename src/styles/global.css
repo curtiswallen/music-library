@@ -92,6 +92,13 @@ main {
   margin-bottom: 18px;
 }
 
+.form-group-horz {
+  display: flex;
+  flex-direction: row;
+  gap: 28px;
+  margin-bottom: 18px;
+}
+
 label {
   font-size: 11px;
   color: var(--text-muted);

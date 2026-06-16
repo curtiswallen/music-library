@@ -70,6 +70,16 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
     <div class="form-group">
       <label for="f-album">Album *</label>
       <input id="f-album" name="album" type="text" required value={values.album ?? ''} />
+      <div class="form-group" id="release-select-wrap"
+         style={values.release_mbid ? '' : 'display:none'}>
+      <label for="f-release-select">Release</label>
+      <select id="f-release-select">
+        <option value="">No specific release</option>
+        {values.release_mbid && values.release_title && (
+          <option value={values.release_mbid} selected>{values.release_title}</option>
+        )}
+      </select>
+    </div>
     </div>
     <div class="form-group">
       <label for="f-year">Year</label>
@@ -90,27 +100,6 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
       <div class="subgenre-chips" id="subgenre-chips"></div>
       <input type="hidden" name="subgenres" id="f-subgenres"
              value={(values.subgenres ?? []).join(', ')} />
-    </div>
-    <div class="form-group">
-      <label>Descriptors</label>
-      <div class="descriptor-widget">
-        <div id="descriptor-chips" class="descriptor-chips">
-          {initialDescriptors.map(tag => (
-            <span class="descriptor-chip" data-tag={tag.toLowerCase()}>
-              <span>{tag}</span>
-              <button type="button" class="descriptor-chip-remove">×</button>
-            </span>
-          ))}
-        </div>
-        <div class="descriptor-input-wrap">
-          <input type="text" id="descriptor-input" class="descriptor-input"
-                placeholder="Type to search or add…" autocomplete="off" />
-          <div class="descriptor-dropdown" id="descriptor-dropdown"></div>
-        </div>
-      </div>
-      <span class="field-hint-inline">Press Enter or comma to add. Backspace removes the last tag.</span>
-      <input type="hidden" name="descriptors" id="f-descriptors"
-            value={JSON.stringify(initialDescriptors)} />
     </div>
     <div class="form-group">
       <label>Rating</label>
@@ -141,39 +130,53 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
         </label>
       </div>
     </div>
-    <div class="form-group" style="padding-bottom:18px">
-      <div id="cover-preview" style={hasCover ? '' : 'display:none'}>
-        <label>Cover Art</label>
-        <div class="cover-box">
-          <img id="cover-img" src={values.cover_url || undefined} alt="" onerror="this.style.display='none'" />
+    <div class="form-group">
+      <label>Descriptors</label>
+      <div class="descriptor-widget">
+        <div id="descriptor-chips" class="descriptor-chips">
+          {initialDescriptors.map(tag => (
+            <span class="descriptor-chip" data-tag={tag.toLowerCase()}>
+              <span>{tag}</span>
+              <button type="button" class="descriptor-chip-remove">×</button>
+            </span>
+          ))}
         </div>
-        <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
+        <div class="descriptor-input-wrap">
+          <input type="text" id="descriptor-input" class="descriptor-input"
+                placeholder="Type to search or add…" autocomplete="off" />
+          <div class="descriptor-dropdown" id="descriptor-dropdown"></div>
+        </div>
       </div>
-      <div id="cover-upload-wrap" style={hasCover ? 'display:none' : ''}>
+      <span class="field-hint-inline">Press Enter or comma to add. Backspace removes the last tag.</span>
+      <input type="hidden" name="descriptors" id="f-descriptors"
+            value={JSON.stringify(initialDescriptors)} />
+    </div>
+    
+  </div>
+
+  <div class="form-group-horz">
+
+    <div id="cover-preview" style={hasCover ? '' : 'display:none'}>
+      <label>Cover Art</label>
+      <div class="cover-box">
+        <img id="cover-img" src={values.cover_url || undefined} alt="" onerror="this.style.display='none'" />
+      </div>
+      <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
+    </div>
+
+    <div id="cover-upload-wrap" style={hasCover ? 'display:none' : ''}>
         <label class="fp-label">Cover Art</label>
         <label class="cover-file-label" for="cover-file">
-          <span id="cover-file-text">Choose image…</span>
+          <span id="cover-file-text">Choose image...</span>
         </label>
         <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
         <span id="cover-upload-status" class="cover-upload-status"></span>
-      </div>
     </div>
-    <div class="form-group" id="release-select-wrap"
-         style={values.release_mbid ? '' : 'display:none'}>
-      <label for="f-release-select">Specific Release</label>
-      <select id="f-release-select">
-        <option value="">No specific release</option>
-        {values.release_mbid && values.release_title && (
-          <option value={values.release_mbid} selected>{values.release_title}</option>
-        )}
-      </select>
+    <div class="form-group" style="width:100%">
+      <label for="f-notes">Notes</label>
+      <textarea id="f-notes" name="notes" rows="7"
+                placeholder="Your thoughts...">{values.notes ?? ''}</textarea>
     </div>
-  </div>
-
-  <div class="form-group">
-    <label for="f-notes">Notes</label>
-    <textarea id="f-notes" name="notes" rows="8"
-              placeholder="Your thoughts...">{values.notes ?? ''}</textarea>
   </div>
 
   <div class="form-group" style="grid-column: 1 / -1">
