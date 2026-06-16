@@ -382,6 +382,7 @@ export function initAlbumForm() {
 
     let descTimer: ReturnType<typeof setTimeout>;
     let fetchToken = 0;
+    let focusedIdx = -1;
 
     function getGenre(): string {
       const genreEl = document.getElementById('f-genre');
@@ -392,6 +393,17 @@ export function initAlbumForm() {
       return new Set(
         Array.from(chips.querySelectorAll<HTMLElement>('[data-tag]')).map(el => el.dataset.tag ?? '')
       );
+    }
+
+    function getOpts(): HTMLElement[] {
+      return Array.from(drop.querySelectorAll<HTMLElement>('.descriptor-opt'));
+    }
+
+    function setFocused(idx: number): void {
+      const opts = getOpts();
+      focusedIdx = Math.max(-1, Math.min(opts.length - 1, idx));
+      opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+      if (focusedIdx >= 0) opts[focusedIdx].scrollIntoView({ block: 'nearest' });
     }
 
     async function fetchAndShow(q: string): Promise<void> {
@@ -406,6 +418,7 @@ export function initAlbumForm() {
         const all      = (await res.json()) as string[];
         const existing = getExistingTags();
         const opts     = all.filter(r => !existing.has(r.toLowerCase()));
+        focusedIdx = -1;
         if (!opts.length) { drop.innerHTML = ''; drop.classList.remove('open'); return; }
         drop.innerHTML = opts.map(r => `<div class="descriptor-opt">${esc(r)}</div>`).join('');
         drop.classList.add('open');
@@ -432,9 +445,23 @@ export function initAlbumForm() {
     dinput.addEventListener('click', () => fetchAndShow(dinput.value.trim()));
 
     dinput.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ',') {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
-        addDescriptorTag(dinput.value);
+        if (!drop.classList.contains('open')) fetchAndShow(dinput.value.trim());
+        else setFocused(focusedIdx + 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocused(focusedIdx - 1);
+      } else if (e.key === 'Escape') {
+        drop.innerHTML = ''; drop.classList.remove('open'); focusedIdx = -1;
+      } else if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        const opts = getOpts();
+        if (focusedIdx >= 0 && opts[focusedIdx]) {
+          addDescriptorTag(opts[focusedIdx].textContent ?? '');
+        } else {
+          addDescriptorTag(dinput.value);
+        }
       } else if (e.key === 'Backspace' && !dinput.value) {
         const last = chips.querySelector<HTMLElement>('.descriptor-chip:last-child');
         if (last) { last.remove(); _syncDescriptors(); }

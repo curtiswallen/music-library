@@ -933,7 +933,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   cursor: pointer;
   color: var(--text);
 }
-.descriptor-opt:hover { background: var(--bg-hover); }
+.descriptor-opt:hover,
+.descriptor-opt.focused { background: var(--bg-hover); }
 .descriptor-tag { color: var(--accent-hi); border-color: #2e3a4a; }
 
 /* ── Responsive ── */
