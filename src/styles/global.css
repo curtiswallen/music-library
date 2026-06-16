@@ -534,8 +534,17 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   font-size: 13px;
   line-height: 1.65;
   margin-bottom: 16px;
-  white-space: pre-wrap;
 }
+.album-notes p { margin: 0 0 0.75em; }
+.album-notes p:last-child { margin-bottom: 0; }
+.album-notes a { color: var(--accent); text-decoration: underline; }
+.album-notes a:hover { opacity: 0.8; }
+.album-notes strong { font-weight: 600; }
+.album-notes em { font-style: italic; }
+.album-notes ul, .album-notes ol { margin: 0 0 0.75em 1.25em; }
+.album-notes li { margin-bottom: 0.25em; }
+.album-notes code { font-family: monospace; font-size: 0.9em; background: var(--bg-hover); padding: 1px 4px; border-radius: 3px; }
+.album-notes blockquote { border-left: 3px solid var(--border); margin: 0 0 0.75em; padding-left: 0.75em; color: var(--text-muted); }
 .added-at {
   font-size: 11px;
   color: var(--text-muted);

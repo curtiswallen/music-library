@@ -185,7 +185,8 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
     <div class="form-group" style="width:100%">
       <label for="f-notes">Notes</label>
       <textarea id="f-notes" name="notes" rows="7"
-                placeholder="Your thoughts...">{values.notes ?? ''}</textarea>
+                placeholder="Your thoughts... (Markdown supported)">{values.notes ?? ''}</textarea>
+      <span class="field-hint-inline">**bold**, *italic*, [link](url), - list</span>
     </div>
   </div>
 
