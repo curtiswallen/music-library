@@ -594,13 +594,14 @@ if (descWrap) {
         ev.preventDefault();
         selectedDescs.add(el.textContent!);
         descInputEl.value = '';
+        descDropEl.innerHTML = ''; descDropEl.classList.remove('open');
         renderDescChips(); syncDescInputs();
-        showDescDropdown('');
       });
     });
   }
 
   descInputEl.addEventListener('focus',  () => showDescDropdown(descInputEl.value.trim()));
+  descInputEl.addEventListener('click',  () => showDescDropdown(descInputEl.value.trim()));
   descInputEl.addEventListener('input',  () => showDescDropdown(descInputEl.value.trim()));
   descInputEl.addEventListener('blur',   () => setTimeout(() => { descDropEl.innerHTML = ''; descDropEl.classList.remove('open'); }, 150));
 
