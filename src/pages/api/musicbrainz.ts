@@ -23,18 +23,20 @@ export const GET: APIRoute = async (context) => {
              FROM albums
              WHERE (artist LIKE ? OR album LIKE ?)
                AND id NOT IN (SELECT album_id FROM user_albums WHERE user_id = ?)
+             ORDER BY CASE WHEN artist LIKE ? THEN 0 ELSE 1 END
              LIMIT 3`
           )
-          .bind(like, like, userId)
+          .bind(like, like, userId, like)
           .all<DBRow>()
       : await env.DB
           .prepare(
             `SELECT id, artist, album, year, country, cover_url, mbid, tracks
              FROM albums
              WHERE artist LIKE ? OR album LIKE ?
+             ORDER BY CASE WHEN artist LIKE ? THEN 0 ELSE 1 END
              LIMIT 3`
           )
-          .bind(like, like)
+          .bind(like, like, like)
           .all<DBRow>();
 
     for (const row of rows.results ?? []) {
@@ -58,33 +60,36 @@ export const GET: APIRoute = async (context) => {
     }
   } catch { /* DB unavailable — continue with MB only */ }
 
-  // MusicBrainz search (skip MBIDs already returned from DB)
+  // MusicBrainz search — artist-name query first, then general title query (parallel)
   try {
-    const res = await fetch(
-      `${MB}/release-group?query=${encodeURIComponent(q)}&type=album&fmt=json&limit=8&inc=genres`,
-      { headers: { 'User-Agent': UA, Accept: 'application/json' } }
-    );
-    if (res.ok) {
-      const data = (await res.json()) as MBResponse;
-      for (const rg of (data['release-groups'] ?? []).slice(0, 8)) {
-        if (seenMbids.has(rg.id)) continue;
-        const ac = rg['artist-credit'] ?? [];
-        const artist = ac.map(c => (c.artist?.name ?? '') + (c.joinphrase ?? '')).join('').trim()
-          || (ac[0]?.artist?.name ?? '');
-        results.push({
-          mbid:     rg.id,
-          title:    rg.title,
-          artist,
-          artists:  ac.map(c => c.artist?.name ?? '').filter(Boolean),
-          artistId: ac[0]?.artist?.id ?? '',
-          year:     rg['first-release-date']?.slice(0, 4) ?? '',
-          tags:     (rg.genres ?? rg.tags ?? [])
-                      .sort((a, b) => b.count - a.count)
-                      .slice(0, 3)
-                      .map(t => t.name),
-          coverUrl: `https://coverartarchive.org/release-group/${rg.id}/front-250`,
-        });
-      }
+    const HDR = { 'User-Agent': UA, Accept: 'application/json' };
+    const enc = encodeURIComponent;
+    const [artistRes, titleRes] = await Promise.all([
+      fetch(`${MB}/release-group?query=artist:${enc(q)}&type=album&fmt=json&limit=8&inc=genres`, { headers: HDR }),
+      fetch(`${MB}/release-group?query=${enc(q)}&type=album&fmt=json&limit=5&inc=genres`,        { headers: HDR }),
+    ]);
+    const artistRgs = artistRes.ok ? ((await artistRes.json()) as MBResponse)['release-groups'] ?? [] : [];
+    const titleRgs  = titleRes.ok  ? ((await titleRes.json())  as MBResponse)['release-groups'] ?? [] : [];
+
+    for (const rg of [...artistRgs.slice(0, 8), ...titleRgs.slice(0, 5)]) {
+      if (seenMbids.has(rg.id)) continue;
+      seenMbids.add(rg.id);
+      const ac = rg['artist-credit'] ?? [];
+      const artist = ac.map(c => (c.artist?.name ?? '') + (c.joinphrase ?? '')).join('').trim()
+        || (ac[0]?.artist?.name ?? '');
+      results.push({
+        mbid:     rg.id,
+        title:    rg.title,
+        artist,
+        artists:  ac.map(c => c.artist?.name ?? '').filter(Boolean),
+        artistId: ac[0]?.artist?.id ?? '',
+        year:     rg['first-release-date']?.slice(0, 4) ?? '',
+        tags:     (rg.genres ?? rg.tags ?? [])
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 3)
+                    .map(t => t.name),
+        coverUrl: `https://coverartarchive.org/release-group/${rg.id}/front-250`,
+      });
     }
   } catch { /* MB unavailable */ }
 
