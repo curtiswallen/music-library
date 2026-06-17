@@ -475,7 +475,7 @@ if (!isOwner && !profileUser.is_private) {
                           </div>
                         </td>
                         <td style="color:var(--text-muted)">{a.artist}</td>
-                        <td>{cc && <span class="added-cell">{cc.toUpperCase()}</span>}</td>
+                        <td>{cc && <span title={a.country} class="added-cell">{cc.toUpperCase()}</span>}</td>
                         <td>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
                         <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                         <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
