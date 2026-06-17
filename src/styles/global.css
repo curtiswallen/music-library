@@ -116,6 +116,27 @@ nav {
 .btn-active { border-color: var(--yellow); color: var(--yellow); }
 .btn-active:hover { border-color: var(--yellow); background: rgba(212,175,55,0.12); color: var(--yellow); }
 
+.icon-btn { position: relative; padding: 7px 10px; justify-content: center; }
+.icon-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 50;
+}
+.icon-btn:hover::after { opacity: 1; }
+
 /* ── Hamburger nav ── */
 .nav-hamburger { display: none; position: relative; }
 .nav-hamburger-menu {
@@ -575,11 +596,15 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 
 /* ── Album view mode ── */
 .album-hero {
-  display: flex;
-  gap: 28px;
-  margin-bottom: 28px;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  column-gap: 28px;
+  align-items: start;
 }
+.album-hero > .cover-col { grid-column: 1; grid-row: 1 / span 10; }
+.album-hero > .album-meta,
+.album-hero > .tracks-wrap,
+.album-hero > .related-section { grid-column: 2; }
 .cover-box-lg {
   width: 200px;
   height: 200px;
@@ -1230,9 +1255,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .form-grid { grid-template-columns: 1fr; }
 
   /* Album detail: cover stays on left, album-header to its right */
-  .album-hero { gap: 30px; }
+  .album-hero { grid-template-columns: 110px 1fr; column-gap: 12px; }
+  .album-hero > .cover-col { grid-row: 1; }
+  .album-hero > .tracks-wrap,
+  .album-hero > .related-section { grid-column: 1 / -1; }
   .cover-box-lg { width: 110px; height: 110px; }
-  .cover-col { width: 110px; flex-shrink: 0; }
+  .cover-col { width: 110px; }
   .release-detail { width: auto; }
 
   /* Breadcrumb: only show "My Library" on mobile; artist/album go into album-meta instead */
@@ -1312,6 +1340,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .more-by-tbl tbody td:nth-child(5) { display: none; }
   .more-by-tbl tbody td:nth-child(2) { /* album fills row 1 */
     flex: 0 0 100%; min-width: 0;
+    overflow: hidden;
+  }
+  .more-by-tbl tbody td:nth-child(2) a {
+    display: block;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .more-by-tbl tbody td:nth-child(3) { /* year */
@@ -1329,7 +1361,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
     content: ''; order: 10; flex-basis: 100%; height: 0;
   }
   .similar-tbl tbody td:nth-child(2) { /* artist */
-    order: 2; flex: 0 1 auto; min-width: 0; max-width: 50%;
+    order: 2; flex: 0 1 auto; min-width: 0; max-width: 42%;
     color: var(--text-muted);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }

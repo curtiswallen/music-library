@@ -286,10 +286,12 @@ if (!isOwner && !profileUser.is_private) {
     <div class="page-header-actions" style="display:flex;gap:8px">
       {isOwner && (
         <>
-          <button class="btn" id="edit-btn">Edit</button>
-          <button class="btn btn-danger" id="delete-btn"
-            data-id={album.id} data-back={libBase}>Delete</button>
-          <a href="/add" class="btn">+ Add Album</a>
+          <button class="btn icon-btn" id="edit-btn" aria-label="Edit" data-tip="Edit">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
+          <button class="btn btn-danger icon-btn" id="delete-btn"
+            data-id={album.id} data-back={libBase} aria-label="Delete" data-tip="Delete">✕</button>
+          <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
         </>
       )}
       {!isOwner && loggedInUser && (
@@ -406,7 +408,6 @@ if (!isOwner && !profileUser.is_private) {
           <p class="added-at">Logged on {addedAt}</p>
         )}
       </div>
-    </div>
 
     {albumTracks.length > 0 && (
       <div class="tracks-wrap" style="margin-top:16px">
@@ -513,6 +514,7 @@ if (!isOwner && !profileUser.is_private) {
         </div>
       )}
     </section>
+  </div>
   </div>
 
   <!-- ── Edit mode (owner only) ── -->
