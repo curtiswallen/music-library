@@ -277,10 +277,7 @@ if (!isOwner && !profileUser.is_private) {
         {artistParts.map((p, i) => (
           <>{i > 0 && <span class="breadcrumb-sep"> / </span>}<a href={`${libBase}/artist/${slugify(p)}`}>{p}</a></>
         ))}
-        {' '}{countryCode(album.country)
-          ? <span class={`fi fi-${countryCode(album.country).toLowerCase()} country-flag`} title={album.country} />
-          : <span style="color:var(--text-muted);font-size:11px">{album.country}</span>
-        }
+        {album.country && <span class="breadcrumb-tag" title={album.country}>{countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}</span>}
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album} {album.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span></h1>
@@ -477,13 +474,9 @@ if (!isOwner && !profileUser.is_private) {
                               onerror="this.style.display='none'" />}
                           </div>
                         </td>
-                        <td style="color:var(--text-muted)">
-                          {a.artist.split(' / ').map((p: string, i: number) => (
-                            <>{i > 0 && ' / '}<a href={`${libBase}/artist/${slugify(p.trim())}`}>{p.trim()}</a></>
-                          ))}
-                        </td>
-                        <td>{cc && <span class={`fi fi-${cc} country-flag`} title={a.country} />}</td>
-                        <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+                        <td style="color:var(--text-muted)">{a.artist}</td>
+                        <td>{cc && <span class="added-cell">{cc.toUpperCase()}</span>}</td>
+                        <td>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
                         <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                         <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
                         <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>

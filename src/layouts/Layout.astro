@@ -13,11 +13,38 @@ const pageTitle = title ? `${title} — Music Library` : 'Music Library';
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{pageTitle}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7/css/flag-icons.min.css" />
+<script is:inline>
+      (function () {
+        const saved = localStorage.getItem('theme');
+        if (saved) document.documentElement.setAttribute('data-theme', saved);
+      })();
+    </script>
   </head>
   <body>
+    <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light mode" title="Toggle theme">
+      <span class="theme-icon"></span>
+    </button>
     <main>
       <slot />
     </main>
+    <script is:inline>
+      (function () {
+        const btn = document.getElementById('theme-toggle');
+        function getEffective() {
+          const saved = localStorage.getItem('theme');
+          if (saved) return saved;
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        function apply(theme) {
+          document.documentElement.setAttribute('data-theme', theme);
+          localStorage.setItem('theme', theme);
+          btn.querySelector('.theme-icon').textContent = theme === 'dark' ? '☀' : '☾';
+        }
+        apply(getEffective());
+        btn.addEventListener('click', function () {
+          apply(getEffective() === 'dark' ? 'light' : 'dark');
+        });
+      })();
+    </script>
   </body>
 </html>

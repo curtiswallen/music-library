@@ -93,10 +93,7 @@ const {
                 ? <a href={buildParams({ country: a.country === currentCountry ? null : a.country })}
                      class="flag-link"
                      title={a.country === currentCountry ? `Remove filter: ${a.country}` : `Filter: ${a.country}`}>
-                    {cc
-                      ? <span class={`fi fi-${cc} country-flag${a.country === currentCountry ? ' flag-active' : ''}`} />
-                      : <span class={`flag-text${a.country === currentCountry ? ' flag-active' : ''}`}>{a.country}</span>
-                    }
+                    <span class="added-cell">{cc ? cc.toUpperCase() : a.country}</span>
                   </a>
                 : null
               }

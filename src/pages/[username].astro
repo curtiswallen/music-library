@@ -280,7 +280,6 @@ if (!isOwner && !profileUser.is_private) {
           <div class="filter-chips">
             {country && (
               <span class="fchip">
-                {countryChipCC && <span class={`fi fi-${countryChipCC}`} style="margin-right:3px;font-size:12px" />}
                 {country}
                 <a href={buildParams({ country: null })} class="chip-remove">×</a>
               </span>

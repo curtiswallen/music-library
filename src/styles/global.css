@@ -1,16 +1,57 @@
+/* ── Light theme (default) ── */
 :root {
-  --bg:         #0d0d0d;
-  --bg-card:    #161616;
-  --bg-hover:   #1e1e1e;
-  --border:     #252525;
-  --text:       #d8d8d8;
-  --text-muted: #5a5a5a;
-  --accent:     #2172ce;
-  --accent-hi:  #4495f3;
-  --green:      #2ecc71;
-  --yellow:     #f1c40f;
-  --red:        #e74c3c;
-  --sketchy:    #50201b;
+  --bg:           #fcfcfc;
+  --bg-card:      #ececec;
+  --bg-hover:     #dfdfdf;
+  --border:       #d4d4d4;
+  --text:         #1e1e1e;
+  --text-muted:   #5a5a5a;
+  --text-hi:      #000;
+  --border-hover: #888;
+  --accent:       #2172ce;
+  --accent-hi:    #1a5fb5;
+  --green:        #1a8040;
+  --yellow:       #f1c40f;
+  --red:          #c0392b;
+  --sketchy:      #c0392b;
+}
+
+/* ── Dark theme (system preference) ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:           #141414;
+    --bg-card:      #1c1c1c;
+    --bg-hover:     #242424;
+    --border:       #2e2e2e;
+    --text:         #d0d0d0;
+    --text-muted:   #606060;
+    --text-hi:      #f0f0f0;
+    --border-hover: #444;
+    --accent:       #2172ce;
+    --accent-hi:    #4495f3;
+    --green:        #2ecc71;
+    --yellow:       #f1c40f;
+    --red:          #e74c3c;
+    --sketchy:      #50201b;
+  }
+}
+
+/* ── Dark theme (manual toggle) ── */
+[data-theme="dark"] {
+  --bg:           #141414;
+  --bg-card:      #1c1c1c;
+  --bg-hover:     #242424;
+  --border:       #2e2e2e;
+  --text:         #d0d0d0;
+  --text-muted:   #606060;
+  --text-hi:      #f0f0f0;
+  --border-hover: #444;
+  --accent:       #2172ce;
+  --accent-hi:    #4495f3;
+  --green:        #2ecc71;
+  --yellow:       #f1c40f;
+  --red:          #e74c3c;
+  --sketchy:      #50201b;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -24,7 +65,7 @@ body {
 }
 
 a { color: var(--text); text-decoration: none; }
-a:hover { color: #fff; }
+a:hover { color: var(--text-hi); }
 
 /* ── Nav ── */
 nav {
@@ -64,16 +105,37 @@ nav {
   transition: border-color 0.12s, background 0.12s, color 0.12s;
   height: 35px;
 }
-.btn:hover { border-color: #3a3a3a; background: var(--bg-hover); color: #fff; }
+.btn:hover { border-color: var(--border-hover); background: var(--bg-hover); color: var(--text-hi); }
 
 .btn-primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 .btn-primary:hover { border-color: var(--accent-hi); background: var(--accent-hi); color: #fff; }
 
-.btn-danger { border-color: #4a1010; }
+.btn-danger { border-color: rgba(192, 57, 43, 0.4); }
 .btn-danger:hover { border-color: var(--accent-hi); background: var(--accent-hi); color: #fff; }
 
 .btn-active { border-color: var(--yellow); color: var(--yellow); }
 .btn-active:hover { border-color: var(--yellow); background: rgba(212,175,55,0.12); color: var(--yellow); }
+
+/* ── Theme toggle ── */
+.theme-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.12s, color 0.12s;
+}
+.theme-toggle:hover { border-color: var(--border-hover); color: var(--text); }
 
 /* ── Main ── */
 main {
@@ -121,7 +183,7 @@ textarea {
 }
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: #3a3a3a;
+  border-color: var(--border-hover);
 }
 textarea { resize: vertical; min-height: 80px; }
 
@@ -412,7 +474,7 @@ tr:hover td { background: var(--bg-hover); }
   transition: border-color 0.12s, background 0.12s, color 0.12s;
   height: 33px;
 }
-.subgenre-chip:hover { border-color: #3a3a3a; color: var(--text); }
+.subgenre-chip:hover { border-color: var(--border-hover); color: var(--text); }
 .subgenre-chip.active { border-color: var(--accent); background: var(--accent); color: #fff; }
 
 .subgenre-custom-tags {
@@ -461,19 +523,9 @@ tr:hover td { background: var(--bg-hover); }
   color: var(--red);
 }
 
-/* ── Country flag (flag-icons via CDN) ── */
-.fi.country-flag {
-  width: 14px !important;
-  height: 10px !important;
-  vertical-align: middle;
-  border-radius: 1px;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
 /* ── Clickable filter tags/genres ── */
 a.tag, .tag a { text-decoration: none; }
-a.tag:hover { border-color: #3a3a3a; color: var(--text); background: var(--bg-hover); }
+a.tag:hover { border-color: var(--border-hover); color: var(--text); background: var(--bg-hover); }
 a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .genre-link { color: var(--text-muted); text-decoration: none; }
 .genre-link:hover { color: var(--text); }
@@ -503,7 +555,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   margin-bottom: 4px;
 }
 .album-meta-artist a { color: var(--text-muted); }
-.album-meta-artist a:hover { color: #fff; }
+.album-meta-artist a:hover { color: var(--text-hi); }
 .album-meta-title {
   font-size: 22px;
   font-weight: 600;
@@ -530,7 +582,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 }
 .album-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
 .album-notes {
-  color: #fff;
+  color: var(--text);
   font-size: 13px;
   line-height: 1.65;
   margin-bottom: 16px;
@@ -623,6 +675,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .breadcrumb a { color: var(--text-muted); }
 .breadcrumb a:hover { color: var(--text); }
 .breadcrumb-sep { color: var(--text-muted); user-select: none; }
+.breadcrumb-tag { padding: 0 5px; font-size: 10px; color: var(--text-muted);}
 .breadcrumb-current { color: var(--text); }
 .breadcrumb h1, .breadcrumb h1 * { display: flex; flex-direction: row; align-items: center; gap: 5px;}
 
@@ -902,7 +955,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   user-select: none;
   transition: border-color 0.1s, background 0.1s, color 0.1s;
 }
-.sub-chip:hover { border-color: #3a3a3a; color: var(--text); }
+.sub-chip:hover { border-color: var(--border-hover); color: var(--text); }
 .sub-chip[data-state="include"] {
   border-color: var(--accent);
   background: rgba(33, 114, 206, 0.15);
