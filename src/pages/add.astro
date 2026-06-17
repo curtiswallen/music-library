@@ -130,16 +130,6 @@ const { genreMap, groupedGenres } = await getGenreCache(kv, db);
   </div>
 
   <div id="add-wrapper">
-    <div class="form-group mb-wrap">
-      <label for="mb-search">Search MusicBrainz to autofill</label>
-      <div class="mb-input-row">
-        <input id="mb-search" type="text" placeholder="Artist, album title..." autocomplete="off" />
-        <span class="spinner" id="mb-spinner"></span>
-        <button type="button" id="clear-form-btn" class="btn">Clear</button>
-      </div>
-      <div class="mb-results" id="mb-results"></div>
-    </div>
-
     <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} genreMap={genreMap} groupedGenres={groupedGenres} />
   </div>
 </Layout>
@@ -284,6 +274,7 @@ function pick(r: MBResult) {
   }
 
   closeResults();
+  document.getElementById('album-form')?.dispatchEvent(new Event('input'));
 }
 
 function resolveGenre(tags: string[]) {
@@ -370,8 +361,11 @@ document.getElementById('clear-form-btn')?.addEventListener('click', () => {
   const isHidden    = document.querySelector<HTMLInputElement>('[name="is_hidden"]');
   if (recommended) recommended.checked = false;
   if (isHidden)    isHidden.checked    = false;
+  document.getElementById('rec-btn')?.classList.remove('active');
+  document.getElementById('hidden-btn')?.classList.remove('active');
   const loadingEl = document.getElementById('tracks-loading') as HTMLElement | null;
   if (loadingEl) loadingEl.hidden = true;
+  document.getElementById('album-form')?.dispatchEvent(new Event('input'));
 });
 
 function esc(s: string) {

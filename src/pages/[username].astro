@@ -236,16 +236,30 @@ if (!isOwner && !profileUser.is_private) {
     <div style="display:flex;gap:8px;align-items:center">
       {isOwner ? (
         <>
-          <span class="user-chip">
+          <span class="user-chip nav-hide-mobile">
             {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
             {loggedInUser!.display_name || loggedInUser!.username}
           </span>
-          {loggedInUser!.is_admin === 1 && <a href="/admin" class="btn" title="Admin">Admin</a>}
-          <a href="/settings" class="btn" title="Settings">⚙</a>
-          <form method="post" action="/auth/logout" style="margin:0">
+          {loggedInUser!.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile" title="Admin">Admin</a>}
+          <a href="/settings" class="btn nav-hide-mobile" title="Settings">⚙</a>
+          <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
             <button class="btn" type="submit">Sign out</button>
           </form>
           <a href="/add" class="btn">+ Add Album</a>
+          <div class="nav-hamburger" id="nav-hamburger">
+            <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
+            <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
+              <div class="nav-hamburger-header">
+                {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
+                <span>{loggedInUser!.display_name || loggedInUser!.username}</span>
+              </div>
+              {loggedInUser!.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
+              <a href="/settings" class="nav-hamburger-item">Settings</a>
+              <form method="post" action="/auth/logout" style="margin:0">
+                <button type="submit" class="nav-hamburger-item">Sign out</button>
+              </form>
+            </div>
+          </div>
         </>
       ) : (
         loggedInUser
@@ -254,6 +268,25 @@ if (!isOwner && !profileUser.is_private) {
       )}
     </div>
   </div>
+  <script is:inline>
+    (function () {
+      var btn  = document.getElementById('nav-hamburger-btn');
+      var menu = document.getElementById('nav-hamburger-menu');
+      if (!btn || !menu) return;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = menu.hidden;
+        menu.hidden = !open;
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('#nav-hamburger')) {
+          menu.hidden = true;
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    })();
+  </script>
 
   {(!isOwner && !!profileUser.is_private) ? (
     <div class="empty-state">

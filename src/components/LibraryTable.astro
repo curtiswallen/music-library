@@ -37,7 +37,7 @@ const {
 } = Astro.props;
 ---
 
-<div class="table-wrap">
+<div class="table-wrap lib-table-wrap">
   <table>
     <thead>
       <tr>
@@ -73,7 +73,7 @@ const {
         const subs: string[] = JSON.parse(a.subgenres || '[]');
         const cc = countryCode(a.country).toLowerCase();
         return (
-          <tr class={isOwner && a.is_hidden ? 'album-hidden' : ''}>
+          <tr class={isOwner && a.is_hidden ? 'album-hidden' : ''} data-album-href={`${base}/album/${a.slug}`}>
             <td>
               <div class="cover-thumb" style="background:#000;overflow:hidden">
                 {a.cover_url && (
@@ -84,7 +84,7 @@ const {
               </div>
             </td>
             <td class="col-artist">
-              {a.artist.split(' / ').map((p, i, arr) => (
+              {a.artist.split(' / ').map((p, i) => (
                 <>{i > 0 && <span class="artist-sep"> / </span>}<a href={`${base}/artist/${slugify(p.trim())}`}>{p.trim()}</a></>
               ))}
             </td>
@@ -151,4 +151,12 @@ const {
       tip.style.display = 'none';
     });
   });
+
+  if (window.matchMedia('(max-width: 640px)').matches) {
+    document.querySelectorAll<HTMLElement>('.lib-table-wrap tbody tr[data-album-href]').forEach(row => {
+      row.addEventListener('click', () => {
+        window.location.href = row.dataset.albumHref!;
+      });
+    });
+  }
 </script>

@@ -1,6 +1,7 @@
 ---
 import Combobox from './Combobox.astro';
 import { COUNTRIES } from '../lib/utils';
+import { md } from '../lib/markdown';
 
 interface FormValues {
   mbid?: string | null;
@@ -49,6 +50,17 @@ const initialArtists     = (values.artist ?? '').split(' / ').map(s => s.trim())
 if (!initialArtists.length) initialArtists.push('');
 const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
   .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+function ratingClass(r: number) {
+  return r >= 70 ? 'rating-hi' : r >= 50 ? 'rating-mid' : 'rating-lo';
+}
+
+interface ReleaseInfo {
+  format?: string; date?: string; country?: string; disambiguation?: string;
+  barcode?: string; labels?: Array<{ name: string; catalog?: string }>;
+}
+let releaseInfo: ReleaseInfo | null = null;
+try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } catch {}
 ---
 
 <script type="application/json" id="genre-map-data" is:inline set:html={JSON.stringify(genreMap)}></script>
@@ -60,167 +72,544 @@ const initialDescriptors = (values.descriptors ?? []).filter(Boolean)
   <input type="hidden" name="release_title" id="f-release-title" value={values.release_title ?? ''} />
   <input type="hidden" name="release_data"  id="f-release-data"  value={values.release_data ?? ''} />
 
-  <div class="form-grid">
-    <div class="form-group">
-      <label>Artist(s) *</label>
-      <div id="artist-list" class="artist-list">
-        {initialArtists.map((a, i) => (
-          <div class="artist-row">
-            <input name="artist" type="text" class="artist-input"
-                   value={a} placeholder="Artist name" required={i === 0} />
-            <button type="button" class="remove-artist-btn" aria-label="Remove artist"
-                    style={initialArtists.length > 1 ? '' : 'display:none'}>−</button>
+  <div class="form-edit-layout">
+
+    <!-- ── Left: form fields ── -->
+    <div class="edit-fields">
+
+      {includeDbAlbumId && (
+        <div class="form-group mb-wrap" style="margin-bottom:24px">
+          <label for="mb-search">Search MusicBrainz to autofill</label>
+          <div class="mb-input-row">
+            <input id="mb-search" type="text" placeholder="Artist, album title..." autocomplete="off" />
+            <span class="spinner" id="mb-spinner"></span>
+            <button type="button" id="clear-form-btn" class="btn">Clear</button>
           </div>
-        ))}
-      </div>
-      <button type="button" id="add-artist-btn" class="add-artist-btn">+ Add Artist</button>
-    </div>
-    <div class="form-group">
-      <label for="f-album">Album *</label>
-      <input id="f-album" name="album" type="text" required value={values.album ?? ''} />
-      <div class="form-group" id="release-select-wrap"
-         style={values.release_mbid ? '' : 'display:none'}>
-      <label for="f-release-select">Release</label>
-      <select id="f-release-select">
-        <option value="">No specific release</option>
-        {values.release_mbid && values.release_title && (
-          <option value={values.release_mbid} selected>{values.release_title}</option>
-        )}
-      </select>
-    </div>
-    </div>
-    <div class="form-group">
-      <label for="f-year">Year</label>
-      <input id="f-year" name="year" type="number" min="1900" max="2099" value={values.year ?? ''} />
-    </div>
-    <div class="form-group">
-      <label for="f-country">Country</label>
-      <Combobox id="f-country" name="country" options={COUNTRIES.map(c => c.name)}
-                value={values.country ?? ''} placeholder="Search country..." />
-    </div>
-    <div class="form-group">
-      <label for="f-genre">Genre</label>
-      <Combobox id="f-genre" name="genre"
-                groupedOptions={groupedGenres}
-                options={groupedGenres ? undefined : genreNames}
-                value={values.genre ?? ''} placeholder="Search genre..." />
-    </div>
-    <div class="form-group">
-      <label>Subgenres</label>
-      <div class="subgenre-chips" id="subgenre-chips"></div>
-      <input type="hidden" name="subgenres" id="f-subgenres"
-             value={(values.subgenres ?? []).join(', ')} />
-    </div>
-    <div class="form-group">
-      <label>Rating</label>
-      <div class="rating-slider-wrap">
-        <div class="rating-slider-top">
-          <span class="rating-current" id="rating-val">{values.rating ?? '—'}</span>
-          <span class="rating-desc" id="rating-desc"></span>
-          <button type="button" class={`clear-rating-btn${hasRating ? ' visible' : ''}`} id="clear-rating">×</button>
+          <div class="mb-results" id="mb-results"></div>
         </div>
-        <input type="range" id="rating-slider" min="0" max="100" step="5" list="rating-ticks"
-               value={values.rating ?? 50} />
-        <datalist id="rating-ticks">
-          {Array.from({length: 21}, (_, i) => i * 5).map(v => <option value={v} />)}
-        </datalist>
-        <div class="rating-labels">
-          {[0,10,20,30,40,50,60,70,80,90,100].map(v => <span>{v}</span>)}
+      )}
+
+      <div class="form-grid">
+
+        <div class="form-group">
+          <label>Artist(s) *</label>
+          <div id="artist-list" class="artist-list">
+            {initialArtists.map((a, i) => (
+              <div class="artist-row">
+                <input name="artist" type="text" class="artist-input"
+                       value={a} placeholder="Artist name" required={i === 0} />
+                <button type="button" class="remove-artist-btn" aria-label="Remove artist"
+                        style={initialArtists.length > 1 ? '' : 'display:none'}>−</button>
+              </div>
+            ))}
+          </div>
+          <button type="button" id="add-artist-btn" class="add-artist-btn">+ Add Artist</button>
         </div>
-        <input type="hidden" name="rating" id="f-rating" value={values.rating ?? ''} />
-      </div>
-      <div style="display:flex;flex-direction:row;gap:18px;align-items:center;padding-top:18px;">
-        <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
-          <input name="recommended" type="checkbox" style="width:auto" checked={isRecommended} />
-          <span>Recommended</span>
-        </label>
-        <label style="display:flex;flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
-          <input name="is_hidden" type="checkbox" style="width:auto" checked={isHidden} />
-          <span>Hide from public profile</span>
-        </label>
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Descriptors</label>
-      <div class="descriptor-widget">
-        <div id="descriptor-chips" class="descriptor-chips">
-          {initialDescriptors.map(tag => (
-            <span class="descriptor-chip" data-tag={tag.toLowerCase()}>
-              <span>{tag}</span>
-              <button type="button" class="descriptor-chip-remove">×</button>
-            </span>
-          ))}
+
+        <div class="form-group">
+          <label for="f-album">Album *</label>
+          <input id="f-album" name="album" type="text" required value={values.album ?? ''} />
+          <div class="form-group" id="release-select-wrap"
+               style={values.release_mbid ? '' : 'display:none'}>
+            <label for="f-release-select">Release</label>
+            <select id="f-release-select">
+              <option value="">No specific release</option>
+              {values.release_mbid && values.release_title && (
+                <option value={values.release_mbid} selected>{values.release_title}</option>
+              )}
+            </select>
+          </div>
         </div>
-        <div class="descriptor-input-wrap">
-          <input type="text" id="descriptor-input" class="descriptor-input"
-                placeholder="Type to search or add…" autocomplete="off" />
-          <div class="descriptor-dropdown" id="descriptor-dropdown"></div>
+
+        <!-- Mobile-only slot: cover moves here on narrow screens -->
+        <div id="mobile-cover-slot"></div>
+
+        <div class="form-group">
+          <label for="f-year">Year</label>
+          <input id="f-year" name="year" type="number" min="1900" max="2099" value={values.year ?? ''} />
         </div>
+
+        <div class="form-group">
+          <label for="f-country">Country</label>
+          <Combobox id="f-country" name="country" options={COUNTRIES.map(c => c.name)}
+                    value={values.country ?? ''} placeholder="Search country..." />
+        </div>
+
+        <div class="form-group">
+          <label for="f-genre">Genre</label>
+          <Combobox id="f-genre" name="genre"
+                    groupedOptions={groupedGenres}
+                    options={groupedGenres ? undefined : genreNames}
+                    value={values.genre ?? ''} placeholder="Search genre..." />
+        </div>
+
+        <div class="form-group">
+          <label>Subgenres</label>
+          <div class="subgenre-chips" id="subgenre-chips"></div>
+          <input type="hidden" name="subgenres" id="f-subgenres"
+                 value={(values.subgenres ?? []).join(', ')} />
+        </div>
+
+        <div class="form-group">
+          <label>Rating</label>
+          <div class="rating-slider-wrap">
+            <div class="rating-slider-top">
+              <span class="rating-current" id="rating-val">{values.rating ?? '—'}</span>
+              <span class="rating-desc" id="rating-desc"></span>
+              <button type="button" class={`clear-rating-btn${hasRating ? ' visible' : ''}`} id="clear-rating">×</button>
+            </div>
+            <input type="range" id="rating-slider" min="0" max="100" step="5" list="rating-ticks"
+                   value={values.rating ?? 50} />
+            <datalist id="rating-ticks">
+              {Array.from({length: 21}, (_, i) => i * 5).map(v => <option value={v} />)}
+            </datalist>
+            <div class="rating-labels">
+              {[0,10,20,30,40,50,60,70,80,90,100].map(v => <span>{v}</span>)}
+            </div>
+            <input type="hidden" name="rating" id="f-rating" value={values.rating ?? ''} />
+          </div>
+          <div class="icon-toggle-row">
+            <!-- Recommended star toggle -->
+            <button type="button"
+                    class={`icon-toggle-btn star-btn${isRecommended ? ' active' : ''}`}
+                    id="rec-btn"
+                    title={isRecommended ? 'Recommended' : 'Mark as recommended'}>
+              <svg class="icon-inactive" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+                <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+              </svg>
+              <svg class="icon-active" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
+                <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+              </svg>
+            </button>
+            <input name="recommended" type="checkbox" id="f-recommended" style="display:none" checked={isRecommended} />
+
+            <!-- Public/hidden eye toggle -->
+            <button type="button"
+                    class={`icon-toggle-btn eye-btn${isHidden ? ' active' : ''}`}
+                    id="hidden-btn"
+                    title={isHidden ? 'Hidden from public profile' : 'Visible on public profile'}>
+              <svg class="icon-inactive" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="icon-active" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                <path d="m6.72 6.72a3 3 0 0 0 4.24 4.24"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+            <input name="is_hidden" type="checkbox" id="f-is-hidden" style="display:none" checked={isHidden} />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Descriptors</label>
+          <div class="descriptor-widget">
+            <div id="descriptor-chips" class="descriptor-chips">
+              {initialDescriptors.map(tag => (
+                <span class="descriptor-chip" data-tag={tag.toLowerCase()}>
+                  <span>{tag}</span>
+                  <button type="button" class="descriptor-chip-remove">×</button>
+                </span>
+              ))}
+            </div>
+            <div class="descriptor-input-wrap">
+              <input type="text" id="descriptor-input" class="descriptor-input"
+                    placeholder="Type to search or add…" autocomplete="off" />
+              <div class="descriptor-dropdown" id="descriptor-dropdown"></div>
+            </div>
+          </div>
+          <span class="field-hint-inline">Press Enter or comma to add. Backspace removes the last tag.</span>
+          <input type="hidden" name="descriptors" id="f-descriptors"
+                value={JSON.stringify(initialDescriptors)} />
+        </div>
+
+      </div><!-- end form-grid -->
+
+      <div class="form-group" style="margin-top:4px">
+        <label for="f-notes">Notes</label>
+        <textarea id="f-notes" name="notes" rows="8"
+                  placeholder="Your thoughts... (Markdown supported)">{values.notes ?? ''}</textarea>
+        <span class="field-hint-inline">**bold**, *italic*, [link](url), - list</span>
       </div>
-      <span class="field-hint-inline">Press Enter or comma to add. Backspace removes the last tag.</span>
-      <input type="hidden" name="descriptors" id="f-descriptors"
-            value={JSON.stringify(initialDescriptors)} />
-    </div>
-    
-  </div>
 
-  <div class="form-group-horz">
+      <!-- Mobile-only slot: tracks move here on narrow screens -->
+      <div id="mobile-tracks-slot"></div>
 
-    <div id="cover-preview" style={hasCover ? '' : 'display:none'}>
-      <label>Cover Art</label>
-      <div class="cover-box">
-        <img id="cover-img" src={values.cover_url || undefined} alt="" onerror="this.style.display='none'" />
+      <div style="display:flex;gap:10px;margin-top:24px">
+        <button class="btn btn-primary" type="submit">{submitLabel}</button>
+        {cancelHref
+          ? <a href={cancelHref} class="btn">Cancel</a>
+          : <button class="btn" type="button" id="cancel-btn">Cancel</button>
+        }
       </div>
-      <button type="button" class="btn cover-replace-btn" id="cover-replace-btn">Replace</button>
-    </div>
+    </div><!-- end edit-fields -->
 
-    <div id="cover-upload-wrap" style={hasCover ? 'display:none' : ''}>
-        <label class="fp-label">Cover Art</label>
-        <label class="cover-file-label" for="cover-file">
-          <span id="cover-file-text">Choose image...</span>
-        </label>
-        <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
-        <span id="cover-upload-status" class="cover-upload-status"></span>
-    </div>
-    <div class="form-group" style="width:100%">
-      <label for="f-notes">Notes</label>
-      <textarea id="f-notes" name="notes" rows="7"
-                placeholder="Your thoughts... (Markdown supported)">{values.notes ?? ''}</textarea>
-      <span class="field-hint-inline">**bold**, *italic*, [link](url), - list</span>
-    </div>
-  </div>
+    <!-- ── Right: preview ── -->
+    <div class="edit-preview">
+      <p class="edit-preview-label">Preview</p>
 
-  <div class="form-group" style="grid-column: 1 / -1">
-    <label>
-      Tracks
-      {includeDbAlbumId && <span class="tracks-loading" id="tracks-loading" hidden> — Loading from MusicBrainz...</span>}
-    </label>
-    <div class="tracks-wrap">
-      <table class="tracks-table" id="tracks-table" hidden>
-        <thead>
-          <tr>
-            <th class="track-num">#</th>
-            <th>Title</th>
-            <th class="track-len">Length</th>
-            <th class="track-rating-cell">Rating</th>
-            <th class="track-notable-cell" title="Notable track">★</th>
-            <th>Note</th>
-            <th style="width:28px"></th>
-          </tr>
-        </thead>
-        <tbody id="tracks-tbody"></tbody>
-        <tfoot id="tracks-tfoot"></tfoot>
-      </table>
-      <button type="button" class="btn tracks-add-btn" id="add-track-btn">+ Add Track</button>
-    </div>
-    <input type="hidden" name="tracks" id="f-tracks" value={values.tracks ?? '[]'} />
-  </div>
+      <div class="album-hero" style="margin-bottom:0;align-items:flex-start">
 
-  <div style="display:flex;gap:10px;margin-top:75px">
-    <button class="btn btn-primary" type="submit">{submitLabel}</button>
-    {cancelHref
-      ? <a href={cancelHref} class="btn">Cancel</a>
-      : <button class="btn" type="button" id="cancel-btn">Cancel</button>
-    }
-  </div>
+        <!-- Cover col: matches real album page -->
+        <div class="cover-col" id="cover-col">
+          <div id="cover-preview" style={hasCover ? '' : 'display:none'}>
+            <div class="cover-box-lg">
+              <img id="cover-img" src={values.cover_url || undefined} alt=""
+                   onerror="this.style.display='none'" />
+            </div>
+            <button type="button" class="btn cover-replace-btn" id="cover-replace-btn"
+                    style="font-size:12px;margin-top:8px;width:200px">Replace image</button>
+          </div>
+          <div id="cover-upload-wrap" style={hasCover ? 'display:none' : ''}>
+            <label class="cover-file-label" for="cover-file">
+              <span id="cover-file-text">Choose image...</span>
+            </label>
+            <input type="file" id="cover-file" accept="image/*" class="cover-file-input" />
+            <span id="cover-upload-status" class="cover-upload-status"></span>
+          </div>
+
+          <!-- Release details (populated by JS, matches real album page) -->
+          <div id="prev-release" style={releaseInfo || values.release_title ? '' : 'display:none'}>
+            {releaseInfo ? (
+              <div class="release-detail">
+                <dl class="release-dl">
+                  {releaseInfo.format         && <><dt>Format</dt><dd>{releaseInfo.format}</dd></>}
+                  {releaseInfo.date           && <><dt>Released</dt><dd>{releaseInfo.date}</dd></>}
+                  {releaseInfo.country        && <><dt>Country</dt><dd>{releaseInfo.country}</dd></>}
+                  {(releaseInfo.labels ?? []).map(l => <><dt>Label</dt><dd>{l.name}{l.catalog ? ` — ${l.catalog}` : ''}</dd></>)}
+                  {releaseInfo.barcode        && <><dt>Barcode</dt><dd>{releaseInfo.barcode}</dd></>}
+                  {releaseInfo.disambiguation && <><dt>Edition</dt><dd>{releaseInfo.disambiguation}</dd></>}
+                </dl>
+              </div>
+            ) : values.release_title ? (
+              <div class="release-detail">
+                <p class="release-name">{values.release_title}</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <!-- Album meta: matches real album page structure -->
+        <div class="album-meta preview-meta">
+          <div class="album-upper-wrapper">
+            <div class="album-header">
+
+              <!-- Attrs: year · genre · rating · rec star · hidden eye (each with its own placeholder) -->
+              <div class="album-attrs" id="prev-attrs">
+                {values.year
+                  ? <span>{values.year}</span>
+                  : <span class="preview-placeholder">year</span>
+                }
+                {values.genre
+                  ? <span class="album-genre-label">{values.genre}</span>
+                  : <span class="preview-placeholder">genre</span>
+                }
+                {values.rating != null
+                  ? <span class={`rating ${ratingClass(values.rating)}`}>{values.rating} / 100</span>
+                  : <span class="preview-placeholder">— / 100</span>
+                }
+                {isRecommended && <span class="rec-star" title="Recommended">★</span>}
+                {isHidden && (
+                  <span class="hidden-eye" title="Hidden from public profile">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                      <path d="m6.72 6.72a3 3 0 0 0 4.24 4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  </span>
+                )}
+              </div>
+
+              <!-- Subgenres -->
+              <div class="album-tags" id="prev-subs">
+                {(values.subgenres ?? []).length > 0
+                  ? (values.subgenres ?? []).map(s => (
+                      <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+                    ))
+                  : <span class="preview-placeholder">subgenres</span>
+                }
+              </div>
+
+              <!-- Descriptors -->
+              <div class="album-tags" id="prev-descs">
+                {initialDescriptors.length > 0
+                  ? initialDescriptors.map(d => <span class="tag descriptor-tag">{d}</span>)
+                  : <span class="preview-placeholder">descriptors</span>
+                }
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div id="prev-notes" style={values.notes ? '' : 'display:none'}>
+            <p class="attr-label" style="margin-bottom:6px">Notes</p>
+            <div class="album-notes prose prev-notes-text"
+                 set:html={values.notes ? md.parse(values.notes) as string : ''} />
+          </div>
+
+          <!-- Tracks (inside album-meta, matching real page) -->
+          <div id="tracks-section" style="margin-top:16px">
+            <label style="font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:0.07em;text-transform:uppercase;display:block;margin-bottom:6px">
+              Tracks
+              {includeDbAlbumId && <span class="tracks-loading" id="tracks-loading" hidden> — Loading from MusicBrainz...</span>}
+            </label>
+            <div class="tracks-wrap">
+              <table class="tracks-table" id="tracks-table" hidden>
+                <thead>
+                  <tr>
+                    <th class="track-num">#</th>
+                    <th>Title</th>
+                    <th class="track-len">Length</th>
+                    <th class="track-rating-cell">Rating</th>
+                    <th class="track-notable-cell" title="Notable track">★</th>
+                    <th>Note</th>
+                    <th style="width:28px"></th>
+                  </tr>
+                </thead>
+                <tbody id="tracks-tbody"></tbody>
+                <tfoot id="tracks-tfoot"></tfoot>
+              </table>
+              <button type="button" class="btn tracks-add-btn" id="add-track-btn">+ Add Track</button>
+            </div>
+            <input type="hidden" name="tracks" id="f-tracks" value={values.tracks ?? '[]'} />
+          </div>
+
+        </div><!-- end album-meta preview-meta -->
+      </div><!-- end album-hero -->
+    </div><!-- end edit-preview -->
+
+  </div><!-- end form-edit-layout -->
 </form>
+
+<script>
+import { Marked } from 'marked';
+const _md = new Marked({
+  gfm: true, breaks: true,
+  renderer: {
+    link({ href, title, text }: { href: string; title?: string | null; text: string }) {
+      const t = title ? ` title="${title}"` : '';
+      return `<a href="${href}"${t} target="_blank" rel="noopener noreferrer">${text}</a>`;
+    },
+  },
+});
+
+function _esc(s: string): string {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function _rc(r: string | number | null | undefined): string {
+  const n = Number(r);
+  return n >= 70 ? 'rating-hi' : n >= 50 ? 'rating-mid' : 'rating-lo';
+}
+function _ph(text: string): HTMLSpanElement {
+  const s = document.createElement('span');
+  s.className = 'preview-placeholder';
+  s.textContent = text;
+  return s;
+}
+
+function refreshPreview(): void {
+  const $ = (id: string) => document.getElementById(id);
+  const val = (id: string) => ($(id) as HTMLInputElement | null)?.value ?? '';
+
+  // Attrs row: year · genre · rating — each field has its own placeholder
+  const attrsEl = $('prev-attrs');
+  if (attrsEl) {
+    const year   = val('f-year');
+    const genre  = val('f-genre');
+    const rating = val('f-rating');
+    attrsEl.innerHTML = '';
+    if (year) {
+      const s = document.createElement('span'); s.textContent = year; attrsEl.appendChild(s);
+    } else {
+      attrsEl.appendChild(_ph('year'));
+    }
+    if (genre) {
+      const s = document.createElement('span'); s.className = 'album-genre-label'; s.textContent = genre; attrsEl.appendChild(s);
+    } else {
+      attrsEl.appendChild(_ph('genre'));
+    }
+    {
+      const s = document.createElement('span');
+      if (rating) {
+        s.className = `rating ${_rc(rating)}`; s.textContent = `${rating} / 100`;
+      } else {
+        s.className = 'preview-placeholder'; s.textContent = '— / 100';
+      }
+      attrsEl.appendChild(s);
+    }
+    const recCb    = document.getElementById('f-recommended') as HTMLInputElement | null;
+    const hiddenCb = document.getElementById('f-is-hidden')   as HTMLInputElement | null;
+    if (recCb?.checked) {
+      const s = document.createElement('span');
+      s.className = 'rec-star'; s.title = 'Recommended'; s.textContent = '★';
+      attrsEl.appendChild(s);
+    }
+    if (hiddenCb?.checked) {
+      const s = document.createElement('span');
+      s.className = 'hidden-eye'; s.title = 'Hidden from public profile';
+      s.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="m6.72 6.72a3 3 0 0 0 4.24 4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+      attrsEl.appendChild(s);
+    }
+  }
+
+  // Subgenres
+  const subsEl = $('prev-subs');
+  if (subsEl) {
+    subsEl.innerHTML = '';
+    const active = Array.from(document.querySelectorAll<HTMLElement>('.subgenre-chip.active'))
+      .map(el => el.dataset.sub ?? '').filter(Boolean);
+    if (active.length) {
+      active.forEach(name => {
+        const s = document.createElement('span');
+        s.className = 'tag' + (name === 'Sketchy' ? ' tag-sketchy' : '');
+        s.textContent = name;
+        subsEl.appendChild(s);
+      });
+    } else {
+      subsEl.appendChild(_ph('subgenres'));
+    }
+  }
+
+  // Descriptors
+  const descsEl = $('prev-descs');
+  if (descsEl) {
+    descsEl.innerHTML = '';
+    const tags = Array.from(document.querySelectorAll<HTMLElement>('#descriptor-chips [data-tag]'))
+      .map(el => el.querySelector('span')?.textContent ?? '').filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    if (tags.length) {
+      tags.forEach(d => {
+        const s = document.createElement('span'); s.className = 'tag descriptor-tag'; s.textContent = d; descsEl.appendChild(s);
+      });
+    } else {
+      descsEl.appendChild(_ph('descriptors'));
+    }
+  }
+
+  // Notes (rendered as markdown)
+  const notesEl = $('prev-notes');
+  if (notesEl) {
+    const notes = (document.getElementById('f-notes') as HTMLTextAreaElement | null)?.value ?? '';
+    const div = notesEl.querySelector<HTMLElement>('.prev-notes-text');
+    if (div) div.innerHTML = notes ? _md.parse(notes) as string : '';
+    notesEl.style.display = notes ? '' : 'none';
+  }
+
+  // Release details
+  const releaseEl = $('prev-release');
+  if (releaseEl) {
+    const data  = val('f-release-data');
+    const title = val('f-release-title');
+    if (data) {
+      try {
+        const info = JSON.parse(data) as {
+          format?: string; date?: string; country?: string; disambiguation?: string;
+          barcode?: string; labels?: Array<{ name: string; catalog?: string }>;
+        };
+        let rows = '';
+        if (info.format)         rows += `<dt>Format</dt><dd>${_esc(info.format)}</dd>`;
+        if (info.date)           rows += `<dt>Released</dt><dd>${_esc(info.date)}</dd>`;
+        if (info.country)        rows += `<dt>Country</dt><dd>${_esc(info.country)}</dd>`;
+        for (const l of (info.labels ?? [])) rows += `<dt>Label</dt><dd>${_esc(l.name)}${l.catalog ? ` — ${_esc(l.catalog)}` : ''}</dd>`;
+        if (info.barcode)        rows += `<dt>Barcode</dt><dd>${_esc(info.barcode)}</dd>`;
+        if (info.disambiguation) rows += `<dt>Edition</dt><dd>${_esc(info.disambiguation)}</dd>`;
+        releaseEl.innerHTML = `<div class="release-detail"><dl class="release-dl">${rows}</dl></div>`;
+        releaseEl.style.display = rows ? '' : 'none';
+      } catch { releaseEl.style.display = 'none'; }
+    } else if (title) {
+      releaseEl.innerHTML = `<div class="release-detail"><p class="release-name">${_esc(title)}</p></div>`;
+      releaseEl.style.display = '';
+    } else {
+      releaseEl.style.display = 'none';
+    }
+  }
+}
+
+// Listen to all form events (requestAnimationFrame ensures hidden inputs are updated first)
+const _refresh = () => requestAnimationFrame(refreshPreview);
+document.getElementById('album-form')?.addEventListener('input',  _refresh);
+document.getElementById('album-form')?.addEventListener('change', _refresh);
+
+// Subgenre chip active-class mutations
+const subChipsEl = document.getElementById('subgenre-chips');
+if (subChipsEl) {
+  new MutationObserver(_refresh).observe(subChipsEl, {
+    attributes: true, attributeFilter: ['class'], subtree: true, childList: true,
+  });
+}
+
+// Descriptor chip add/remove
+const descChipsEl = document.getElementById('descriptor-chips');
+if (descChipsEl) {
+  new MutationObserver(_refresh).observe(descChipsEl, { childList: true, subtree: true });
+}
+
+// Icon toggle buttons
+function toggleIcon(btnId: string, cbId: string) {
+  const btn = document.getElementById(btnId);
+  const cb  = document.getElementById(cbId) as HTMLInputElement | null;
+  if (!btn || !cb) return;
+  const nowActive = !btn.classList.contains('active');
+  btn.classList.toggle('active', nowActive);
+  cb.checked = nowActive;
+  if (btnId === 'hidden-btn') {
+    btn.title = nowActive ? 'Hidden from public profile' : 'Visible on public profile';
+  } else {
+    btn.title = nowActive ? 'Recommended' : 'Mark as recommended';
+  }
+  _refresh();
+}
+document.getElementById('rec-btn')?.addEventListener('click',    () => toggleIcon('rec-btn',    'f-recommended'));
+document.getElementById('hidden-btn')?.addEventListener('click', () => toggleIcon('hidden-btn', 'f-is-hidden'));
+
+// Mobile layout: physically move cover-col and tracks-section into the left column
+// so they remain accessible when the preview panel is hidden on narrow screens.
+const mq = window.matchMedia('(max-width: 900px)');
+const coverCol         = document.getElementById('cover-col');
+const tracksSection    = document.getElementById('tracks-section');
+const mobileCoverSlot  = document.getElementById('mobile-cover-slot');
+const mobileTracksSlot = document.getElementById('mobile-tracks-slot');
+
+let coverOrigParent:  Element | null = null;
+let coverOrigNext:    Node | null    = null;
+let tracksOrigParent: Element | null = null;
+let tracksOrigNext:   Node | null    = null;
+let isMobileMoved = false;
+
+function applyLayout(mobile: boolean) {
+  if (mobile && !isMobileMoved) {
+    if (coverCol && mobileCoverSlot) {
+      coverOrigParent = coverCol.parentElement;
+      coverOrigNext   = coverCol.nextSibling;
+      mobileCoverSlot.appendChild(coverCol);
+    }
+    if (tracksSection && mobileTracksSlot) {
+      tracksOrigParent = tracksSection.parentElement;
+      tracksOrigNext   = tracksSection.nextSibling;
+      mobileTracksSlot.appendChild(tracksSection);
+    }
+    isMobileMoved = true;
+  } else if (!mobile && isMobileMoved) {
+    if (coverCol && coverOrigParent) {
+      coverOrigNext
+        ? coverOrigParent.insertBefore(coverCol, coverOrigNext)
+        : coverOrigParent.appendChild(coverCol);
+    }
+    if (tracksSection && tracksOrigParent) {
+      tracksOrigNext
+        ? tracksOrigParent.insertBefore(tracksSection, tracksOrigNext)
+        : tracksOrigParent.appendChild(tracksSection);
+    }
+    isMobileMoved = false;
+  }
+}
+
+mq.addEventListener('change', e => applyLayout(e.matches));
+applyLayout(mq.matches);
+
+refreshPreview();
+</script>

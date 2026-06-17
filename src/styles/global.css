@@ -116,6 +116,47 @@ nav {
 .btn-active { border-color: var(--yellow); color: var(--yellow); }
 .btn-active:hover { border-color: var(--yellow); background: rgba(212,175,55,0.12); color: var(--yellow); }
 
+/* ── Hamburger nav ── */
+.nav-hamburger { display: none; position: relative; }
+.nav-hamburger-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  z-index: 200;
+  overflow: hidden;
+}
+.nav-hamburger-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.nav-hamburger-item {
+  display: block;
+  padding: 10px 14px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.nav-hamburger-item:hover { background: var(--bg-hover); color: var(--text-hi); }
+
+@media (max-width: 640px) {
+  .nav-hide-mobile { display: none !important; }
+  .nav-hamburger { display: block; }
+}
+
 /* ── Theme toggle ── */
 .theme-toggle {
   position: fixed;
@@ -143,7 +184,7 @@ main {
   margin: 0 auto;
 }
 #add-wrapper {
-  width: 60vw;
+  width: 100%;
 }
 
 /* ── Forms ── */
@@ -249,6 +290,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 
 .rec-star { color: var(--yellow); font-size: 11px; }
+.hidden-eye { color: var(--text-muted); display: inline-flex; align-items: center; vertical-align: middle; }
 
 /* Library table column classes */
 .col-artist { max-width: 150px; }
@@ -313,12 +355,13 @@ tr:hover td { background: var(--bg-hover); }
 /* Cover art upload */
 .cover-file-input { display: none; }
 .cover-file-label {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 8px; justify-content: center;
   padding: 7px 14px; margin-top: 4px;
   background: var(--bg-hover); border: 1px dashed var(--border);
-  border-radius: 4px; cursor: pointer; font-size: 13px;
+  cursor: pointer; font-size: 13px;
   color: var(--text-muted); transition: border-color 0.15s, color 0.15s;
   width: 200px;
+  height: 200px;
 }
 .cover-file-label:hover { border-color: var(--accent); color: var(--text); }
 .cover-upload-status { display: block; margin-top: 5px; font-size: 12px; color: var(--text-muted); }
@@ -549,6 +592,12 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .cover-box-lg img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 .album-meta { flex: 1; min-width: 0; }
+.album-mobile-header { display: none; margin-bottom: 8px; }
+.album-mobile-header .album-meta-title { font-size: 15px; margin-bottom: 4px; }
+.album-mobile-header .album-meta-artist { font-size: 11px; }
+@media (max-width: 640px) {
+  .album-mobile-header { display: block; }
+}
 .album-meta-artist {
   font-size: 12px;
   color: var(--text-muted);
@@ -613,6 +662,9 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   gap: 12px;
   flex-shrink: 0;
 }
+#mobile-cover-slot {
+  margin-bottom: 20px;
+}
 .release-detail {
   width: 200px;
 }
@@ -662,7 +714,6 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .view-panel.hidden { display: none; }
 .edit-panel { display: none; }
 .edit-panel.visible { display: block; }
-.edit-panel {width: 60vw;}
 
 /* ── Breadcrumb ── */
 .breadcrumb {
@@ -815,7 +866,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .rating-tip-row strong { color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* ── Tracks ── */
-.tracks-wrap { margin-top: 8px; }
+.tracks-wrap { margin-top: 8px; overflow-x: auto; }
 .tracks-table { width: 100%; border-collapse: collapse; }
 .tracks-table th, .tracks-table td {
   padding: 5px 8px;
@@ -830,13 +881,30 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   color: var(--text-muted);
 }
 .track-num { color: var(--text-muted); width: 28px; text-align: right; padding-right: 12px; }
-.track-title {width: 400px;}
+.track-title { width: 200px; }
 .track-len { font-variant-numeric: tabular-nums; color: var(--text-muted); width: 75px; text-align: left; }
 .track-rating-cell { width: 75px; }
 .track-notable-cell { width: 30px; text-align: center; }
 .tracks-total-row td { border-bottom: none; padding-top: 8px; }
 .tracks-total { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); text-align: left; }
 .track-note-cell { color: var(--text-muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-note-tip {
+  display: none;
+  position: fixed;
+  left: 16px; right: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  z-index: 300;
+}
+@media (max-width: 640px) {
+  .track-note-cell { cursor: pointer; }
+}
 .track-rating-input {
   width: 68px;
   padding: 3px 4px;
@@ -1025,10 +1093,255 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .descriptor-opt.focused { background: var(--bg-hover); }
 .descriptor-tag { color: var(--accent-hi); border-color: #2e3a4a; }
 
+/* ── Add/Edit split layout ── */
+.form-edit-layout {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 40px;
+  align-items: start;
+}
+.edit-fields .form-grid {
+  grid-template-columns: 1fr;
+}
+.edit-preview {
+  position: sticky;
+  top: 70px;
+}
+.edit-preview-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.preview-placeholder {
+  color: var(--text-muted);
+  opacity: 0.4;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.edit-preview > .album-hero {
+  padding: 10px;
+  border: 1px solid var(--border-hover);
+}
+
+/* Mobile layout slots — hidden on desktop, revealed when elements are moved into them */
+#mobile-cover-slot,
+#mobile-tracks-slot { display: none; }
+@media (max-width: 900px) {
+  #mobile-cover-slot,
+  #mobile-tracks-slot { display: block; }
+}
+
+/* ── Icon toggle buttons (recommended / hidden) ── */
+.icon-toggle-row { display: flex; gap: 10px; align-items: center; padding-top: 14px; }
+.icon-toggle-btn {
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  padding: 5px 6px;
+  color: var(--text-muted);
+  transition: color 0.12s, border-color 0.12s;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  line-height: 1;
+}
+.icon-toggle-btn:hover { color: var(--text); border-color: var(--border-hover); }
+.icon-toggle-btn .icon-active { display: none; }
+.star-btn.active { color: var(--yellow); }
+.star-btn.active .icon-inactive { display: none; }
+.star-btn.active .icon-active   { display: block; }
+.eye-btn.active { color: var(--red); }
+.eye-btn.active .icon-inactive { display: none; }
+.eye-btn.active .icon-active   { display: block; }
+
 /* ── Responsive ── */
+@media (max-width: 900px) {
+  .form-edit-layout {
+    grid-template-columns: 1fr;
+  }
+  .edit-preview {
+    display: none;
+  }
+}
+/* ── Library table: two-row card layout on mobile ── */
+@media (max-width: 640px) {
+  .lib-table-wrap { overflow-x: hidden; }
+  .lib-table-wrap table,
+  .lib-table-wrap tbody { display: block; }
+  .lib-table-wrap thead  { display: none; }
+
+  .lib-table-wrap tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+  }
+  .lib-table-wrap tbody tr:hover td { background: none; }
+  .lib-table-wrap tbody td { border: none; padding: 2px 4px 2px 0; }
+
+  /* ── Row 1: artist · country · album ── */
+  .lib-table-wrap tbody td:nth-child(1) { display: none; } /* cover */
+  .lib-table-wrap tbody td:nth-child(2) { /* artist */
+    order: 2; flex: 0 1 auto; min-width: 0; max-width: 50%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .lib-table-wrap tbody td:nth-child(3) { /* country */
+    display: none;
+  }
+  .lib-table-wrap tbody td:nth-child(4) { /* album */
+    order: 4; flex: 0 1 auto; min-width: 0; max-width: 50%;
+    margin-left: auto;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* Zero-height flex break forces row 2 onto a new line */
+  .lib-table-wrap tbody tr::after {
+    content: ''; order: 10; flex-basis: 100%; height: 0;
+  }
+
+  /* ── Row 2: year · genre · subgenres · rating ── */
+  .lib-table-wrap tbody td:nth-child(5) { /* year */
+    order: 11; flex: 0 0 auto;
+    color: var(--text-muted); font-size: 11px;
+  }
+  .lib-table-wrap tbody td:nth-child(6) { /* genre */
+    display: none;
+  }
+  .lib-table-wrap tbody td:nth-child(7) { display: none; } /* subgenres */
+  .lib-table-wrap tbody td:nth-child(8) { /* rating */
+    order: 14; flex: 0 0 auto; margin-left: auto;
+  }
+
+  /* Hide notes, added-at, and owner column */
+  .lib-table-wrap tbody td:nth-child(n+9) { display: none; }
+
+  /* Entire card is a tap target — disable individual child links */
+  .lib-table-wrap tbody tr[data-album-href] { cursor: pointer; }
+  .lib-table-wrap tbody td a { pointer-events: none; }
+}
+
 @media (max-width: 640px) {
   main { padding: 16px; }
   .form-grid { grid-template-columns: 1fr; }
-  .album-hero { flex-direction: column; }
-  .cover-box-lg { width: 140px; height: 140px; }
+
+  /* Album detail: cover stays on left, album-header to its right */
+  .album-hero { gap: 30px; }
+  .cover-box-lg { width: 110px; height: 110px; }
+  .cover-col { width: 110px; flex-shrink: 0; }
+  .release-detail { width: auto; }
+
+  /* Breadcrumb: only show "My Library" on mobile; artist/album go into album-meta instead */
+  .breadcrumb h1:not(:first-child) { display: none; }
+
+  /* Page-header action buttons: stack vertically (breadcrumb stays left, buttons stay right) */
+  .page-header-actions { flex-direction: row; align-items: flex-end; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+  .filter-bar { width: 100%; }
+  .search-input { flex: 1; min-width: 0; }
+}
+
+/* ── Artist/related table cards on mobile ── */
+@media (max-width: 640px) {
+
+  .related-section { flex-direction: column; }
+  .table-wrap { padding-bottom: 20px; }
+
+  .artist-tbl,
+  .more-by-tbl,
+  .similar-tbl { overflow-x: hidden; }
+
+  .artist-tbl table, .artist-tbl tbody,
+  .more-by-tbl table, .more-by-tbl tbody,
+  .similar-tbl table, .similar-tbl tbody { display: block; }
+
+  .artist-tbl thead,
+  .more-by-tbl thead,
+  .similar-tbl thead { display: none; }
+
+  .artist-tbl tbody tr,
+  .more-by-tbl tbody tr,
+  .similar-tbl tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .artist-tbl tbody tr:hover td,
+  .more-by-tbl tbody tr:hover td,
+  .similar-tbl tbody tr:hover td { background: none; }
+
+  .artist-tbl tbody td,
+  .more-by-tbl tbody td,
+  .similar-tbl tbody td { border: none; padding: 2px 4px 2px 0; }
+
+  .artist-tbl tbody tr[data-href],
+  .more-by-tbl tbody tr[data-href],
+  .similar-tbl tbody tr[data-href] { cursor: pointer; }
+
+  .artist-tbl tbody td a,
+  .more-by-tbl tbody td a,
+  .similar-tbl tbody td a { pointer-events: none; }
+
+  /* ── Artist page table: cover(1) album(2) year(3) genre(4) subs(5) descs(6) rating(7) notes(8) ── */
+  .artist-tbl tbody td:nth-child(1),
+  .artist-tbl tbody td:nth-child(5),
+  .artist-tbl tbody td:nth-child(6),
+  .artist-tbl tbody td:nth-child(8) { display: none; }
+  .artist-tbl tbody td:nth-child(2) { /* album fills row 1 */
+    flex: 0 0 100%; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .artist-tbl tbody td:nth-child(3) { /* year */
+    flex: 0 0 auto; color: var(--text-muted); font-size: 11px;
+  }
+  .artist-tbl tbody td:nth-child(4) { /* genre */
+    display: none;
+  }
+  .artist-tbl tbody td:nth-child(7) { /* rating */
+    flex: 0 0 auto; margin-left: auto;
+  }
+
+  /* ── More by table: cover(1) album(2) year(3) rating(4) subs(5) ── */
+  .more-by-tbl tbody td:nth-child(1),
+  .more-by-tbl tbody td:nth-child(5) { display: none; }
+  .more-by-tbl tbody td:nth-child(2) { /* album fills row 1 */
+    flex: 0 0 100%; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .more-by-tbl tbody td:nth-child(3) { /* year */
+    flex: 0 0 auto; color: var(--text-muted); font-size: 11px;
+  }
+  .more-by-tbl tbody td:nth-child(4) { /* rating */
+    flex: 0 0 auto; margin-left: auto;
+  }
+
+  /* ── Similar table: cover(1) artist(2) country(3) album(4) year(5) rating(6) subs(7) ── */
+  .similar-tbl tbody td:nth-child(1),
+  .similar-tbl tbody td:nth-child(3),
+  .similar-tbl tbody td:nth-child(7) { display: none; }
+  .similar-tbl tbody tr::after {
+    content: ''; order: 10; flex-basis: 100%; height: 0;
+  }
+  .similar-tbl tbody td:nth-child(2) { /* artist */
+    order: 2; flex: 0 1 auto; min-width: 0; max-width: 50%;
+    color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .similar-tbl tbody td:nth-child(4) { /* album */
+    order: 4; flex: 0 1 auto; min-width: 0; max-width: 55%;
+    margin-left: auto;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .similar-tbl tbody td:nth-child(5) { /* year */
+    order: 11; flex: 0 0 auto; color: var(--text-muted); font-size: 11px;
+  }
+  .similar-tbl tbody td:nth-child(6) { /* rating */
+    order: 14; flex: 0 0 auto; margin-left: auto;
+  }
 }

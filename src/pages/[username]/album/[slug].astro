@@ -281,9 +281,9 @@ if (!isOwner && !profileUser.is_private) {
         {album.country && <span class="breadcrumb-tag" title={album.country}>{countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}</span>}
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
-      <h1><span class="breadcrumb-current">{album.album} {album.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span></h1>
+      <h1><span class="breadcrumb-current">{album.album}</span></h1>
     </div>
-    <div style="display:flex;gap:8px">
+    <div class="page-header-actions" style="display:flex;gap:8px">
       {isOwner && (
         <>
           <button class="btn" id="edit-btn">Edit</button>
@@ -347,6 +347,14 @@ if (!isOwner && !profileUser.is_private) {
         )}
       </div>
       <div class="album-meta">
+        <div class="album-mobile-header">
+          <p class="album-meta-artist">
+            {artistParts.map((p, i) => (
+              <>{i > 0 && <span> / </span>}<a href={`${libBase}/artist/${slugify(p)}`}>{p}</a></>
+            ))}
+          </p>
+          <p class="album-meta-title">{album.album}</p>
+        </div>
         <div class="album-upper-wrapper">
           <div class="album-header">
             <div class="album-attrs">
@@ -355,6 +363,17 @@ if (!isOwner && !profileUser.is_private) {
               {album.rating != null && (
                 <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
               )}
+              {album.recommended ? <span class="rec-star" title="Recommended">★</span> : null}
+              {isOwner && album.is_hidden ? (
+                <span class="hidden-eye" title="Hidden from public profile">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                    <path d="m6.72 6.72a3 3 0 0 0 4.24 4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                </span>
+              ) : null}
               {otherLogs.length > 0 && (
                 <span class="community-stat">
                   {otherLogs.length} other{otherLogs.length !== 1 ? 's' : ''}
@@ -386,110 +405,114 @@ if (!isOwner && !profileUser.is_private) {
         {addedAt && (isOwner || !profileUser.hide_added_at) && (
           <p class="added-at">Logged on {addedAt}</p>
         )}
-        {albumTracks.length > 0 && (
-          <div class="tracks-wrap" style="margin-top:16px">
-            <p class="attr-label" style="margin-bottom:6px">Tracks</p>
-            <table class="tracks-table">
-              <thead>
-                <tr>
-                  <th class="track-num">#</th>
-                  <th class="track-title">Title</th>
-                  <th class="track-len">Length</th>
-                  <th class="track-rating-cell">Rating</th>
-                  <th>Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {albumTracks.map(t => (
-                  <tr>
-                    <td class="track-num">{t.pos}</td>
-                    <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
-                    <td class="track-len">{fmtLen(t.length)}</td>
-                    <td class="track-rating-cell">
-                      {t.rating != null
-                        ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
-                        : <span style="color:var(--text-muted)">—</span>
-                      }
-                    </td>
-                    <td class="track-note-cell">{t.note}</td>
-                  </tr>
-                ))}
-              </tbody>
-              {totalAlbumLen && (
-                <tfoot>
-                  <tr class="tracks-total-row">
-                    <td class="track-num"></td><td></td>
-                    <td class="track-len tracks-total">{totalAlbumLen}</td>
-                    <td colspan="2"></td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        )}
-
-        <section class="related-section">
-          {artistAlbums.length > 0 && (
-            <div class="more-by">
-              <p class="related-title">More by {album.artist} in {isOwner ? 'my' : `${displayName}'s`} library</p>
-              <div class="table-wrap">
-                <table><tbody>
-                  {artistAlbums.map(a => {
-                    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
-                    return (
-                      <tr data-href={`${libBase}/album/${a.slug}`}>
-                        <td style="width:44px">
-                          <div class="cover-thumb" style="background:#000;overflow:hidden">
-                            {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
-                              style="width:100%;height:100%;object-fit:cover;display:block"
-                              onerror="this.style.display='none'" />}
-                          </div>
-                        </td>
-                        <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
-                        <td style="color:var(--text-muted)">{a.year ?? ''}</td>
-                        <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-                        <td>{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody></table>
-              </div>
-            </div>
-          )}
-
-          {similar.length > 0 && (
-            <div class="more-by">
-              <p class="related-title">Similar albums in {isOwner ? 'my' : `${displayName}'s`} library</p>
-              <div class="table-wrap">
-                <table><tbody>
-                  {similar.map(a => {
-                    const aSubs: string[] = JSON.parse(a.subgenres || '[]');
-                    const cc = countryCode(a.country).toLowerCase();
-                    return (
-                      <tr data-href={`${libBase}/album/${a.slug}`}>
-                        <td style="width:44px">
-                          <div class="cover-thumb" style="background:#000;overflow:hidden">
-                            {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
-                              style="width:100%;height:100%;object-fit:cover;display:block"
-                              onerror="this.style.display='none'" />}
-                          </div>
-                        </td>
-                        <td style="color:var(--text-muted)">{a.artist}</td>
-                        <td>{cc && <span title={a.country} class="added-cell">{cc.toUpperCase()}</span>}</td>
-                        <td>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
-                        <td style="color:var(--text-muted)">{a.year ?? ''}</td>
-                        <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-                        <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody></table>
-              </div>
-            </div>
-          )}
-        </section>
       </div>
     </div>
+
+    {albumTracks.length > 0 && (
+      <div class="tracks-wrap" style="margin-top:16px">
+        <p class="attr-label" style="margin-bottom:6px">Tracks</p>
+        <table class="tracks-table">
+          <thead>
+            <tr>
+              <th class="track-num">#</th>
+              <th class="track-title">Title</th>
+              <th class="track-len">Length</th>
+              <th class="track-rating-cell">Rating</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {albumTracks.map(t => (
+              <tr>
+                <td class="track-num">{t.pos}</td>
+                <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
+                <td class="track-len">{fmtLen(t.length)}</td>
+                <td class="track-rating-cell">
+                  {t.rating != null
+                    ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
+                    : <span style="color:var(--text-muted)">—</span>
+                  }
+                </td>
+                <td class="track-note-cell">
+                  {t.note}
+                  {t.note && <span class="track-note-tip">{t.note}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {totalAlbumLen && (
+            <tfoot>
+              <tr class="tracks-total-row">
+                <td class="track-num"></td><td></td>
+                <td class="track-len tracks-total">{totalAlbumLen}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    )}
+
+    <section class="related-section">
+      {artistAlbums.length > 0 && (
+        <div class="more-by">
+          <p class="related-title">More by {album.artist} in {isOwner ? 'my' : `${displayName}'s`} library</p>
+          <div class="table-wrap more-by-tbl">
+            <table><tbody>
+              {artistAlbums.map(a => {
+                const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+                return (
+                  <tr data-href={`${libBase}/album/${a.slug}`}>
+                    <td style="width:44px">
+                      <div class="cover-thumb" style="background:#000;overflow:hidden">
+                        {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
+                          style="width:100%;height:100%;object-fit:cover;display:block"
+                          onerror="this.style.display='none'" />}
+                      </div>
+                    </td>
+                    <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+                    <td style="color:var(--text-muted)">{a.year ?? ''}</td>
+                    <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                    <td>{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
+                  </tr>
+                );
+              })}
+            </tbody></table>
+          </div>
+        </div>
+      )}
+
+      {similar.length > 0 && (
+        <div class="more-by">
+          <p class="related-title">Similar albums in {isOwner ? 'my' : `${displayName}'s`} library</p>
+          <div class="table-wrap similar-tbl">
+            <table><tbody>
+              {similar.map(a => {
+                const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+                const cc = countryCode(a.country).toLowerCase();
+                return (
+                  <tr data-href={`${libBase}/album/${a.slug}`}>
+                    <td style="width:44px">
+                      <div class="cover-thumb" style="background:#000;overflow:hidden">
+                        {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
+                          style="width:100%;height:100%;object-fit:cover;display:block"
+                          onerror="this.style.display='none'" />}
+                      </div>
+                    </td>
+                    <td style="color:var(--text-muted)">{a.artist}</td>
+                    <td>{cc && <span title={a.country} class="added-cell">{cc.toUpperCase()}</span>}</td>
+                    <td>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
+                    <td style="color:var(--text-muted)">{a.year ?? ''}</td>
+                    <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                    <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
+                  </tr>
+                );
+              })}
+            </tbody></table>
+          </div>
+        </div>
+      )}
+    </section>
   </div>
 
   <!-- ── Edit mode (owner only) ── -->
@@ -563,4 +586,25 @@ document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
     window.location.href = tr.dataset.href!;
   });
 });
+
+if (window.matchMedia('(max-width: 640px)').matches) {
+  const allTips = () => document.querySelectorAll<HTMLElement>('.track-note-tip');
+  document.querySelectorAll<HTMLElement>('.track-note-cell').forEach(cell => {
+    const tip = cell.querySelector<HTMLElement>('.track-note-tip');
+    if (!tip) return;
+    cell.addEventListener('click', e => {
+      e.stopPropagation();
+      const wasOpen = tip.style.display === 'block';
+      allTips().forEach(t => { t.style.display = 'none'; });
+      if (!wasOpen) {
+        const r = cell.getBoundingClientRect();
+        tip.style.top = (r.bottom + 4) + 'px';
+        tip.style.display = 'block';
+      }
+    });
+  });
+  document.addEventListener('click', () => {
+    allTips().forEach(t => { t.style.display = 'none'; });
+  });
+}
 </script>
