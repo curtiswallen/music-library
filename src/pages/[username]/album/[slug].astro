@@ -257,8 +257,9 @@ const { results: otherLogs } = await db.prepare(`
 }>();
 
 const otherRatings = otherLogs.map(l => l.rating).filter((r): r is number => r != null);
-const communityAvg = otherRatings.length
-  ? Math.round(otherRatings.reduce((s, r) => s + r, 0) / otherRatings.length)
+const allRatings = album.rating != null ? [album.rating, ...otherRatings] : otherRatings;
+const communityAvg = allRatings.length > 1
+  ? Math.round(allRatings.reduce((s, r) => s + r, 0) / allRatings.length)
   : null;
 
 const notesHtml = album.notes ? md.parse(album.notes) as string : '';
@@ -430,7 +431,7 @@ if (!isOwner && !profileUser.is_private) {
         <section class="related-section">
           {artistAlbums.length > 0 && (
             <div class="more-by">
-              <p class="related-title">More by {album.artist}</p>
+              <p class="related-title">More by {album.artist} in {isOwner ? 'my' : `${displayName}'s`} library</p>
               <div class="table-wrap">
                 <table><tbody>
                   {artistAlbums.map(a => {
@@ -458,7 +459,7 @@ if (!isOwner && !profileUser.is_private) {
 
           {similar.length > 0 && (
             <div class="more-by">
-              <p class="related-title">Similar Albums</p>
+              <p class="related-title">Similar albums in {isOwner ? 'my' : `${displayName}'s`} library</p>
               <div class="table-wrap">
                 <table><tbody>
                   {similar.map(a => {
