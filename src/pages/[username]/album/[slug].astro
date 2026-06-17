@@ -325,6 +325,25 @@ if (!isOwner && !profileUser.is_private) {
             )}
           </div>
         )}
+        {otherLogs.length > 0 && (
+          <section class="also-logged">
+            <p class="attr-label">Also Logged By</p>
+            <div class="also-logged-list">
+              {otherLogs.slice(0, 10).map(l => (
+                <a href={`/${l.profile_url}/album/${slugParam}`} class="also-logged-item">
+                  {l.avatar_url
+                    ? <img src={l.avatar_url} class="also-logged-avatar" alt="" />
+                    : <span class="also-logged-avatar also-logged-placeholder" />
+                  }
+                  <span class="also-logged-name">{l.display_name || l.profile_url}</span>
+                  {l.rating != null && (
+                    <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
+                  )}
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
       <div class="album-meta">
         <div class="album-upper-wrapper">
@@ -406,26 +425,6 @@ if (!isOwner && !profileUser.is_private) {
               )}
             </table>
           </div>
-        )}
-
-        {otherLogs.length > 0 && (
-          <section class="also-logged">
-            <p class="attr-label">Also Logged By</p>
-            <div class="also-logged-list">
-              {otherLogs.slice(0, 10).map(l => (
-                <a href={`/${l.profile_url}`} class="also-logged-item">
-                  {l.avatar_url
-                    ? <img src={l.avatar_url} class="also-logged-avatar" alt="" />
-                    : <span class="also-logged-avatar also-logged-placeholder" />
-                  }
-                  <span class="also-logged-name">{l.display_name || l.profile_url}</span>
-                  {l.rating != null && (
-                    <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
-                  )}
-                </a>
-              ))}
-            </div>
-          </section>
         )}
 
         <section class="related-section">
