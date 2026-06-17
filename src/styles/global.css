@@ -660,6 +660,26 @@ tr[data-href] { cursor: pointer; }
   white-space: nowrap;
 }
 
+/* ── Community stats & Also Logged By ── */
+.community-stat {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.also-logged { margin-top: 20px; }
+.also-logged-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.also-logged-item {
+  display: flex; align-items: center; gap: 8px;
+  text-decoration: none; color: var(--text); font-size: 13px; padding: 3px 0;
+}
+.also-logged-item:hover .also-logged-name { color: var(--accent); }
+.also-logged-avatar {
+  width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+}
+.also-logged-placeholder {
+  background: var(--bg-hover); border: 1px solid var(--border); display: inline-block;
+}
+.also-logged-name { flex: 1; color: var(--text-muted); }
+
 /* ── Rating slider ── */
 .rating-slider-wrap { display: flex; flex-direction: column; gap: 0; }
 .rating-slider-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }

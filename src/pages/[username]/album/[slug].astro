@@ -244,6 +244,23 @@ if (isOwner) {
   ({ genreMap, groupedGenres } = await getGenreCache(kv, db));
 }
 
+const { results: otherLogs } = await db.prepare(`
+  SELECT u.display_name, u.profile_url, u.avatar_url, ua.rating
+  FROM user_albums ua
+  JOIN users u ON u.id = ua.user_id
+  WHERE ua.album_id = ? AND ua.user_id != ?
+    AND u.is_private = 0 AND ua.is_hidden = 0
+  ORDER BY ua.added_at DESC
+`).bind(album.id, profileUser.id).all<{
+  display_name: string | null; profile_url: string;
+  avatar_url: string | null; rating: number | null;
+}>();
+
+const otherRatings = otherLogs.map(l => l.rating).filter((r): r is number => r != null);
+const communityAvg = otherRatings.length
+  ? Math.round(otherRatings.reduce((s, r) => s + r, 0) / otherRatings.length)
+  : null;
+
 const notesHtml = album.notes ? md.parse(album.notes) as string : '';
 
 if (!isOwner && !profileUser.is_private) {
@@ -321,6 +338,12 @@ if (!isOwner && !profileUser.is_private) {
               {album.rating != null && (
                 <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
               )}
+              {otherLogs.length > 0 && (
+                <span class="community-stat">
+                  {otherLogs.length} other{otherLogs.length !== 1 ? 's' : ''}
+                  {communityAvg != null && <> · avg <span class={`rating ${ratingClass(communityAvg)}`}>{communityAvg}</span></>}
+                </span>
+              )}
             </div>
             {sortedSubs.length > 0 && (
               <div class="album-tags">
@@ -386,6 +409,26 @@ if (!isOwner && !profileUser.is_private) {
               )}
             </table>
           </div>
+        )}
+
+        {otherLogs.length > 0 && (
+          <section class="also-logged">
+            <p class="attr-label">Also Logged By</p>
+            <div class="also-logged-list">
+              {otherLogs.slice(0, 10).map(l => (
+                <a href={`/${l.profile_url}`} class="also-logged-item">
+                  {l.avatar_url
+                    ? <img src={l.avatar_url} class="also-logged-avatar" alt="" />
+                    : <span class="also-logged-avatar also-logged-placeholder" />
+                  }
+                  <span class="also-logged-name">{l.display_name || l.profile_url}</span>
+                  {l.rating != null && (
+                    <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
+                  )}
+                </a>
+              ))}
+            </div>
+          </section>
         )}
 
         <section class="related-section">
