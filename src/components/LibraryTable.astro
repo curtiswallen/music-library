@@ -1,6 +1,7 @@
 ---
 import type { LibraryEntry } from '../types';
 import { countryCode, slugify } from '../lib/utils';
+import { mdNoLinks, mdInline } from '../lib/markdown';
 
 interface Props {
   albums: LibraryEntry[];
@@ -119,8 +120,8 @@ const {
             </td>
             <td class="col-rating"><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
             <td class="notes-cell">
-              <span class="notes-text">{a.notes}</span>
-              {a.notes && <span class="notes-tip-body">{a.notes}</span>}
+              <span class="notes-text" set:html={a.notes ? mdInline(a.notes) : ''} />
+              {a.notes && <div class="notes-tip-body" set:html={mdNoLinks(a.notes)} />}
             </td>
             {showAddedAt && <td class="added-cell">{a.added_at ? a.added_at.slice(0, 10) : ''}</td>}
             {isOwner && <td>{a.is_hidden ? <span class="hidden-badge" title="Hidden from public profile">🔒</span> : null}</td>}

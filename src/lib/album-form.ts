@@ -217,17 +217,18 @@ export function initAlbumForm() {
       const active = selectedSubs.includes(s);
       return `<button type="button" class="subgenre-chip${active ? ' active' : ''}" data-sub="${esc(s)}">${esc(s)}</button>`;
     }).join('');
-    chipsEl.querySelectorAll<HTMLButtonElement>('.subgenre-chip').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const s = btn.dataset.sub!;
-        selectedSubs = selectedSubs.includes(s)
-          ? selectedSubs.filter(x => x !== s)
-          : [...selectedSubs, s];
-        renderSubgenreWidget();
-      });
-    });
     subHidden.value = selectedSubs.join(', ');
   }
+
+  chipsEl.addEventListener('click', e => {
+    const btn = (e.target as Element).closest<HTMLButtonElement>('.subgenre-chip');
+    if (!btn) return;
+    const s = btn.dataset.sub!;
+    selectedSubs = selectedSubs.includes(s)
+      ? selectedSubs.filter(x => x !== s)
+      : [...selectedSubs, s];
+    renderSubgenreWidget();
+  });
 
   function setSelectedSubs(subs: string[]) {
     selectedSubs = subs;

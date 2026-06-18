@@ -10,3 +10,14 @@ export const md = new Marked({
     },
   },
 });
+
+const _mdNoLinks = new Marked({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    link({ text }) { return text; },
+  },
+});
+
+export const mdNoLinks = (src: string): string => _mdNoLinks.parse(src) as string;
+export const mdInline  = (src: string): string => _mdNoLinks.parseInline(src) as string;

@@ -369,7 +369,6 @@ tr:hover td { background: var(--bg-hover); }
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 10px 12px;
-  white-space: pre-wrap;
   word-break: break-word;
   z-index: 300;
   box-shadow: 0 4px 16px rgba(0,0,0,0.55);
@@ -377,6 +376,14 @@ tr:hover td { background: var(--bg-hover); }
   font-size: 12px;
   line-height: 1.55;
 }
+.notes-tip-body p { margin: 0 0 0.6em; }
+.notes-tip-body p:last-child { margin-bottom: 0; }
+.notes-tip-body strong { font-weight: 600; }
+.notes-tip-body em { font-style: italic; }
+.notes-tip-body ul, .notes-tip-body ol { margin: 0 0 0.6em 1.25em; }
+.notes-tip-body li { margin-bottom: 0.2em; }
+.notes-tip-body code { font-family: monospace; font-size: 0.9em; background: var(--bg-hover); padding: 1px 4px; border-radius: 3px; }
+.notes-tip-body blockquote { border-left: 3px solid var(--border); margin: 0 0 0.6em; padding-left: 0.75em; color: var(--text-muted); }
 
 /* Cover art upload */
 .cover-file-input { display: none; }
