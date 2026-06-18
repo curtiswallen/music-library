@@ -1253,6 +1253,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .cover-col { width: 110px; }
   .release-detail { width: auto; }
   .release-dl { grid-template-columns: 1fr; gap: 0; font-size: 10px; }
+  .release-dl dd { margin-bottom: 5px; }
   .added-at { font-size: 10px; }
 
   /* Breadcrumb: only show "My Library" on mobile; artist/album go into album-meta instead */
