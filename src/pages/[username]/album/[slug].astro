@@ -115,13 +115,14 @@ if (Astro.request.method === 'POST') {
 const row = await db.prepare(`
   SELECT
     a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
+    a.logged_by_user_ids,
     ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
     ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at,
     ua.release_mbid, ua.release_title, ua.release_data, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.slug = ?
-`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string }>();
+`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string; logged_by_user_ids: string }>();
 
 if (!row) return new Response(null, { status: 404 });
 if (row.is_hidden && !isOwner) return new Response(null, { status: 404 });
@@ -244,17 +245,24 @@ if (isOwner) {
   ({ genreMap, groupedGenres } = await getGenreCache(kv, db));
 }
 
-const { results: otherLogs } = await db.prepare(`
-  SELECT u.display_name, u.profile_url, u.avatar_url, ua.rating
-  FROM user_albums ua
-  JOIN users u ON u.id = ua.user_id
-  WHERE ua.album_id = ? AND ua.user_id != ?
-    AND u.is_private = 0 AND ua.is_hidden = 0
-  ORDER BY ua.added_at DESC
-`).bind(album.id, profileUser.id).all<{
-  display_name: string | null; profile_url: string;
-  avatar_url: string | null; rating: number | null;
-}>();
+let otherLogs: Array<{ display_name: string | null; profile_url: string; avatar_url: string | null; rating: number | null }> = [];
+const otherUserIds = (JSON.parse(album.logged_by_user_ids || '[]') as number[])
+  .filter(uid => uid !== profileUser.id);
+if (otherUserIds.length > 0) {
+  const placeholders = otherUserIds.map(() => '?').join(', ');
+  const { results } = await db.prepare(`
+    SELECT u.display_name, u.profile_url, u.avatar_url, ua.rating
+    FROM user_albums ua
+    JOIN users u ON u.id = ua.user_id
+    WHERE ua.album_id = ? AND ua.user_id IN (${placeholders})
+      AND u.is_private = 0 AND ua.is_hidden = 0
+    ORDER BY ua.added_at DESC
+  `).bind(album.id, ...otherUserIds).all<{
+    display_name: string | null; profile_url: string;
+    avatar_url: string | null; rating: number | null;
+  }>();
+  otherLogs = results;
+}
 
 const otherRatings = otherLogs.map(l => l.rating).filter((r): r is number => r != null);
 const allRatings = album.rating != null ? [album.rating, ...otherRatings] : otherRatings;

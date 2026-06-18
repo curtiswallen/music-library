@@ -9,11 +9,17 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   await env.DB.prepare('DELETE FROM user_albums WHERE album_id = ? AND user_id = ?')
     .bind(id, userId).run();
 
-  // Clean up orphaned canonical album (no other users have it)
+  // Clean up orphaned canonical album, or update logged_by_user_ids
   const remaining = await env.DB.prepare('SELECT COUNT(*) as c FROM user_albums WHERE album_id = ?')
     .bind(id).first<{ c: number }>();
   if (Number(remaining?.c ?? 0) === 0) {
     await env.DB.prepare('DELETE FROM albums WHERE id = ?').bind(id).run();
+  } else {
+    await env.DB.prepare(`
+      UPDATE albums SET logged_by_user_ids = (
+        SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?
+      ) WHERE id = ?
+    `).bind(id, id).run();
   }
 
   return new Response(null, { status: 204 });

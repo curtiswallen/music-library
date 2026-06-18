@@ -117,6 +117,12 @@ if (Astro.request.method === 'POST') {
     descriptorsJson,
   ).run();
 
+  await db.prepare(`
+    UPDATE albums SET logged_by_user_ids = (
+      SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?
+    ) WHERE id = ?
+  `).bind(albumId, albumId).run();
+
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
 }
 
