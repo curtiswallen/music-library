@@ -16,7 +16,9 @@ export const GET: APIRoute = async ({ url }) => {
     if (!res.ok) return json([]);
 
     const data = (await res.json()) as { releases?: MBRelease[] };
-    const releases = (data.releases ?? []).filter(r => !r.status || r.status === 'Official');
+    const releases = (data.releases ?? [])
+      .filter(r => !r.status || r.status === 'Official')
+      .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
     if (!releases.length) return json([]);
 
     return json(releases.map(r => ({

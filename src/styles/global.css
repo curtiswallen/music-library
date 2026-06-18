@@ -580,7 +580,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 
 /* Sketchy chip in the subgenre picker */
-.subgenre-chip[data-sub="Sketchy"] { border-color: #4a1515; color: var(--text-muted); }
+.subgenre-chip[data-sub="Sketchy"] { border-color: var(--sketchy); color: var(--text-muted); }
 .subgenre-chip[data-sub="Sketchy"]:hover { border-color: var(--red); }
 .subgenre-chip[data-sub="Sketchy"].active {
   background: rgba(231, 76, 60, 0.2);
@@ -911,6 +911,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .track-len { font-variant-numeric: tabular-nums; color: var(--text-muted); width: 75px; text-align: left; }
 .track-rating-cell { width: 75px; }
 .track-notable-cell { width: 30px; text-align: center; }
+.track-notable-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--bg-card);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.track-notable-btn:hover { color: var(--yellow); }
+.track-notable-btn.btn-active { color: var(--yellow); }
 .tracks-total-row td { border-bottom: none; padding-top: 8px; }
 .tracks-total { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); text-align: left; }
 .track-note-cell { color: var(--text-muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -984,6 +996,48 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .track-remove-btn:hover { color: var(--red); }
 .tracks-loading { color: var(--text-muted); font-size: 12px; padding: 8px 0; }
 .tracks-add-btn { margin-top: 8px; font-size: 12px; }
+
+@media (max-width: 640px) {
+  /* Track form rows: 2-row grid on mobile so title/note have room */
+  #tracks-section .tracks-table { display: block; }
+  #tracks-section .tracks-table thead { display: none; }
+  #tracks-section .tracks-table tbody,
+  #tracks-section .tracks-table tfoot { display: block; }
+
+  #tracks-section .tracks-table tbody tr {
+    display: grid;
+    grid-template-columns: 22px 1fr 75px 30px;
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+    row-gap: 4px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  /* Reset fixed widths that desktop table columns impose — let the grid tracks control size */
+  #tracks-section .tracks-table tbody td { border: none; padding: 0; width: auto; }
+
+  /* Row 1: pos · title · length · delete */
+  #tracks-section .tracks-table tbody td:nth-child(1) { grid-column: 1; grid-row: 1; align-self: center; padding-right: 2px; }
+  #tracks-section .tracks-table tbody td:nth-child(2) { grid-column: 2; grid-row: 1; }
+  #tracks-section .tracks-table tbody td:nth-child(3) { grid-column: 3; grid-row: 1; }
+  #tracks-section .tracks-table tbody td:nth-child(7) { grid-column: 4; grid-row: 1; align-self: center; text-align: center; }
+
+  /* Row 2: (indent) · note · rating · notable★ */
+  #tracks-section .tracks-table tbody td:nth-child(6) { grid-column: 2; grid-row: 2; }
+  #tracks-section .tracks-table tbody td:nth-child(4) { grid-column: 3; grid-row: 2; }
+  #tracks-section .tracks-table tbody td:nth-child(5) { grid-column: 4; grid-row: 2; align-self: center; text-align: center; }
+
+  /* Inputs fill their grid column (override fixed pixel widths from desktop CSS) */
+  #tracks-section .track-len-input,
+  #tracks-section .track-rating-input,
+  #tracks-section .track-title-input,
+  #tracks-section .track-note-input { width: 100%; height: 100%; }
+
+  /* Total duration row */
+  #tracks-section .tracks-total-row { display: flex; }
+  #tracks-section .tracks-total-row td { border: none; padding: 4px 0; }
+  #tracks-section .tracks-total-row td:not(.tracks-total) { display: none; }
+}
 
 /* ── Multi-artist widget ── */
 .artist-list { display: flex; flex-direction: column; gap: 6px; }
@@ -1249,8 +1303,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .album-hero > .cover-col { grid-row: 1; }
   .album-hero > .tracks-wrap,
   .album-hero > .related-section { grid-column: 1 / -1; }
-  .cover-box-lg { width: 110px; height: 110px; }
-  .cover-col { width: 110px; }
+  .cover-box-lg { width: 200px; height: 200px; }
+  .cover-col { width: 100%; flex-direction: row; }
   .release-detail { width: auto; }
   .release-dl { grid-template-columns: 1fr; gap: 0; font-size: 10px; }
   .release-dl dd { margin-bottom: 5px; }
@@ -1264,6 +1318,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
   .filter-bar { width: 100%; }
   .search-input { flex: 1; min-width: 0; }
+
+  /* Prevent iOS Safari from zooming in on focused inputs (requires font-size >= 16px) */
+  input[type="text"], input[type="number"], select, textarea { font-size: 16px !important; }
 }
 
 /* ── Artist/related table cards on mobile ── */

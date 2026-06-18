@@ -288,7 +288,8 @@ export function initAlbumForm() {
           </select>
         </td>
         <td class="track-notable-cell">
-          <input type="checkbox" class="ti" data-i="${i}" data-f="notable"${t.notable ? ' checked' : ''}>
+          <button type="button" class="track-notable-btn${t.notable ? ' btn-active' : ''}" data-i="${i}" title="${t.notable ? 'Notable track' : 'Mark as notable'}">★</button>
+          <input type="checkbox" class="ti" data-i="${i}" data-f="notable"${t.notable ? ' checked' : ''} style="display:none">
         </td>
         <td><input class="track-note-input ti" type="text" value="${esc(t.note)}" placeholder="Note..." data-i="${i}" data-f="note"></td>
         <td><button type="button" class="track-remove-btn" data-i="${i}">×</button></td>
@@ -309,6 +310,17 @@ export function initAlbumForm() {
         else if (f === 'note')    tracks[i].note    = inp.value;
         if (f === 'length') renderTracks();
         else saveTracks();
+      });
+    });
+    tbody.querySelectorAll<HTMLButtonElement>('.track-notable-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.dataset.i!);
+        tracks[i].notable = !tracks[i].notable;
+        btn.classList.toggle('btn-active', tracks[i].notable);
+        btn.title = tracks[i].notable ? 'Notable track' : 'Mark as notable';
+        const cb = btn.nextElementSibling as HTMLInputElement;
+        if (cb) cb.checked = !!tracks[i].notable;
+        saveTracks();
       });
     });
     tbody.querySelectorAll<HTMLButtonElement>('.track-remove-btn').forEach(btn => {
