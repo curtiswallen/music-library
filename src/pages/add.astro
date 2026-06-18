@@ -94,6 +94,13 @@ if (Astro.request.method === 'POST') {
     }
   }
 
+  const alreadyLogged = await db.prepare(
+    'SELECT 1 FROM user_albums WHERE user_id = ? AND album_id = ?'
+  ).bind(user.id, albumId).first();
+  if (alreadyLogged) {
+    return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
+  }
+
   await db.prepare(`
     INSERT OR IGNORE INTO user_albums
       (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, release_data, descriptors)
@@ -134,7 +141,7 @@ const { genreMap, groupedGenres } = await getGenreCache(kv, db);
     <a href={`/${user.profile_url}`} class="btn">← Back</a>
   </div>
 
-  <div id="add-wrapper">
+  <div id="add-wrapper" data-profile-url={user.profile_url}>
     <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} genreMap={genreMap} groupedGenres={groupedGenres} />
   </div>
 </Layout>
@@ -144,19 +151,23 @@ import { initAlbumForm, setArtists, setDescriptors, populateReleaseSelect, readG
 import type { TrackData } from '../lib/album-form';
 
 interface MBResult {
-  mbid: string;
-  title: string;
-  artist: string;
-  artists: string[];
-  artistId: string;
-  year: string;
-  tags: string[];
-  coverUrl: string;
-  dbId?: number;
-  country?: string;
-  fromDb?: boolean;
+  mbid:      string;
+  title:     string;
+  artist:    string;
+  artists:   string[];
+  artistId:  string;
+  year:      string;
+  tags:      string[];
+  coverUrl:  string;
+  dbId?:     number;
+  country?:  string;
+  slug?:     string;
+  fromDb?:   boolean;
+  inLibrary?: boolean;
   dbTracks?: Array<{ pos: number; title: string; length: number | null }>;
 }
+
+const profileUrl = (document.getElementById('add-wrapper') as HTMLElement).dataset.profileUrl!;
 
 const { setTracks, renderSubgenreWidget, setSelectedSubs } = initAlbumForm();
 
@@ -196,14 +207,14 @@ function renderResults(items: MBResult[]) {
     return;
   }
   resultsEl.innerHTML = items.map((r, i) => `
-    <div class="mb-item" data-i="${i}">
+    <div class="mb-item${r.inLibrary ? ' mb-item-in-library' : ''}" data-i="${i}">
       <div class="mb-thumb-wrap">
         <img class="mb-thumb" src="${esc(r.coverUrl)}" alt=""
              onerror="this.style.opacity='0'" loading="lazy" />
       </div>
       <div class="mb-info">
         <strong>${esc(r.title)}</strong>
-        <span>${esc(r.artist)}${r.year ? ' · ' + r.year : ''}${r.fromDb ? ' <span class="mb-db-badge">in library</span>' : ''}</span>
+        <span>${esc(r.artist)}${r.year ? ' · ' + r.year : ''}${r.inLibrary ? ' <span class="mb-in-library-badge">In library</span>' : ''}</span>
       </div>
     </div>
   `).join('');
@@ -214,6 +225,10 @@ function renderResults(items: MBResult[]) {
 }
 
 function pick(r: MBResult) {
+  if (r.inLibrary && r.slug) {
+    window.location.href = `/${profileUrl}/album/${r.slug}`;
+    return;
+  }
   set('f-mbid',        r.mbid ?? '');
   set('f-db-album-id', r.dbId ? String(r.dbId) : '');
   setArtists(r.artists?.length ? r.artists : r.artist.split(' / '));
