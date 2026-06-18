@@ -301,6 +301,10 @@ th a:hover, th a.active { color: var(--text); }
 
 tr:hover td { background: var(--bg-hover); }
 
+@media (max-width: 640px) {
+  tr:hover td { background: none; }
+}
+
 .cover-thumb {
   width: 36px;
   height: 36px;
