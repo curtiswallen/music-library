@@ -24,8 +24,8 @@ if (Astro.request.method === 'POST') {
 
   let descriptorsList: string[] = [];
   try { descriptorsList = JSON.parse((data.get('descriptors') as string) || '[]'); } catch {}
-  const descriptorsJson = JSON.stringify(descriptorsList.filter(Boolean));
-  const newDescriptors = descriptorsList.map(d => d.trim()).filter(Boolean);
+  const newDescriptors = descriptorsList.map(d => d.trim().toLowerCase()).filter(Boolean);
+  const descriptorsJson = JSON.stringify(newDescriptors);
   if (newDescriptors.length) {
     await db.batch(newDescriptors.map(d =>
       db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d)

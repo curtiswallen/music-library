@@ -1315,12 +1315,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   }
   .lib-table-wrap tbody td:nth-child(6) { display: none; } /* genre */
   .lib-table-wrap tbody td:nth-child(7) { display: none; } /* subgenres */
-  .lib-table-wrap tbody td:nth-child(8) { /* rating */
+  .lib-table-wrap tbody td:nth-child(8) { display: none; } /* descriptors */
+  .lib-table-wrap tbody td:nth-child(9) { /* rating */
     grid-column: 3; grid-row: 2; text-align: right;
   }
 
   /* Hide notes, added-at, and owner column */
-  .lib-table-wrap tbody td:nth-child(n+9) { display: none; }
+  .lib-table-wrap tbody td:nth-child(n+10) { display: none; }
 
   /* Entire card is a tap target — disable individual child links */
   .lib-table-wrap tbody tr[data-album-href] { cursor: pointer; }
