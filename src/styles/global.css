@@ -342,6 +342,7 @@ tr:hover td { background: var(--bg-hover); }
   height: 20px;
 }
 
+.tag-others { opacity: 0.4; }
 .rating { font-weight: 600; font-variant-numeric: tabular-nums; }
 .rating-hi  { color: var(--green); }
 .rating-mid { color: var(--yellow); }

@@ -122,10 +122,12 @@ if (Astro.request.method === 'POST') {
   ).run();
 
   await db.prepare(`
-    UPDATE albums SET logged_by_user_ids = (
-      SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?
-    ) WHERE id = ?
-  `).bind(albumId, albumId).run();
+    UPDATE albums SET
+      logged_by_user_ids = (SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?),
+      all_subgenres  = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
+      all_descriptors = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]')
+    WHERE id = ?
+  `).bind(albumId, albumId, albumId, albumId).run();
 
   await invalidateLibraryOverview(kv, user.id);
 

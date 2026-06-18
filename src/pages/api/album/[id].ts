@@ -17,10 +17,12 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     await env.DB.prepare('DELETE FROM albums WHERE id = ?').bind(id).run();
   } else {
     await env.DB.prepare(`
-      UPDATE albums SET logged_by_user_ids = (
-        SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?
-      ) WHERE id = ?
-    `).bind(id, id).run();
+      UPDATE albums SET
+        logged_by_user_ids = (SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?),
+        all_subgenres  = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
+        all_descriptors = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]')
+      WHERE id = ?
+    `).bind(id, id, id, id).run();
   }
 
   await invalidateLibraryOverview(env.GENRE_CACHE, userId);

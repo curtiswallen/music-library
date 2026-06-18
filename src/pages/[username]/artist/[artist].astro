@@ -44,6 +44,7 @@ if (!artistName) return new Response(null, { status: 404 });
 
 const { results: albums } = await db.prepare(`
   SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+         a.all_subgenres, a.all_descriptors,
          ua.genre, ua.subgenres, ua.descriptors, ua.rating, ua.notes, ua.recommended
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
@@ -57,6 +58,7 @@ const { results: albums } = await db.prepare(`
 `).bind(profileUser.id, artistName, artistName, artistName, artistName).all<{
   id: number; slug: string; artist: string; album: string; country: string;
   year: number | null; cover_url: string | null;
+  all_subgenres: string; all_descriptors: string;
   genre: string; subgenres: string; descriptors: string; rating: number | null; notes: string; recommended: number;
 }>();
 
@@ -125,9 +127,10 @@ function sortedSubs(subs: string[]) {
       </thead>
       <tbody>
         {albums.map(a => {
-          const subs:  string[] = JSON.parse(a.subgenres  || '[]');
-          const descs: string[] = (JSON.parse(a.descriptors || '[]') as string[])
-            .sort((x, y) => x.localeCompare(y, undefined, { sensitivity: 'base' }));
+          const mySubs  = new Set(JSON.parse(a.subgenres  || '[]') as string[]);
+          const myDescs = new Set(JSON.parse(a.descriptors || '[]') as string[]);
+          const allSubs:  string[] = JSON.parse(a.all_subgenres  || '[]');
+          const allDescs: string[] = (JSON.parse(a.all_descriptors || '[]') as string[]).sort((x, y) => x.localeCompare(y));
           return (
             <tr data-href={`${libBase}/album/${a.slug}`}>
               <td>
@@ -143,13 +146,13 @@ function sortedSubs(subs: string[]) {
               <td>{a.year ?? ''}</td>
               <td>{a.genre && <span class="genre">{a.genre}</span>}</td>
               <td>
-                {sortedSubs(subs).map(s => (
-                  <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+                {sortedSubs(allSubs).map(s => (
+                  <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}${!mySubs.has(s) ? ' tag-others' : ''}`}>{s}</span>
                 ))}
               </td>
               <td>
-                {descs.map(d => (
-                  <span class="tag descriptor-tag">{d}</span>
+                {allDescs.map(d => (
+                  <span class={`tag descriptor-tag${!myDescs.has(d) ? ' tag-others' : ''}`}>{d}</span>
                 ))}
               </td>
               <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>

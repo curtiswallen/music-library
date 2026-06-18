@@ -49,6 +49,7 @@ const {
         <th><a href={sortHref('year')}   class={safeSort === 'year'   ? 'active' : ''}>Year{sortArrow('year')}</a></th>
         <th class="col-genre"><a href={sortHref('genre')}  class={safeSort === 'genre'  ? 'active' : ''}>Genre{sortArrow('genre')}</a></th>
         <th class="col-subgenres">Subgenres</th>
+        <th class="col-descriptors">Descriptors</th>
         <th class="col-rating" style="position:relative">
           <a href={sortHref('rating')} class={safeSort === 'rating' ? 'active' : ''}>Rating{sortArrow('rating')}</a>
           <span class="rating-tip">?<span class="rating-tip-body">
@@ -71,7 +72,10 @@ const {
     </thead>
     <tbody>
       {albums.map(a => {
-        const subs: string[] = JSON.parse(a.subgenres || '[]');
+        const mySubs  = new Set(JSON.parse(a.subgenres  || '[]') as string[]);
+        const myDescs = new Set(JSON.parse(a.descriptors || '[]') as string[]);
+        const allSubs:  string[] = JSON.parse(a.all_subgenres  || '[]');
+        const allDescs: string[] = (JSON.parse(a.all_descriptors || '[]') as string[]).sort((x, y) => x.localeCompare(y));
         const cc = countryCode(a.country).toLowerCase();
         return (
           <tr class={isOwner && a.is_hidden ? 'album-hidden' : ''} data-album-href={`${base}/album/${a.slug}`}>
@@ -112,10 +116,17 @@ const {
               )}
             </td>
             <td class="col-subgenres">
-              {sortedSubs(subs).map(s => (
-                <a href={subgenreHref(s)}
-                   class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}${currentSubgenres.includes(s) ? ' tag-filtered' : ''}`}
-                >{s}</a>
+              {sortedSubs(allSubs).map(s => {
+                const own = mySubs.has(s);
+                const cls = `tag${s === 'Sketchy' ? ' tag-sketchy' : ''}${currentSubgenres.includes(s) ? ' tag-filtered' : ''}${!own ? ' tag-others' : ''}`;
+                return own
+                  ? <a href={subgenreHref(s)} class={cls}>{s}</a>
+                  : <span class={cls}>{s}</span>;
+              })}
+            </td>
+            <td class="col-descriptors">
+              {allDescs.map(d => (
+                <span class={`tag descriptor-tag${!myDescs.has(d) ? ' tag-others' : ''}`}>{d}</span>
               ))}
             </td>
             <td class="col-rating"><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>

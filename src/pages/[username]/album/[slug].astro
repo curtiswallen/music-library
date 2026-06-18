@@ -105,6 +105,13 @@ if (Astro.request.method === 'POST') {
     profileUser.id,
   ).run();
 
+  await db.prepare(`
+    UPDATE albums SET
+      all_subgenres  = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
+      all_descriptors = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]')
+    WHERE id = ?
+  `).bind(existing.id, existing.id, existing.id).run();
+
   await invalidateLibraryOverview(env.GENRE_CACHE, profileUser.id);
 
   return Astro.redirect(`/${profileUser.profile_url}/album/${newSlug}`);
