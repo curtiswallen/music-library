@@ -111,8 +111,8 @@ nav {
 .btn-primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 .btn-primary:hover { border-color: var(--accent-hi); background: var(--accent-hi); color: #fff; }
 
-.btn-danger { border-color: rgba(192, 57, 43, 0.4); }
-.btn-danger:hover { border-color: var(--accent-hi); background: var(--accent-hi); color: #fff; }
+.btn-danger { border-color: var(--red); }
+.btn-danger:hover { border-color: var(--red); background: var(--red); color: #fff; }
 
 .btn-active { border-color: var(--yellow); color: var(--yellow); }
 .btn-active:hover { border-color: var(--yellow); background: rgba(212,175,55,0.12); color: var(--yellow); }
@@ -934,7 +934,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   padding: 2px 4px;
   border-radius: 3px;
 }
-.track-notable-btn:hover { color: var(--yellow); }
+.track-notable-btn:hover { color: var(--bg-card); }
 .track-notable-btn.btn-active { color: var(--yellow); }
 .tracks-total-row td { border-bottom: none; padding-top: 8px; }
 .tracks-total { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); text-align: left; }

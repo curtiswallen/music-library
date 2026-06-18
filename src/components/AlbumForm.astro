@@ -30,6 +30,8 @@ interface Props {
   includeDbAlbumId?: boolean;
   submitLabel?: string;
   cancelHref?: string;
+  deleteAlbumId?: number;
+  deleteBackHref?: string;
 }
 
 const {
@@ -39,6 +41,8 @@ const {
   includeDbAlbumId = false,
   submitLabel = 'Save',
   cancelHref,
+  deleteAlbumId,
+  deleteBackHref,
 } = Astro.props;
 const genreNames = Object.keys(genreMap);
 
@@ -237,12 +241,18 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
       <!-- Mobile-only slot: tracks move here on narrow screens -->
       <div id="mobile-tracks-slot"></div>
 
-      <div style="display:flex;gap:10px;margin-top:24px">
+      <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">{submitLabel}</button>
         {cancelHref
           ? <a href={cancelHref} class="btn">Cancel</a>
           : <button class="btn" type="button" id="cancel-btn">Cancel</button>
         }
+        {deleteAlbumId && (
+          <button class="btn btn-danger" type="button" id="form-delete-btn"
+            data-id={deleteAlbumId} data-back={deleteBackHref ?? '/'} style="margin-left:auto">
+            Delete Album
+          </button>
+        )}
       </div>
     </div><!-- end edit-fields -->
 
