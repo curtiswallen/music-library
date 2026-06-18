@@ -1303,8 +1303,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .album-hero > .cover-col { grid-row: 1; }
   .album-hero > .tracks-wrap,
   .album-hero > .related-section { grid-column: 1 / -1; }
-  .cover-box-lg { width: 200px; height: 200px; }
-  .cover-col { width: 100%; flex-direction: row; }
+  .cover-box-lg { width: 110px; height: 110px; }
+  .edit-fields .cover-box-lg { width: 200px; height: 200px; }
+  .edit-fields .cover-col { width: 100%; flex-direction: row; }
   .release-detail { width: auto; }
   .release-dl { grid-template-columns: 1fr; gap: 0; font-size: 10px; }
   .release-dl dd { margin-bottom: 5px; }
