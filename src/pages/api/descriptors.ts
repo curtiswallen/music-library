@@ -6,8 +6,8 @@ export const GET: APIRoute = async ({ url }) => {
 
   const { results } = await env.DB.prepare(
     q
-      ? `SELECT name FROM descriptors WHERE name LIKE ? COLLATE NOCASE ORDER BY name ASC LIMIT 10`
-      : `SELECT name FROM descriptors ORDER BY name ASC LIMIT 20`
+      ? `SELECT name FROM descriptors WHERE name LIKE ? COLLATE NOCASE ORDER BY name ASC LIMIT 20`
+      : `SELECT name FROM descriptors ORDER BY name ASC LIMIT 500`
   ).bind(...(q ? [`%${q}%`] : [])).all<{ name: string }>();
 
   return json(results.map(r => r.name));
