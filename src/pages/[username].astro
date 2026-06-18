@@ -5,11 +5,14 @@ import LibraryTable from '../components/LibraryTable.astro';
 import { env } from 'cloudflare:workers';
 import type { LibraryEntry } from '../types';
 import { countryCode } from '../lib/utils';
+import { getGenreCache } from '../lib/genre-cache';
+import { getLibraryOverview } from '../lib/library-cache';
 
 const { username } = Astro.params;
 if (!username) return Astro.redirect('/');
 
 const db = env.DB;
+const kv = env.GENRE_CACHE;
 
 const profileUser = await db.prepare(`
   SELECT id, username, display_name, profile_url, is_private, hide_added_at, avatar_url
@@ -90,53 +93,17 @@ if (isOwner || !profileUser.is_private) {
   `).bind(profileUser.id, ...params).all<LibraryEntry>();
   albums = results;
 
-  // One query replaces separate country, descriptor, and library-genre queries
-  const hiddenFilter = isOwner ? '' : 'AND ua.is_hidden = 0';
-  const { results: overviewRows } = await db.prepare(`
-    SELECT a.country, ua.genre, ua.subgenres, ua.descriptors
-    FROM user_albums ua
-    JOIN albums a ON a.id = ua.album_id
-    WHERE ua.user_id = ? ${hiddenFilter}
-  `).bind(profileUser.id).all<{ country: string; genre: string; subgenres: string; descriptors: string }>();
-
-  const countrySet = new Set<string>();
-  const descriptorSet = new Set<string>();
-  for (const row of overviewRows) {
-    if (row.country) countrySet.add(row.country);
-    if (row.genre) {
-      libraryGenreSet.add(row.genre);
-      if (!librarySubMap[row.genre]) librarySubMap[row.genre] = [];
-      try {
-        for (const s of JSON.parse(row.subgenres || '[]') as string[]) {
-          if (s && !librarySubMap[row.genre].includes(s)) librarySubMap[row.genre].push(s);
-        }
-      } catch {}
-    }
-    try {
-      for (const d of JSON.parse(row.descriptors || '[]') as string[]) {
-        if (d) descriptorSet.add(d);
-      }
-    } catch {}
-  }
-  libraryCountries = [...countrySet].sort();
-  allDescriptors   = [...descriptorSet].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-  for (const g of Object.keys(librarySubMap)) librarySubMap[g].sort();
+  const overview = await getLibraryOverview(kv, db, profileUser.id, isOwner);
+  libraryCountries = overview.countries;
+  allDescriptors   = overview.descriptors;
+  librarySubMap    = overview.subMap;
+  for (const g of overview.genres) libraryGenreSet.add(g);
 }
 
-// Lightweight genre-groups query (no subgenres join) for the grouped filter dropdown
-const { results: genreGroupRows } = await db.prepare(`
-  SELECT name, genre_group FROM genres ORDER BY name ASC
-`).all<{ name: string; genre_group: string | null }>();
-
-const groupedFilterGenres: Array<{ group: string; options: string[] }> = [];
-for (const row of genreGroupRows) {
-  if (!libraryGenreSet.has(row.name)) continue;
-  const g = row.genre_group ?? 'Other';
-  let grp = groupedFilterGenres.find(x => x.group === g);
-  if (!grp) { grp = { group: g, options: [] }; groupedFilterGenres.push(grp); }
-  grp.options.push(row.name);
-}
-groupedFilterGenres.sort((a, b) => a.group.localeCompare(b.group));
+const { groupedGenres: allGroupedGenres } = await getGenreCache(kv, db);
+const groupedFilterGenres = allGroupedGenres
+  .map(({ group, options }) => ({ group, options: options.filter(name => libraryGenreSet.has(name)) }))
+  .filter(({ options }) => options.length > 0);
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
 

@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
+import { invalidateLibraryOverview } from '../../../lib/library-cache';
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
   const id     = parseInt(params.id ?? '');
@@ -21,6 +22,8 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
       ) WHERE id = ?
     `).bind(id, id).run();
   }
+
+  await invalidateLibraryOverview(env.GENRE_CACHE, userId);
 
   return new Response(null, { status: 204 });
 };

@@ -6,6 +6,7 @@ import type { Album, UserAlbum, Track } from '../../../types';
 import { slugify, generateUniqueSlug, countryCode } from '../../../lib/utils';
 import { md } from '../../../lib/markdown';
 import { getGenreCache } from '../../../lib/genre-cache';
+import { invalidateLibraryOverview } from '../../../lib/library-cache';
 
 const { username, slug: slugParam } = Astro.params;
 if (!username || !slugParam) return new Response(null, { status: 404 });
@@ -53,10 +54,6 @@ if (Astro.request.method === 'POST') {
       db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d)
     ));
   }
-  await db.prepare(`
-    DELETE FROM descriptors
-    WHERE name NOT IN (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors))
-  `).run();
 
   let rawTracks: Array<Record<string, unknown>> = [];
   try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
@@ -107,6 +104,8 @@ if (Astro.request.method === 'POST') {
     existing.id,
     profileUser.id,
   ).run();
+
+  await invalidateLibraryOverview(env.GENRE_CACHE, profileUser.id);
 
   return Astro.redirect(`/${profileUser.profile_url}/album/${newSlug}`);
 }

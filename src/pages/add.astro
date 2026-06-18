@@ -4,6 +4,7 @@ import AlbumForm from '../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
 import { generateUniqueSlug } from '../lib/utils';
 import { getGenreCache } from '../lib/genre-cache';
+import { invalidateLibraryOverview } from '../lib/library-cache';
 
 const user = Astro.locals.user!;
 const db   = env.DB;
@@ -30,10 +31,6 @@ if (Astro.request.method === 'POST') {
       db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d)
     ));
   }
-  await db.prepare(`
-    DELETE FROM descriptors
-    WHERE name NOT IN (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors))
-  `).run();
 
   let rawTracks: Array<Record<string, unknown>> = [];
   try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
@@ -122,6 +119,8 @@ if (Astro.request.method === 'POST') {
       SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?
     ) WHERE id = ?
   `).bind(albumId, albumId).run();
+
+  await invalidateLibraryOverview(kv, user.id);
 
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
 }
