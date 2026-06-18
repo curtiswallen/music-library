@@ -85,7 +85,6 @@ if (isOwner || !profileUser.is_private) {
   const where = clauses.length ? `AND ${clauses.join(' AND ')}` : '';
   const { results } = await db.prepare(`
     SELECT a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
-           a.all_subgenres, a.all_descriptors,
            ua.genre, ua.subgenres, ua.descriptors, ua.rating, ua.notes, ua.recommended, ua.is_hidden, ua.added_at
     FROM albums a
     JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?

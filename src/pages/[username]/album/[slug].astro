@@ -121,14 +121,14 @@ if (Astro.request.method === 'POST') {
 const row = await db.prepare(`
   SELECT
     a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
-    a.logged_by_user_ids,
+    a.logged_by_user_ids, a.all_subgenres, a.all_descriptors,
     ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
     ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at,
     ua.release_mbid, ua.release_title, ua.release_data, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.slug = ?
-`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string; logged_by_user_ids: string }>();
+`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string; logged_by_user_ids: string; all_subgenres: string; all_descriptors: string }>();
 
 if (!row) return new Response(null, { status: 404 });
 if (row.is_hidden && !isOwner) return new Response(null, { status: 404 });
@@ -137,6 +137,11 @@ const album       = row;
 const subgenres:   string[] = JSON.parse(album.subgenres  || '[]');
 const descriptors: string[] = (JSON.parse(album.descriptors || '[]') as string[])
   .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+const allSubgenres:  string[] = JSON.parse(album.all_subgenres  || '[]');
+const allDescriptors: string[] = (JSON.parse(album.all_descriptors || '[]') as string[])
+  .sort((a, b) => a.localeCompare(b));
+const mySubSet  = new Set(subgenres);
+const myDescSet = new Set(descriptors);
 
 interface ReleaseInfo {
   format: string; date: string; country: string; disambiguation: string;
@@ -189,7 +194,6 @@ function ratingClass(r: number | null) {
 function sortSubs(subs: string[]) {
   return [...subs].sort((a, b) => a === 'Sketchy' ? -1 : b === 'Sketchy' ? 1 : 0);
 }
-const sortedSubs = sortSubs(subgenres);
 
 const libBase      = `/${profileUser.profile_url}`;
 const displayName  = profileUser.display_name || profileUser.username;
@@ -403,16 +407,16 @@ if (!isOwner && !profileUser.is_private) {
                 </span>
               )}
             </div>
-            {sortedSubs.length > 0 && (
+            {allSubgenres.length > 0 && (
               <div class="album-tags">
-                {sortedSubs.map(s => (
-                  <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+                {sortSubs(allSubgenres).map(s => (
+                  <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}${!mySubSet.has(s) ? ' tag-others' : ''}`}>{s}</span>
                 ))}
               </div>
             )}
-            {descriptors.length > 0 && (
+            {allDescriptors.length > 0 && (
               <div class="album-tags">
-                {descriptors.map(d => <span class="tag descriptor-tag">{d}</span>)}
+                {allDescriptors.map(d => <span class={`tag descriptor-tag${!myDescSet.has(d) ? ' tag-others' : ''}`}>{d}</span>)}
               </div>
             )}
           </div>

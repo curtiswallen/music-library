@@ -62,8 +62,6 @@ export interface LibraryEntry {
   country: string;
   year: number | null;
   cover_url: string | null;
-  all_subgenres: string;   // JSON: string[] — union across all users
-  all_descriptors: string; // JSON: string[] — union across all users
   // from user_albums
   genre: string;
   subgenres: string;
