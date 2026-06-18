@@ -299,7 +299,7 @@ if (!isOwner && !profileUser.is_private) {
           </button>
           <a href="/add" class="btn icon-btn view-mode-btn" aria-label="Add Album" data-tip="Add Album">+</a>
           <!-- Edit-mode buttons (shown when editing) -->
-          <button class="btn btn-active icon-btn edit-mode-btn" id="header-save-btn" aria-label="Save" data-tip="Save" style="display:none">
+          <button class="btn btn-primary icon-btn edit-mode-btn" id="header-save-btn" aria-label="Save" data-tip="Save" style="display:none">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </button>
           <button class="btn icon-btn edit-mode-btn" id="header-cancel-btn" aria-label="Discard changes" data-tip="Discard" style="display:none">
@@ -601,7 +601,8 @@ async function deleteAlbum(id: string, back: string) {
 
 document.getElementById('edit-btn')?.addEventListener('click', enterEditMode);
 document.getElementById('header-save-btn')?.addEventListener('click', () => {
-  document.getElementById('album-form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  const form = document.getElementById('album-form') as HTMLFormElement | null;
+  form?.requestSubmit();
 });
 document.getElementById('header-cancel-btn')?.addEventListener('click', exitEditMode);
 document.getElementById('cancel-btn')?.addEventListener('click', exitEditMode);
