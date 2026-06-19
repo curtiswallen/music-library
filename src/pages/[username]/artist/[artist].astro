@@ -152,7 +152,7 @@ function sortedSubs(subs: string[]) {
                 ))}
               </td>
               <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-              <td class="notes-cell"><span set:html={a.notes ? mdInline(a.notes) : ''} /></td>
+              <td class="notes-cell"><span set:html={a.notes ? mdInline(a.notes.split(/\r?\n/)[0]) : ''} /></td>
             </tr>
           );
         })}

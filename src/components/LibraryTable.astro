@@ -119,7 +119,7 @@ const {
             </td>
             <td class="col-rating"><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
             <td class="notes-cell">
-              <span class="notes-text" set:html={a.notes ? mdInline(a.notes) : ''} />
+              <span class="notes-text" set:html={a.notes ? mdInline(a.notes.split(/\r?\n/)[0]) : ''} />
               {a.notes && <div class="notes-tip-body" set:html={mdNoLinks(a.notes)} />}
             </td>
             {showAddedAt && <td class="added-cell">{a.added_at ? a.added_at.slice(0, 10) : ''}</td>}
