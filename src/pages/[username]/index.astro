@@ -112,11 +112,12 @@ if (!isOwner && !profileUser.is_private) {
             <span>|</span>
           }  
           <a href={libBase} class="btn nav-hide-mobile">My Library</a>
+          <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
+          <span>|</span>
           <a href="/settings" class="btn nav-hide-mobile" title="Settings">⚙</a>
           <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
             <button class="btn" type="submit">Sign out</button>
           </form>
-          <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
           <div class="nav-hamburger" id="nav-hamburger">
             <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
             <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
