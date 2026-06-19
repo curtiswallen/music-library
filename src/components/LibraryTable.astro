@@ -93,7 +93,8 @@ const {
               {a.country
                 ? <a href={buildParams({ country: a.country === currentCountry ? null : a.country })}
                      class="flag-link"
-                     title={a.country === currentCountry ? `Remove filter: ${a.country}` : `Filter: ${a.country}`}>
+                     data-tip={a.country}
+                     aria-label={a.country}>
                     <span class="added-cell">{cc ? cc.toUpperCase() : a.country}</span>
                   </a>
                 : null

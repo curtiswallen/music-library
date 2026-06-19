@@ -1499,3 +1499,26 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   }
   .similar-tbl tbody td:nth-child(7) { display: none; }
 }
+
+/* ── Flag link (country filter chip with tooltip) ── */
+.flag-link { text-decoration: none; display: inline-flex; align-items: center; border-radius: 3px; transition: opacity 0.15s; position: relative; }
+.flag-link:hover { opacity: 1; }
+.flag-link::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 99;
+}
+.flag-link:hover::after { opacity: 1; }
