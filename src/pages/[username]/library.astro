@@ -194,7 +194,7 @@ if (!isOwner && !profileUser.is_private) {
 
   <div class="page-header">
     <div style="display:flex;align-items:center;gap:10px">
-      {profileUser.avatar_url && <a href={`/${username}`} class="btn nav-hide-mobile"><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}
+      {profileUser.avatar_url && <a href={`/${username}`}><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}
       <h1>
         {isOwner ? 'My Library' : `${displayName}'s Library`}
         {(isOwner || !profileUser.is_private) && <span class="count">({albums.length} albums)</span>}
