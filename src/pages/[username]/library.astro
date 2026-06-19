@@ -203,8 +203,9 @@ if (!isOwner && !profileUser.is_private) {
     <div style="display:flex;gap:8px;align-items:center">
       {isOwner ? (
         <>
-          <a href={`/${username}`} class="btn nav-hide-mobile">Home</a>
           {loggedInUser!.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile" title="Admin">Admin</a>}
+          |
+          <a href={`/${username}`} class="btn nav-hide-mobile">My Dashboard</a>
           <a href="/settings" class="btn nav-hide-mobile" title="Settings">⚙</a>
           <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
             <button class="btn" type="submit">Sign out</button>
@@ -228,7 +229,7 @@ if (!isOwner && !profileUser.is_private) {
         </>
       ) : (
         <>
-          <a href={`/${username}`} class="btn">{username}'s Dashboard</a>
+          <a href={`/${username}`} class="btn">{displayName}'s Dashboard</a>
           |
           {loggedInUser
             ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
