@@ -232,7 +232,7 @@ if (!isOwner && !profileUser.is_private) {
       ) : (
         <>
           <a href={`/${username}`} class="btn">{displayName}'s Dashboard</a>
-          |
+          <span>|</span>
           {loggedInUser
             ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
             : <a href="/auth/login" class="btn">Sign In</a>}
