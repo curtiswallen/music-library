@@ -101,7 +101,9 @@ const {
             </td>
             <td class="col-album">
               <a href={`${base}/album/${a.slug}`}>
-                {a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
+                {a.year != null && <span class="year-chip col-album-year">{a.year}</span>}
+                <span class="col-album-text">{a.album}</span>
+                {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
               </a>
             </td>
             <td>{a.year ?? ''}</td>

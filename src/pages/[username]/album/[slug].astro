@@ -496,7 +496,7 @@ if (!isOwner && !profileUser.is_private) {
                           onerror="this.style.display='none'" />}
                       </div>
                     </td>
-                    <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+                    <td><a href={`${libBase}/album/${a.slug}`}>{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
                     <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                     <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
                     <td>{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
@@ -525,9 +525,9 @@ if (!isOwner && !profileUser.is_private) {
                           onerror="this.style.display='none'" />}
                       </div>
                     </td>
-                    <td style="color:var(--text-muted)">{a.artist}</td>
+                    <td>{a.artist}</td>
                     <td>{cc && <span title={a.country} class="added-cell">{cc.toUpperCase()}</span>}</td>
-                    <td>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
+                    <td class="similar-album-cell">{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
                     <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                     <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
                     <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>

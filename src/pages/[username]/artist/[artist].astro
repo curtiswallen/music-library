@@ -138,7 +138,7 @@ function sortedSubs(subs: string[]) {
                   )}
                 </div>
               </td>
-              <td><a href={`${libBase}/album/${a.slug}`}>{a.album} {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+              <td><a href={`${libBase}/album/${a.slug}`}>{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
               <td>{a.year ?? ''}</td>
               <td>{a.genre && <span class="genre">{a.genre}</span>}</td>
               <td>

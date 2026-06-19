@@ -321,7 +321,14 @@ tr:hover td { background: var(--bg-hover); }
 /* Library table column classes */
 .col-artist { max-width: 150px; }
 .col-album { max-width: 300px; }
-.col-album a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.col-album a { display: flex; align-items: center; gap: 3px; overflow: hidden; }
+.col-album-text { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Hide year chips inside album cells on desktop — year has its own column */
+.col-album a .col-album-year,
+.artist-tbl td a .col-album-year,
+.more-by-tbl td a .col-album-year,
+.similar-tbl td .col-album-year { display: none; }
+.rec-star { flex-shrink: 0; }
 .col-genre { max-width: 150px; }
 .col-subgenres { max-width: 150px; }
 .added-cell {
@@ -344,6 +351,21 @@ tr:hover td { background: var(--bg-hover); }
 
 .tag-others { opacity: 0.4; }
 .rating { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.year-chip {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-muted);
+  /*background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;*/
+  padding: 0 5px 0 0;
+  font-weight: 400;
+  vertical-align: middle;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
 .rating-hi  { color: var(--green); }
 .rating-mid { color: var(--yellow); }
 .rating-lo  { color: var(--red); }
@@ -1284,8 +1306,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
   .lib-table-wrap tbody tr {
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 8px;
+    grid-template-columns: 44px minmax(0, 6fr) minmax(0, 1fr);
+    column-gap: 3px;
     align-items: center;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
@@ -1298,21 +1320,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .lib-table-wrap tbody td:nth-child(2) { /* artist */
     grid-column: 2; grid-row: 1;
     min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-weight: 600; font-size: 12px;
   }
   .lib-table-wrap tbody td:nth-child(3) { display: none; } /* country */
   .lib-table-wrap tbody td:nth-child(4) { /* album */
-    grid-column: 3; grid-row: 1;
-    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    text-align: right;
-  }
-  .lib-table-wrap tbody td:nth-child(5) { /* year */
     grid-column: 2; grid-row: 2;
-    color: var(--text-muted); font-size: 11px;
+    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 11px; color: var(--text-muted);
   }
+  .lib-table-wrap tbody td:nth-child(4) .col-album-year { display: inline-block; }
+  .lib-table-wrap tbody td:nth-child(5) { display: none; } /* year — shown as chip in album cell */
   .lib-table-wrap tbody td:nth-child(6) { display: none; } /* genre */
   .lib-table-wrap tbody td:nth-child(7) { display: none; } /* subgenres */
   .lib-table-wrap tbody td:nth-child(8) { /* rating */
-    grid-column: 3; grid-row: 2; text-align: right;
+    grid-column: 3; grid-row: 1; text-align: right;
   }
 
   /* Hide notes, added-at, and owner column */
@@ -1375,14 +1396,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .more-by-tbl tbody tr,
   .similar-tbl tbody tr {
     display: grid;
-    column-gap: 8px;
+    column-gap: 3px;
     align-items: center;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
   }
   .artist-tbl tbody tr,
-  .more-by-tbl tbody tr { grid-template-columns: 44px minmax(0, 1fr) auto; }
-  .similar-tbl tbody tr { grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr); }
+  .more-by-tbl tbody tr { grid-template-columns: 44px minmax(0, 6fr) auto; }
+  .similar-tbl tbody tr { grid-template-columns: 44px minmax(0, 6fr) minmax(0, 1fr); }
 
   .artist-tbl tbody tr:hover td,
   .more-by-tbl tbody tr:hover td,
@@ -1403,37 +1424,43 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .similar-tbl tbody td a { pointer-events: none; }
 
   /* ── Artist page table: cover(1) album(2) year(3) genre(4) subs(5) descs(6) rating(7) notes(8) ── */
-  .artist-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; } /* cover */
-  .artist-tbl tbody td:nth-child(2) { /* album spans full content width */
-    grid-column: 2 / -1; grid-row: 1;
-    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  .artist-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1; } /* cover */
+  .artist-tbl tbody td:nth-child(2) { /* album */
+    grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden;
+    font-size: 11px; color: var(--text-muted);
   }
-  .artist-tbl tbody td:nth-child(3) { /* year */
-    grid-column: 2; grid-row: 2; color: var(--text-muted); font-size: 11px;
+  .artist-tbl tbody td:nth-child(2) a {
+    display: flex; align-items: center; gap: 3px; overflow: hidden;
   }
+  .artist-tbl tbody td:nth-child(2) .col-album-text {
+    flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .artist-tbl tbody td:nth-child(2) a .col-album-year { display: inline-block; }
+  .artist-tbl tbody td:nth-child(3) { display: none; } /* year — shown as chip */
   .artist-tbl tbody td:nth-child(4),
   .artist-tbl tbody td:nth-child(5),
   .artist-tbl tbody td:nth-child(6),
   .artist-tbl tbody td:nth-child(8) { display: none; }
   .artist-tbl tbody td:nth-child(7) { /* rating */
-    grid-column: 3; grid-row: 2; text-align: right;
+    grid-column: 3; grid-row: 1; text-align: right;
   }
 
   /* ── More by table: cover(1) album(2) year(3) rating(4) subs(5) ── */
-  .more-by-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; } /* cover */
-  .more-by-tbl tbody td:nth-child(2) { /* album spans full content width */
-    grid-column: 2 / -1; grid-row: 1;
-    min-width: 0; overflow: hidden;
+  .more-by-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1; } /* cover */
+  .more-by-tbl tbody td:nth-child(2) { /* album */
+    grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden;
+    font-size: 11px; color: var(--text-muted);
   }
   .more-by-tbl tbody td:nth-child(2) a {
-    display: block;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center; gap: 3px; overflow: hidden;
   }
-  .more-by-tbl tbody td:nth-child(3) { /* year */
-    grid-column: 2; grid-row: 2; color: var(--text-muted); font-size: 11px;
+  .more-by-tbl tbody td:nth-child(2) .col-album-text {
+    flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .more-by-tbl tbody td:nth-child(2) a .col-album-year { display: inline-block; }
+  .more-by-tbl tbody td:nth-child(3) { display: none; } /* year — shown as chip */
   .more-by-tbl tbody td:nth-child(4) { /* rating */
-    grid-column: 3; grid-row: 2; text-align: right;
+    grid-column: 3; grid-row: 1; text-align: right;
   }
   .more-by-tbl tbody td:nth-child(5) { display: none; }
 
@@ -1441,20 +1468,24 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .similar-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; } /* cover */
   .similar-tbl tbody td:nth-child(2) { /* artist */
     grid-column: 2; grid-row: 1;
-    min-width: 0; color: var(--text-muted);
+    min-width: 0; color: var(--text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-weight: 600; font-size: 12px;
   }
   .similar-tbl tbody td:nth-child(3) { display: none; } /* country */
   .similar-tbl tbody td:nth-child(4) { /* album */
-    grid-column: 3; grid-row: 1;
-    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    text-align: right;
+    grid-column: 2; grid-row: 2;
+    min-width: 0; overflow: hidden;
+    display: flex; align-items: center; gap: 3px;
+    font-size: 11px; color: var(--text-muted);
   }
-  .similar-tbl tbody td:nth-child(5) { /* year */
-    grid-column: 2; grid-row: 2; color: var(--text-muted); font-size: 11px;
+  .similar-tbl tbody td:nth-child(4) .col-album-text {
+    flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  .similar-tbl tbody td:nth-child(4) .col-album-year { display: inline-block; }
+  .similar-tbl tbody td:nth-child(5) { display: none; } /* year — shown as chip */
   .similar-tbl tbody td:nth-child(6) { /* rating */
-    grid-column: 3; grid-row: 2; text-align: right;
+    grid-column: 3; grid-row: 1 / span 2; align-self: center; text-align: right;
   }
   .similar-tbl tbody td:nth-child(7) { display: none; }
 }
