@@ -291,7 +291,7 @@ if (!isOwner && !profileUser.is_private) {
 <Layout title={`${album.artist} — ${album.album}`}>
   <div class="page-header">
     <div class="breadcrumb">
-      <h1><a href={libBase}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a></h1>
+      <h1><a href={`${libBase}/library`}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a></h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1>
         {artistParts.map((p, i) => (
@@ -320,7 +320,7 @@ if (!isOwner && !profileUser.is_private) {
         </>
       )}
       {!isOwner && loggedInUser && (
-        <a href={`/${loggedInUser.profile_url}`} class="btn">← My Library</a>
+        <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
       )}
       {!isOwner && !loggedInUser && (
         <a href="/auth/login" class="btn">Sign In</a>
@@ -569,7 +569,7 @@ if (!isOwner && !profileUser.is_private) {
         genreMap={genreMap}
         groupedGenres={groupedGenres}
         deleteAlbumId={album.id}
-        deleteBackHref={libBase}
+        deleteBackHref={`${libBase}/library`}
       />
     </div>
   )}

@@ -1,12 +1,12 @@
 ---
-import Layout from '../layouts/Layout.astro';
-import Combobox from '../components/Combobox.astro';
-import LibraryTable from '../components/LibraryTable.astro';
+import Layout from '../../layouts/Layout.astro';
+import Combobox from '../../components/Combobox.astro';
+import LibraryTable from '../../components/LibraryTable.astro';
 import { env } from 'cloudflare:workers';
-import type { LibraryEntry } from '../types';
-import { countryCode, normalizeSearch } from '../lib/utils';
-import { getGenreCache } from '../lib/genre-cache';
-import { getLibraryOverview } from '../lib/library-cache';
+import type { LibraryEntry } from '../../types';
+import { countryCode, normalizeSearch } from '../../lib/utils';
+import { getGenreCache } from '../../lib/genre-cache';
+import { getLibraryOverview } from '../../lib/library-cache';
 
 const { username } = Astro.params;
 if (!username) return Astro.redirect('/');
@@ -28,6 +28,7 @@ const loggedInUser = Astro.locals.user;
 const isOwner      = loggedInUser?.id === profileUser.id;
 const displayName  = profileUser.display_name || profileUser.username;
 const base         = `/${username}`;
+const filterBase   = `/${username}/library`;
 
 // ── URL params ────────────────────────────────────────────────────────────────
 const q           = Astro.url.searchParams.get('q')           ?? '';
@@ -119,10 +120,10 @@ function buildParams(o: Record<string, string | string[] | null | undefined> = {
   if (genre)           defaults.genre        = genre;
   defaults.sort = safeSort;
   defaults.dir  = safeDir.toLowerCase();
-  if (recommended)       defaults.recommended  = '1';
-  if (subgenres.length)        defaults.subgenre    = subgenres;
-  if (excludes.length)         defaults.excl        = excludes;
-  if (descriptorFilters.length) defaults.descriptor  = descriptorFilters;
+  if (recommended)              defaults.recommended  = '1';
+  if (subgenres.length)         defaults.subgenre     = subgenres;
+  if (excludes.length)          defaults.excl         = excludes;
+  if (descriptorFilters.length) defaults.descriptor   = descriptorFilters;
 
   const merged = { ...defaults, ...o };
   const p = new URLSearchParams();
@@ -131,7 +132,7 @@ function buildParams(o: Record<string, string | string[] | null | undefined> = {
     if (Array.isArray(v)) v.forEach(x => p.append(k, x));
     else p.set(k, v);
   }
-  return `${base}?${p}`;
+  return `${filterBase}?${p}`;
 }
 
 function sortHref(col: string) {
@@ -170,7 +171,6 @@ const activeFilterCount = [
 ].filter(Boolean).length;
 
 const hasAnyFilter = !!(q || country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length || excludes.length || descriptorFilters.length || recommended);
-const countryChipCC = country ? countryCode(country).toLowerCase() : '';
 const clearFiltersHref = buildParams({
   q: null, country: null, year_from: null, year_to: null,
   rating_min: null, rating_max: null, rated: null,
@@ -203,10 +203,7 @@ if (!isOwner && !profileUser.is_private) {
     <div style="display:flex;gap:8px;align-items:center">
       {isOwner ? (
         <>
-          <span class="user-chip nav-hide-mobile">
-            {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
-            {loggedInUser!.display_name || loggedInUser!.username}
-          </span>
+          <a href={`/${username}`} class="btn nav-hide-mobile">Home</a>
           {loggedInUser!.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile" title="Admin">Admin</a>}
           <a href="/settings" class="btn nav-hide-mobile" title="Settings">⚙</a>
           <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
@@ -220,6 +217,7 @@ if (!isOwner && !profileUser.is_private) {
                 {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
                 <span>{loggedInUser!.display_name || loggedInUser!.username}</span>
               </div>
+              <a href={`/${username}`} class="nav-hamburger-item">Home</a>
               {loggedInUser!.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
               <a href="/settings" class="nav-hamburger-item">Settings</a>
               <form method="post" action="/auth/logout" style="margin:0">
@@ -230,7 +228,7 @@ if (!isOwner && !profileUser.is_private) {
         </>
       ) : (
         loggedInUser
-          ? <a href={`/${loggedInUser.profile_url}`} class="btn">← My Library</a>
+          ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
           : <a href="/auth/login" class="btn">Sign In</a>
       )}
     </div>
@@ -261,7 +259,7 @@ if (!isOwner && !profileUser.is_private) {
     </div>
   ) : (
     <>
-      <form class="filters" method="get" action={base}>
+      <form class="filters" method="get" action={filterBase}>
         <input type="hidden" name="sort" value={safeSort} />
         <input type="hidden" name="dir"  value={safeDir.toLowerCase()} />
 

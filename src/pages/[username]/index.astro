@@ -1,0 +1,321 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+
+const { username } = Astro.params;
+if (!username) return Astro.redirect('/');
+
+const db = env.DB;
+
+const profileUser = await db.prepare(`
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, avatar_url
+  FROM users WHERE profile_url = ?
+`).bind(username).first<{
+  id: number; username: string; display_name: string | null;
+  profile_url: string; is_private: number; hide_added_at: number; avatar_url: string | null;
+}>();
+
+if (!profileUser) return new Response(null, { status: 404 });
+
+const loggedInUser = Astro.locals.user;
+const isOwner      = loggedInUser?.id === profileUser.id;
+const displayName  = profileUser.display_name || profileUser.username;
+const userBase     = `/${username}`;
+const libBase      = `/${username}/library`;
+
+const showRecentlyAdded = isOwner || !profileUser.hide_added_at;
+
+type DashAlbum = {
+  slug: string; artist: string; album: string; year: number | null;
+  cover_url: string | null; rating: number | null; recommended: number;
+};
+
+let recentAlbums: DashAlbum[] = [];
+let topAlbums:    DashAlbum[] = [];
+let queueAlbums:  DashAlbum[] = [];
+
+if (isOwner || !profileUser.is_private) {
+  const recentPromise = showRecentlyAdded
+    ? db.prepare(`
+        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended
+        FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+        WHERE ua.is_hidden = 0
+        ORDER BY ua.added_at DESC LIMIT 5
+      `).bind(profileUser.id).all<DashAlbum>()
+    : Promise.resolve({ results: [] as DashAlbum[] });
+
+  const [recentRes, topRes, queueRes] = await Promise.all([
+    recentPromise,
+    db.prepare(`
+      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended
+      FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+      WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
+      ORDER BY ua.rating DESC LIMIT 5
+    `).bind(profileUser.id).all<DashAlbum>(),
+    db.prepare(`
+      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended
+      FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+      WHERE ua.is_hidden = 0 AND ua.rating IS NULL
+      ORDER BY ua.added_at DESC LIMIT 5
+    `).bind(profileUser.id).all<DashAlbum>(),
+  ]);
+
+  recentAlbums = (recentRes as { results: DashAlbum[] }).results;
+  topAlbums    = topRes.results;
+  queueAlbums  = queueRes.results;
+}
+
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 70) return 'rating-hi';
+  if (r >= 50) return 'rating-mid';
+  return 'rating-lo';
+}
+
+const sections = [
+  ...(showRecentlyAdded ? [{
+    title: 'Recently Logged',
+    albums: recentAlbums,
+    viewAllHref: `${libBase}?sort=added&dir=desc`,
+    emptyText: 'No albums logged yet.',
+  }] : []),
+  {
+    title: 'Highest Rated',
+    albums: topAlbums,
+    viewAllHref: `${libBase}?sort=rating&dir=desc&rated=yes`,
+    emptyText: 'No rated albums yet.',
+  },
+  {
+    title: 'Queue',
+    albums: queueAlbums,
+    viewAllHref: `${libBase}?rated=no&sort=added&dir=desc`,
+    emptyText: 'No unrated albums.',
+  },
+];
+
+if (!isOwner && !profileUser.is_private) {
+  Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+}
+---
+
+<Layout title={isOwner ? 'Home' : displayName}>
+  <div class="page-header">
+    <div style="display:flex;align-items:center;gap:10px">
+      {profileUser.avatar_url && <img src={profileUser.avatar_url} class="profile-avatar" alt="" />}
+      <h1>{displayName}</h1>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      {isOwner ? (
+        <>
+          <a href={libBase} class="btn nav-hide-mobile">Library</a>
+          {loggedInUser!.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile">Admin</a>}
+          <a href="/settings" class="btn nav-hide-mobile" title="Settings">⚙</a>
+          <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
+            <button class="btn" type="submit">Sign out</button>
+          </form>
+          <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
+          <div class="nav-hamburger" id="nav-hamburger">
+            <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
+            <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
+              <div class="nav-hamburger-header">
+                {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
+                <span>{loggedInUser!.display_name || loggedInUser!.username}</span>
+              </div>
+              <a href={libBase} class="nav-hamburger-item">Library</a>
+              {loggedInUser!.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
+              <a href="/settings" class="nav-hamburger-item">Settings</a>
+              <form method="post" action="/auth/logout" style="margin:0">
+                <button type="submit" class="nav-hamburger-item">Sign out</button>
+              </form>
+            </div>
+          </div>
+        </>
+      ) : loggedInUser ? (
+        <>
+          <a href={libBase} class="btn">Library</a>
+          <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
+        </>
+      ) : (
+        <>
+          <a href={libBase} class="btn">Library</a>
+          <a href="/auth/login" class="btn">Sign In</a>
+        </>
+      )}
+    </div>
+  </div>
+
+  {(!isOwner && !!profileUser.is_private) ? (
+    <div class="empty-state">
+      <p>{displayName} has set their library to private.</p>
+    </div>
+  ) : (
+    <div class="dash-grid" style={`grid-template-columns: repeat(${sections.length}, 1fr)`}>
+      {sections.map(({ title, albums, viewAllHref, emptyText }) => (
+        <section class="dash-section">
+          <div class="dash-section-header">
+            <h2 class="dash-title">{title}</h2>
+            <a href={viewAllHref} class="dash-view-all">View all →</a>
+          </div>
+          {albums.length === 0 ? (
+            <p class="dash-empty">{emptyText}</p>
+          ) : (
+            <div class="dash-list">
+              {albums.map(a => (
+                <a href={`${userBase}/album/${a.slug}`} class="dash-row">
+                  {a.cover_url
+                    ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
+                    : <div class="dash-cover dash-cover-empty" />}
+                  <div class="dash-info">
+                    <span class="dash-artist">{a.artist}</span>
+                    <span class="dash-album-name">
+                      {a.year && <span class="year-chip">{a.year}</span>}
+                      <span class="dash-album-text">{a.album}</span>
+                      {a.recommended === 1 && <span class="rec-star" title="Recommended"> ★</span>}
+                    </span>
+                  </div>
+                  {a.rating != null
+                    ? <span class={`dash-rating rating ${ratingClass(a.rating)}`}>{a.rating}</span>
+                    : <span class="dash-rating dash-rating-none">—</span>}
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
+    </div>
+  )}
+</Layout>
+
+<style>
+.profile-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.user-avatar    { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+
+.dash-grid {
+  display: grid;
+  gap: 24px;
+  align-items: start;
+}
+
+.dash-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.dash-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dash-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.dash-view-all { font-size: 11px; color: var(--text-muted); }
+.dash-view-all:hover { color: var(--accent-hi); }
+
+.dash-empty {
+  padding: 20px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dash-list { display: flex; flex-direction: column; }
+
+.dash-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  min-width: 0;
+}
+.dash-row:last-child { border-bottom: none; }
+.dash-row:hover { background: var(--bg-hover); }
+
+.dash-cover {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+}
+.dash-cover-empty { background: var(--bg-hover); }
+
+.dash-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+  padding-right: 10px;
+}
+
+.dash-artist {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-album-name {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dash-album-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.dash-rating {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dash-rating-none { color: var(--text-muted); font-weight: 400; }
+
+@media (max-width: 900px) {
+  .dash-grid { grid-template-columns: 1fr !important; }
+}
+</style>
+
+<script is:inline>
+  (function () {
+    var btn  = document.getElementById('nav-hamburger-btn');
+    var menu = document.getElementById('nav-hamburger-menu');
+    if (!btn || !menu) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = menu.hidden;
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#nav-hamburger')) {
+        menu.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  })();
+</script>
