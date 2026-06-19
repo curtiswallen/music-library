@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import AlbumForm from '../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
-import { generateUniqueSlug } from '../lib/utils';
+import { generateUniqueSlug, normalizeSearch } from '../lib/utils';
 import { getGenreCache } from '../lib/genre-cache';
 import { invalidateLibraryOverview } from '../lib/library-cache';
 
@@ -60,14 +60,15 @@ if (Astro.request.method === 'POST') {
     } else {
       albumSlug = await generateUniqueSlug(db, artist, album);
       const r = await db.prepare(`
-        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         mbid, albumSlug, artist, album,
         (data.get('country') as string) || '',
         data.get('year') ? parseInt(data.get('year') as string) : null,
         (data.get('cover_url') as string) || null,
         canonicalTracks,
+        normalizeSearch(`${artist} ${album}`),
       ).run();
       albumId = r.meta.last_row_id as number;
     }
@@ -81,14 +82,15 @@ if (Astro.request.method === 'POST') {
     } else {
       albumSlug = await generateUniqueSlug(db, artist, album);
       const r = await db.prepare(`
-        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         null, albumSlug, artist, album,
         (data.get('country') as string) || '',
         data.get('year') ? parseInt(data.get('year') as string) : null,
         (data.get('cover_url') as string) || null,
         canonicalTracks,
+        normalizeSearch(`${artist} ${album}`),
       ).run();
       albumId = r.meta.last_row_id as number;
     }

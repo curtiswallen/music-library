@@ -1,3 +1,16 @@
+export function normalizeSearch(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[øØ]/g, 'o')
+    .replace(/[æÆ]/g, 'ae')
+    .replace(/[œŒ]/g, 'oe')
+    .replace(/ß/g, 'ss')
+    .replace(/[ðÐ]/g, 'd')
+    .replace(/[þÞ]/g, 'th')
+    .toLowerCase();
+}
+
 export function slugify(s: string): string {
   return s
     .toLowerCase()

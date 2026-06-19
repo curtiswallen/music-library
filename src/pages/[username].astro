@@ -4,7 +4,7 @@ import Combobox from '../components/Combobox.astro';
 import LibraryTable from '../components/LibraryTable.astro';
 import { env } from 'cloudflare:workers';
 import type { LibraryEntry } from '../types';
-import { countryCode } from '../lib/utils';
+import { countryCode, normalizeSearch } from '../lib/utils';
 import { getGenreCache } from '../lib/genre-cache';
 import { getLibraryOverview } from '../lib/library-cache';
 
@@ -61,7 +61,7 @@ const safeDir     = dir === 'desc' ? 'DESC' : 'ASC';
 const clauses: string[] = isOwner ? [] : ['ua.is_hidden = 0'];
 const params:  (string | number)[] = [];
 
-if (q) { clauses.push('(a.artist LIKE ? OR a.album LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+if (q) { clauses.push('(a.artist LIKE ? OR a.album LIKE ? OR a.search_text LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${normalizeSearch(q)}%`); }
 if (country)   { clauses.push('a.country = ?');    params.push(country); }
 if (yearFrom)  { clauses.push('a.year >= ?');      params.push(Number(yearFrom)); }
 if (yearTo)    { clauses.push('a.year <= ?');      params.push(Number(yearTo)); }

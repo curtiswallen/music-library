@@ -3,7 +3,7 @@ import Layout from '../../../layouts/Layout.astro';
 import AlbumForm from '../../../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
 import type { Album, UserAlbum, Track } from '../../../types';
-import { slugify, generateUniqueSlug, countryCode } from '../../../lib/utils';
+import { slugify, generateUniqueSlug, countryCode, normalizeSearch } from '../../../lib/utils';
 import { md } from '../../../lib/markdown';
 import { getGenreCache } from '../../../lib/genre-cache';
 import { invalidateLibraryOverview } from '../../../lib/library-cache';
@@ -70,7 +70,7 @@ if (Astro.request.method === 'POST') {
   await db.prepare(`
     UPDATE albums SET
       artist = ?, album = ?, country = ?, year = ?,
-      slug = ?, cover_url = ?, mbid = ?, tracks = ?
+      slug = ?, cover_url = ?, mbid = ?, tracks = ?, search_text = ?
     WHERE id = ?
   `).bind(
     artist, albumName,
@@ -80,6 +80,7 @@ if (Astro.request.method === 'POST') {
     (data.get('cover_url') as string) || null,
     (data.get('mbid') as string) || null,
     canonicalTracks,
+    normalizeSearch(`${artist} ${albumName}`),
     existing.id,
   ).run();
 
