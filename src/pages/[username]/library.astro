@@ -228,7 +228,8 @@ if (!isOwner && !profileUser.is_private) {
         </>
       ) : (
         <>
-          <a href={`/${username}`} class="btn">Dashboard</a>
+          <a href={`/${username}`} class="btn">{username}'s Dashboard</a>
+          |
           {loggedInUser
             ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
             : <a href="/auth/login" class="btn">Sign In</a>}
