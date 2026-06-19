@@ -68,7 +68,7 @@ if (Astro.url.searchParams.get('saved') === '1') saved = true;
 <Layout title="Settings">
   <div class="page-header">
     <h1>Settings</h1>
-    <a href={`/${user.profile_url}/library`} class="btn">← Library</a>
+    <a href={`/${user.profile_url}`} class="btn">← Dashboard</a>
   </div>
 
   {saved && <p class="flash-ok">Settings saved.</p>}
