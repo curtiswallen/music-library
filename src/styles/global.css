@@ -68,6 +68,9 @@ a { color: var(--text); text-decoration: none; }
 a:hover { color: var(--text-hi); }
 
 /* ── Nav ── */
+.header-link { display: flex; }
+.breadcrumb .header-link { margin-right: 5px; }
+
 nav {
   display: flex;
   align-items: center;
@@ -87,6 +90,13 @@ nav {
 
 .user-chip {
   padding-right: 10px;
+}
+
+.profile-avatar { 
+  width: 32px; 
+  height: 32px; 
+  border-radius: 50%; 
+  object-fit: cover; 
 }
 
 /* ── Buttons ── */
@@ -791,7 +801,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 /* ── Breadcrumb ── */
 .breadcrumb {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--text-muted);

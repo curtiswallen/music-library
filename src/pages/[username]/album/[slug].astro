@@ -298,7 +298,10 @@ if (!isOwner && !profileUser.is_private) {
 <Layout title={`${album.artist} — ${album.album}`}>
   <div class="page-header">
     <div class="breadcrumb">
-      <h1><a href={`${libBase}/library`}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a></h1>
+      <h1>
+        {profileUser.avatar_url && <a href={`/${username}`} class="header-link"><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}
+        <a href={`${libBase}/library`}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a>
+      </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1>
         {artistParts.map((p, i) => (
