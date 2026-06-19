@@ -107,14 +107,13 @@ if (!isOwner && !profileUser.is_private) {
     <div style="display:flex;gap:8px;align-items:center">
       {isOwner ? (
         <>
-          {loggedInUser!.is_admin === 1 && 
-            <a href="/admin" class="btn nav-hide-mobile">Admin</a>
-            <span>|</span>
-          }  
           <a href={libBase} class="btn nav-hide-mobile">My Library</a>
           <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
           <span>|</span>
-          <a href="/settings" class="btn nav-hide-mobile" title="Settings">⚙</a>
+          {loggedInUser!.is_admin === 1 && 
+            <a href="/admin" class="btn nav-hide-mobile">Admin</a>
+          }  
+          <a href="/settings" class="btn icon-btn nav-hide-mobile" aria-label="Settings" data-tip="Settings">⚙</a>
           <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
             <button class="btn" type="submit">Sign out</button>
           </form>
@@ -137,7 +136,7 @@ if (!isOwner && !profileUser.is_private) {
       ) : loggedInUser ? (
         <>
           <a href={libBase} class="btn">{displayName}'s Library</a>
-          |
+          <span>|</span>
           <a href={`/${loggedInUser.profile_url}/`} class="btn">← My Dashboard</a>
         </>
       ) : (
