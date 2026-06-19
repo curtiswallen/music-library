@@ -85,7 +85,7 @@ function sortedSubs(subs: string[]) {
         <a href={`${libBase}/library`}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a>
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
-      <h1><span class="breadcrumb-current">{artistName} {albums[0].country && <span class="breadcrumb-tag" title={albums[0].country}>{countryCode(albums[0].country) ? countryCode(albums[0].country).toUpperCase() : albums[0].country}</span>}</span></h1>
+      <h1><span class="breadcrumb-current">{artistName} {albums[0].country && <span class="breadcrumb-tag flag-link" data-tip={albums[0].country}>{countryCode(albums[0].country) ? countryCode(albums[0].country).toUpperCase() : albums[0].country}</span>}</span></h1>
       <span class="count" style="margin-left:4px">({albums.length} album{albums.length !== 1 ? 's' : ''})</span>
     </div>
     <div style="display:flex;gap:8px">

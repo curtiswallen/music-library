@@ -307,7 +307,7 @@ if (!isOwner && !profileUser.is_private) {
         {artistParts.map((p, i) => (
           <>{i > 0 && <span class="breadcrumb-sep"> / </span>}<a href={`${libBase}/artist/${slugify(p)}`}>{p}</a></>
         ))}
-        {album.country && <span class="breadcrumb-tag" title={album.country}>{countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}</span>}
+        {album.country && <span class="breadcrumb-tag flag-link" data-tip={album.country}>{countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}</span>}
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
@@ -536,7 +536,7 @@ if (!isOwner && !profileUser.is_private) {
                       </div>
                     </td>
                     <td>{a.artist}</td>
-                    <td>{cc && <span title={a.country} class="added-cell">{cc.toUpperCase()}</span>}</td>
+                    <td>{cc && <span class="added-cell flag-link" data-tip={a.country}>{cc.toUpperCase()}</span>}</td>
                     <td class="similar-album-cell">{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
                     <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                     <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
