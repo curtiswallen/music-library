@@ -119,6 +119,7 @@ document.querySelectorAll<HTMLDivElement>('.combo').forEach(wrap => {
     dropdown.hidden = true;
     focusedIdx = -1;
     input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.blur();
   }
 
   input.addEventListener('focus', showAll);
