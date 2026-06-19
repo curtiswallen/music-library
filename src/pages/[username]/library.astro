@@ -194,7 +194,7 @@ if (!isOwner && !profileUser.is_private) {
 
   <div class="page-header">
     <div style="display:flex;align-items:center;gap:10px">
-      {profileUser.avatar_url && <img src={profileUser.avatar_url} class="profile-avatar" alt="" />}
+      {profileUser.avatar_url && <a href={`/${username}`} class="btn nav-hide-mobile"><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}
       <h1>
         {isOwner ? 'My Library' : `${displayName}'s Library`}
         {(isOwner || !profileUser.is_private) && <span class="count">({albums.length} albums)</span>}
@@ -203,9 +203,7 @@ if (!isOwner && !profileUser.is_private) {
     <div style="display:flex;gap:8px;align-items:center">
       {isOwner ? (
         <>
-          <a href={`/${username}`} class="btn nav-hide-mobile">My Dashboard</a>
           <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
-          <span>|</span>
           {loggedInUser!.is_admin === 1 && 
             <a href="/admin" class="btn nav-hide-mobile" title="Admin">Admin</a>
           }
@@ -231,8 +229,6 @@ if (!isOwner && !profileUser.is_private) {
         </>
       ) : (
         <>
-          <a href={`/${username}`} class="btn">{displayName}'s Dashboard</a>
-          <span>|</span>
           {loggedInUser
             ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
             : <a href="/auth/login" class="btn">Sign In</a>}
