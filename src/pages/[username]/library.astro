@@ -4,7 +4,7 @@ import Combobox from '../../components/Combobox.astro';
 import LibraryTable from '../../components/LibraryTable.astro';
 import { env } from 'cloudflare:workers';
 import type { LibraryEntry } from '../../types';
-import { countryCode, normalizeSearch } from '../../lib/utils';
+import { normalizeSearch } from '../../lib/utils';
 import { getGenreCache } from '../../lib/genre-cache';
 import { getLibraryOverview } from '../../lib/library-cache';
 
@@ -227,9 +227,12 @@ if (!isOwner && !profileUser.is_private) {
           </div>
         </>
       ) : (
-        loggedInUser
-          ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
-          : <a href="/auth/login" class="btn">Sign In</a>
+        <>
+          <a href={`/${username}`} class="btn">Dashboard</a>
+          {loggedInUser
+            ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
+            : <a href="/auth/login" class="btn">Sign In</a>}
+        </>
       )}
     </div>
   </div>
