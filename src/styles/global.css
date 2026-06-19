@@ -338,6 +338,7 @@ tr:hover td { background: var(--bg-hover); }
 .artist-tbl td a .col-album-year,
 .more-by-tbl td a .col-album-year,
 .similar-tbl td .col-album-year { display: none; }
+.table-wrap.similar-tbl { overflow-x: clip; overflow-y: visible; }
 .rec-star { flex-shrink: 0; }
 .col-genre { max-width: 150px; }
 .col-subgenres { max-width: 150px; }
