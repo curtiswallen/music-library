@@ -203,8 +203,10 @@ if (!isOwner && !profileUser.is_private) {
     <div style="display:flex;gap:8px;align-items:center">
       {isOwner ? (
         <>
-          {loggedInUser!.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile" title="Admin">Admin</a>}
-          |
+          {loggedInUser!.is_admin === 1 && 
+            <a href="/admin" class="btn nav-hide-mobile" title="Admin">Admin</a>
+            <span>|</span>
+          }
           <a href={`/${username}`} class="btn nav-hide-mobile">My Dashboard</a>
           <a href="/settings" class="btn nav-hide-mobile" title="Settings">⚙</a>
           <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
