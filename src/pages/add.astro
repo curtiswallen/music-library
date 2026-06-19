@@ -35,6 +35,11 @@ if (Astro.request.method === 'POST') {
   let rawTracks: Array<Record<string, unknown>> = [];
   try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
 
+  const trackSeconds = rawTracks.reduce((s, t) => {
+    const l = Number(t.length);
+    return s + (Number.isFinite(l) && l > 0 ? l : 0);
+  }, 0);
+
   const canonicalTracks = JSON.stringify(rawTracks.map(t => ({
     pos: t.pos, title: t.title, length: t.length ?? null,
   })));
@@ -105,8 +110,8 @@ if (Astro.request.method === 'POST') {
 
   await db.prepare(`
     INSERT OR IGNORE INTO user_albums
-      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, release_data, descriptors)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, release_data, descriptors, track_seconds)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
     albumId,
@@ -121,6 +126,7 @@ if (Astro.request.method === 'POST') {
     (data.get('release_title') as string) || null,
     (data.get('release_data') as string) || null,
     descriptorsJson,
+    trackSeconds,
   ).run();
 
   await db.prepare(`

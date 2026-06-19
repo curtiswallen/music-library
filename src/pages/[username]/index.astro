@@ -8,11 +8,12 @@ if (!username) return Astro.redirect('/');
 const db = env.DB;
 
 const profileUser = await db.prepare(`
-  SELECT id, username, display_name, profile_url, is_private, hide_added_at, avatar_url
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url
   FROM users WHERE profile_url = ?
 `).bind(username).first<{
   id: number; username: string; display_name: string | null;
-  profile_url: string; is_private: number; hide_added_at: number; avatar_url: string | null;
+  profile_url: string; is_private: number; hide_added_at: number;
+  timezone: string; avatar_url: string | null;
 }>();
 
 if (!profileUser) return new Response(null, { status: 404 });
@@ -29,40 +30,137 @@ type DashAlbum = {
   slug: string; artist: string; album: string; year: number | null;
   cover_url: string | null; rating: number | null; recommended: number;
 };
+type StatsRow   = { total_albums: number; rated_count: number; avg_rating: number | null; total_seconds: number };
+type HeatmapRow = { day: string; count: number; seconds: number };
 
 let recentAlbums: DashAlbum[] = [];
 let topAlbums:    DashAlbum[] = [];
 let queueAlbums:  DashAlbum[] = [];
+let stats: StatsRow = { total_albums: 0, rated_count: 0, avg_rating: null, total_seconds: 0 };
+
+type HeatmapCell  = { dateStr: string; count: number; seconds: number; tip: string; isFuture: boolean };
+type MonthBlock   = { label: string; yearMonth: string; weeks: HeatmapCell[][] };
+let heatmapWeeks: HeatmapCell[][] = [];
+let monthBlocks:  MonthBlock[] = [];
+
+// Compute UTC offset for profile owner's timezone so SQLite DATE() groups by local day.
+function tzOffsetMinutes(tz: string): number {
+  try {
+    const now = new Date();
+    const utc   = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+    return Math.round((local.getTime() - utc.getTime()) / 60000);
+  } catch { return 0; }
+}
+
+const tz       = profileUser.timezone || 'UTC';
+const offsetMin = tzOffsetMinutes(tz);
+// e.g. "+330 minutes" (India) or "-300 minutes" (US Eastern)
+const tzMod    = `${offsetMin >= 0 ? '+' : ''}${offsetMin} minutes`;
+// "today" as a date string in the profile owner's timezone
+const localToday = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
 
 if (isOwner || !profileUser.is_private) {
+  const hiddenWhere = isOwner ? '' : ' AND is_hidden = 0';
+
   const recentPromise = showRecentlyAdded
     ? db.prepare(`
         SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended
         FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
         WHERE ua.is_hidden = 0
-        ORDER BY ua.added_at DESC LIMIT 5
+        ORDER BY ua.added_at DESC LIMIT 15
       `).bind(profileUser.id).all<DashAlbum>()
     : Promise.resolve({ results: [] as DashAlbum[] });
 
-  const [recentRes, topRes, queueRes] = await Promise.all([
+  const [recentRes, topRes, queueRes, statsRes, heatmapRes] = await Promise.all([
     recentPromise,
     db.prepare(`
       SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
       WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
-      ORDER BY ua.rating DESC LIMIT 5
+      ORDER BY ua.rating DESC LIMIT 10
     `).bind(profileUser.id).all<DashAlbum>(),
     db.prepare(`
       SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
       WHERE ua.is_hidden = 0 AND ua.rating IS NULL
-      ORDER BY ua.added_at DESC LIMIT 5
+      ORDER BY ua.added_at DESC LIMIT 10
     `).bind(profileUser.id).all<DashAlbum>(),
+    db.prepare(`
+      SELECT COUNT(*) as total_albums, COUNT(rating) as rated_count,
+             ROUND(AVG(CAST(rating AS REAL)), 1) as avg_rating,
+             COALESCE(SUM(track_seconds), 0) as total_seconds
+      FROM user_albums WHERE user_id = ?${hiddenWhere}
+    `).bind(profileUser.id).first<StatsRow>(),
+    showRecentlyAdded
+      ? db.prepare(`
+          SELECT DATE(added_at, '${tzMod}') as day,
+                 COUNT(*) as count,
+                 COALESCE(SUM(track_seconds), 0) as seconds
+          FROM user_albums
+          WHERE user_id = ? AND DATE(added_at, '${tzMod}') > DATE('${localToday}', '-371 days')${hiddenWhere}
+          GROUP BY day
+        `).bind(profileUser.id).all<HeatmapRow>()
+      : Promise.resolve({ results: [] as HeatmapRow[] }),
   ]);
 
   recentAlbums = (recentRes as { results: DashAlbum[] }).results;
   topAlbums    = topRes.results;
   queueAlbums  = queueRes.results;
+  stats        = statsRes ?? stats;
+
+  // ── Build heatmap ────────────────────────────────────────────────────────────
+  if (showRecentlyAdded) {
+    const heatmapMap = new Map<string, HeatmapRow>();
+    for (const r of (heatmapRes as { results: HeatmapRow[] }).results) {
+      heatmapMap.set(r.day, r);
+    }
+
+    const todayDate = new Date(localToday + 'T00:00:00Z');
+
+    const startDate = new Date(todayDate);
+    startDate.setUTCDate(startDate.getUTCDate() - 364 - todayDate.getUTCDay());
+
+    let cur = new Date(startDate);
+    while (cur <= todayDate) {
+      const week: HeatmapCell[] = [];
+      for (let d = 0; d < 7; d++) {
+        const dateStr  = cur.toISOString().slice(0, 10);
+        const isFuture = cur > todayDate;
+        const row      = isFuture ? null : (heatmapMap.get(dateStr) ?? null);
+        const count    = row?.count ?? 0;
+        const seconds  = row?.seconds ?? 0;
+        const label = ordinal(cur.getUTCDate());
+        let tip = '';
+        if (!isFuture && count > 0) {
+          const lines = [label, `${count} album${count !== 1 ? 's' : ''}`];
+          if (seconds > 0) lines.push(fmtDuration(seconds));
+          tip = lines.join('|');
+        }
+        week.push({ dateStr, count, seconds, isFuture, tip });
+        const next = new Date(cur);
+        next.setUTCDate(next.getUTCDate() + 1);
+        cur = next;
+      }
+      heatmapWeeks.push(week);
+    }
+
+    // Group weeks by month (oldest → newest, left-to-right reading order)
+    const blockMap = new Map<string, MonthBlock>();
+    for (const week of heatmapWeeks) {
+      const d  = new Date(week[0].dateStr + 'T00:00:00Z');
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      if (!blockMap.has(ym)) {
+        blockMap.set(ym, {
+          label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }),
+          yearMonth: ym,
+          weeks: [],
+        });
+      }
+      blockMap.get(ym)!.weeks.push(week);
+    }
+    monthBlocks = [...blockMap.values()].reverse(); // newest first
+  }
 }
 
 function ratingClass(r: number | null) {
@@ -70,6 +168,23 @@ function ratingClass(r: number | null) {
   if (r >= 70) return 'rating-hi';
   if (r >= 50) return 'rating-mid';
   return 'rating-lo';
+}
+
+function ordinal(n: number): string {
+  const v = n % 100;
+  const s = (v >= 11 && v <= 13) ? 'th' : ['th','st','nd','rd'][n % 10] ?? 'th';
+  return `${n}${s}`;
+}
+
+function fmtDuration(s: number): string {
+  if (!s) return '—';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  if (d > 0) return rh > 0 ? `${d}d ${rh}h` : `${d}d`;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
 }
 
 const sections = [
@@ -89,7 +204,7 @@ const sections = [
     title: 'Queue',
     albums: queueAlbums,
     viewAllHref: `${libBase}?rated=no&sort=added&dir=desc`,
-    emptyText: 'No unrated albums.',
+    emptyText: 'Queue empty.',
   },
 ];
 
@@ -109,10 +224,10 @@ if (!isOwner && !profileUser.is_private) {
         <>
           <a href={libBase} class="btn nav-hide-mobile">My Library</a>
           <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
-          <span>|</span>
-          {loggedInUser!.is_admin === 1 && 
+          <span class="nav-sep nav-hide-mobile">|</span>
+          {loggedInUser!.is_admin === 1 &&
             <a href="/admin" class="btn nav-hide-mobile">Admin</a>
-          }  
+          }
           <a href="/settings" class="btn icon-btn nav-hide-mobile" aria-label="Settings" data-tip="Settings">⚙</a>
           <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
             <button class="btn" type="submit">Sign out</button>
@@ -136,7 +251,7 @@ if (!isOwner && !profileUser.is_private) {
       ) : loggedInUser ? (
         <>
           <a href={libBase} class="btn">{displayName}'s Library</a>
-          <span>|</span>
+          <span class="nav-sep">|</span>
           <a href={`/${loggedInUser.profile_url}/`} class="btn">← My Dashboard</a>
         </>
       ) : (
@@ -153,68 +268,226 @@ if (!isOwner && !profileUser.is_private) {
       <p>{displayName} has set their library to private.</p>
     </div>
   ) : (
-    <div class="dash-grid" style={`grid-template-columns: repeat(${sections.length}, 1fr)`}>
-      {sections.map(({ title, albums, viewAllHref, emptyText }) => (
-        <section class="dash-section">
-          <div class="dash-section-header">
-            <h2 class="dash-title">{title}</h2>
-            <a href={viewAllHref} class="dash-view-all">View all →</a>
+    <>
+    <div id="dashboard-wrapper">
+      {/* ── Activity section ──────────────────────────────────────────────── */}
+      <div class="activity-section">
+        <div class="dash-title dash-section-header">Overall Stats</div>
+        <div class="stat-cards">
+          <div class="stat-card">
+            <span class="stat-val">{stats.total_albums}</span>
+            <span class="stat-lbl">Albums</span>
           </div>
-          {albums.length === 0 ? (
-            <p class="dash-empty">{emptyText}</p>
-          ) : (
-            <div class="dash-list">
-              {albums.map(a => (
-                <a href={`${userBase}/album/${a.slug}`} class="dash-row">
-                  {a.cover_url
-                    ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
-                    : <div class="dash-cover dash-cover-empty" />}
-                  <div class="dash-info">
-                    <span class="dash-artist">{a.artist}</span>
-                    <span class="dash-album-name">
-                      {a.year && <span class="year-chip">{a.year}</span>}
-                      <span class="dash-album-text">{a.album}</span>
-                      {a.recommended === 1 && <span class="rec-star" title="Recommended"> ★</span>}
-                    </span>
-                  </div>
-                  {a.rating != null
-                    ? <span class={`dash-rating rating ${ratingClass(a.rating)}`}>{a.rating}</span>
-                    : <span class="dash-rating dash-rating-none">—</span>}
-                </a>
-              ))}
+          <div class="stat-card">
+            <span class="stat-val">{fmtDuration(stats.total_seconds)}</span>
+            <span class="stat-lbl">Listened</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-val">{stats.rated_count}</span>
+            <span class="stat-lbl">Rated</span>
+          </div>
+          {stats.avg_rating != null && (
+            <div class="stat-card">
+              <span class="stat-val">{stats.avg_rating}</span>
+              <span class="stat-lbl">Avg Rating</span>
             </div>
           )}
-        </section>
-      ))}
+        </div>
+
+        <div id="hm-tip" aria-hidden="true"></div>
+
+        {showRecentlyAdded && monthBlocks.length > 0 && (
+          <div class="dash-title dash-section-header hm-header">Monthly Heatmap</div>
+          <div class="hm-grid">
+            {monthBlocks.map(block => (
+              <div class="hm-block">
+                <div class="hm-block-label">{block.label}</div>
+                <div class="hm-dow-row" aria-hidden="true">
+                  {['S','M','T','W','T','F','S'].map(d => <span class="hm-dow">{d}</span>)}
+                </div>
+                {block.weeks.map(cells => (
+                  <div class="hm-row">
+                    {cells.map(({ dateStr, count, tip, isFuture }) => {
+                      const other = dateStr.slice(0, 7) !== block.yearMonth;
+                      return (
+                        <div
+                          class="hm-cell"
+                          style={other ? 'opacity:0;pointer-events:none' : undefined}
+                          data-v={other ? '0' : String(isFuture ? 0 : Math.min(count, 4))}
+                          data-future={!other && isFuture ? '' : undefined}
+                          data-hm={!other && !isFuture && tip ? tip : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Dashboard panels ──────────────────────────────────────────────── */}
+      <div class="dash-grid" style={`grid-template-columns: repeat(${sections.length}, 1fr)`}>
+        {sections.map(({ title, albums, viewAllHref, emptyText }) => (
+          <div class="dash-grid-wrapper">
+            <div class="dash-section-header">
+                <h2 class="dash-title">{title}</h2>
+                <a href={viewAllHref} class="dash-view-all">View all →</a>
+            </div>
+            <section class="dash-section"> 
+              {albums.length === 0 ? (
+                <p class="dash-empty">{emptyText}</p>
+              ) : (
+                <div class="dash-list">
+                  {albums.map(a => (
+                    <a href={`${userBase}/album/${a.slug}`} class="dash-row">
+                      {a.cover_url
+                        ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
+                        : <div class="dash-cover dash-cover-empty" />}
+                      <div class="dash-info">
+                        <span class="dash-artist">{a.artist}</span>
+                        <span class="dash-album-name">
+                          {a.year && <span class="year-chip">{a.year}</span>}
+                          <span class="dash-album-text">{a.album}</span>
+                          {a.recommended === 1 && <span class="rec-star" title="Recommended"> ★</span>}
+                        </span>
+                      </div>
+                      {a.rating != null
+                        ? <span class={`dash-rating rating ${ratingClass(a.rating)}`}>{a.rating}</span>
+                        : <span class="dash-rating dash-rating-none">—</span>}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        ))}
+      </div>
     </div>
+    </>
   )}
 </Layout>
 
 <style>
+#dashboard-wrapper { display: flex; flex-direction: row; gap: 28px; }
+
 .profile-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .user-avatar    { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.nav-sep        { color: var(--border); user-select: none; }
 
-.dash-grid {
-  display: grid;
-  gap: 24px;
-  align-items: start;
+/* ── Activity section ────────────────────────────────────────────────────── */
+.activity-section { margin-bottom: 28px; display: flex; flex-direction: column; }
+
+.stat-cards {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.stat-card {
+  padding: 0 18px 0 0;
+}
+.stat-val {
+  display: block;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-hi);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.stat-lbl {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin-top: 3px;
 }
 
+/* ── Heatmap ─────────────────────────────────────────────────────────────── */
+.hm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.hm-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hm-block-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-bottom: 2px;
+}
+.hm-dow-row,
+.hm-row {
+  display: flex;
+  gap: 2px;
+}
+.hm-dow {
+  width: 11px;
+  text-align: center;
+  font-size: 9px;
+  color: var(--text-muted);
+  line-height: 11px;
+}
+.hm-cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  cursor: default;
+}
+.hm-cell[data-future] { opacity: 0.25; }
+.hm-cell[data-v="1"] { background: color-mix(in srgb, var(--green) 30%, var(--bg-hover)); }
+.hm-cell[data-v="2"] { background: color-mix(in srgb, var(--green) 55%, var(--bg-hover)); }
+.hm-cell[data-v="3"] { background: color-mix(in srgb, var(--green) 80%, var(--bg-hover)); }
+.hm-cell[data-v="4"] { background: var(--green); }
+
+#hm-tip {
+  display: none;
+  position: fixed;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 7px 10px;
+  pointer-events: none;
+  z-index: 500;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+:global(#hm-tip .hmt-date)  { font-size: 12px; font-weight: 600; color: var(--text); }
+:global(#hm-tip .hmt-count) { font-size: 11px; color: var(--text-muted); }
+:global(#hm-tip .hmt-time)  { font-size: 11px; color: var(--text-muted); }
+
+/* ── Dashboard panels ────────────────────────────────────────────────────── */
+.dash-grid {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+  width: 100%;
+}
+.dash-grid-wrapper { min-width: 0; }
 .dash-section {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 3px;
   overflow: hidden;
 }
-
 .dash-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 14px 10px 0;
 }
-
 .dash-title {
   font-size: 11px;
   font-weight: 600;
@@ -222,15 +495,10 @@ if (!isOwner && !profileUser.is_private) {
   letter-spacing: 0.07em;
   color: var(--text-muted);
 }
-
 .dash-view-all { font-size: 11px; color: var(--text-muted); }
 .dash-view-all:hover { color: var(--accent-hi); }
 
-.dash-empty {
-  padding: 20px 14px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
+.dash-empty { padding: 20px 14px; font-size: 12px; color: var(--text-muted); }
 
 .dash-list { display: flex; flex-direction: column; }
 
@@ -264,7 +532,6 @@ if (!isOwner && !profileUser.is_private) {
   gap: 1px;
   padding-right: 10px;
 }
-
 .dash-artist {
   font-size: 12px;
   font-weight: 600;
@@ -273,7 +540,6 @@ if (!isOwner && !profileUser.is_private) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .dash-album-name {
   display: flex;
   align-items: center;
@@ -283,14 +549,12 @@ if (!isOwner && !profileUser.is_private) {
   min-width: 0;
   overflow: hidden;
 }
-
 .dash-album-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
-
 .dash-rating {
   flex-shrink: 0;
   font-size: 12px;
@@ -302,9 +566,43 @@ if (!isOwner && !profileUser.is_private) {
 @media (max-width: 900px) {
   .dash-grid { grid-template-columns: 1fr !important; }
 }
+@media (max-width: 640px) {
+  .stat-cards { gap: 8px; margin-bottom: 0; }
+  #dashboard-wrapper { flex-direction: column; gap: 20px; }
+  .hm-grid, .hm-header { display: none; }
+  .activity-section { margin-bottom: 0; }
+  .dash-grid { margin-bottom: 150px; }
+}
 </style>
 
 <script is:inline>
+  (function () {
+    var tip = document.getElementById('hm-tip');
+    if (tip) {
+      function positionTip(e) {
+        var x = e.clientX + 12, y = e.clientY + 12;
+        tip.style.left = x + 'px';
+        tip.style.top  = y + 'px';
+        var r = tip.getBoundingClientRect();
+        if (r.right  > window.innerWidth  - 8) tip.style.left = (e.clientX - r.width  - 8) + 'px';
+        if (r.bottom > window.innerHeight - 8) tip.style.top  = (e.clientY - r.height - 8) + 'px';
+      }
+      document.querySelectorAll('.hm-cell[data-hm]').forEach(function (cell) {
+        cell.addEventListener('mouseenter', function (e) {
+          var parts = (cell.getAttribute('data-hm') || '').split('|');
+          tip.innerHTML =
+            '<span class="hmt-date">'  + parts[0] + '</span>' +
+            (parts[1] ? '<span class="hmt-count">' + parts[1] + '</span>' : '') +
+            (parts[2] ? '<span class="hmt-time">'  + parts[2] + '</span>' : '');
+          tip.style.display = 'flex';
+          positionTip(e);
+        });
+        cell.addEventListener('mousemove', positionTip);
+        cell.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+      });
+    }
+  })();
+
   (function () {
     var btn  = document.getElementById('nav-hamburger-btn');
     var menu = document.getElementById('nav-hamburger-menu');
