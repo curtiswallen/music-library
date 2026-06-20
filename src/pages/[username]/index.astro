@@ -69,7 +69,7 @@ if (isOwner || !profileUser.is_private) {
     ? db.prepare(`
         SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at
         FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-        WHERE ua.is_hidden = 0
+        WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
         ORDER BY ua.added_at DESC LIMIT 15
       `).bind(profileUser.id).all<DashAlbum>()
     : Promise.resolve({ results: [] as DashAlbum[] });

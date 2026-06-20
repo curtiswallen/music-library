@@ -93,17 +93,20 @@ if (Astro.request.method === 'POST') {
     existing.id,
   ).run();
 
+  const newRating = data.get('rating') ? parseInt(data.get('rating') as string) : null;
+  const isFirstRating = existing.old_rating == null && newRating != null;
+
   await db.prepare(`
     UPDATE user_albums SET
       genre = ?, subgenres = ?, rating = ?, notes = ?,
       tracks_data = ?, recommended = ?, is_hidden = ?,
       release_mbid = ?, release_title = ?, release_data = ?, descriptors = ?,
-      track_seconds = ?
+      track_seconds = ?${isFirstRating ? ', added_at = CURRENT_TIMESTAMP' : ''}
     WHERE album_id = ? AND user_id = ?
   `).bind(
     (data.get('genre') as string) || '',
     subgenres,
-    data.get('rating') ? parseInt(data.get('rating') as string) : null,
+    newRating,
     (data.get('notes') as string) || '',
     tracksData,
     data.get('recommended') === 'on' ? 1 : 0,
@@ -118,7 +121,7 @@ if (Astro.request.method === 'POST') {
   ).run();
 
   const oldEffective = existing.old_rating != null ? existing.old_track_seconds : 0;
-  const newEffective = data.get('rating') ? trackSeconds : 0;
+  const newEffective = newRating != null ? trackSeconds : 0;
   if (oldEffective !== newEffective) {
     await db.prepare('UPDATE users SET total_seconds = total_seconds - ? + ? WHERE id = ?')
       .bind(oldEffective, newEffective, profileUser.id).run();
