@@ -216,44 +216,23 @@ if (!hasFilter) {
 
       {/* ── Filter form ────────────────────────────────────────────────────── */}
       <div class="filter-section">
-        <div class="dash-title dash-section-header">Filters</div>
+        <div class="dash-section-header">
+          <span class="dash-title">Filters</span>
+          {hasFilter && <a href="/" class="gf-clear" title="Clear filters">×</a>}
+        </div>
         <form method="get" action="/" id="filter-form" class="gf-form">
           <div class="gf-controls">
             <div class="gf-wrap">
               <Combobox id="fp-genre" name="genre" groupedOptions={filteredGroupedGenres}
                         value={genre} placeholder="Genre..." />
-              <div class="stat-lbl">Genre</div>
             </div>
-            <div class="gf-wrap">
-              <div class="gf-year-wrap">
-                <select name="year_from" class="gf-select gf-auto-submit">
-                  <option value="">From</option>
-                  {yearOptions.map(y => <option value={y} selected={yearFrom === String(y)}>{y}</option>)}
-                </select>
-                <span class="gf-sep">–</span>
-                <select name="year_to" class="gf-select gf-auto-submit">
-                  <option value="">To</option>
-                  {[...yearOptions].reverse().map(y => <option value={y} selected={yearTo === String(y)}>{y}</option>)}
-                </select>
-              </div>
-              <div class="stat-lbl">Year</div>
-            </div>
-            <div class="gf-wrap">
-              <select name="rating_min" class="gf-select gf-auto-submit">
-                <option value="">Any</option>
-                {[50,60,70,80,90].map(v => <option value={v} selected={ratingMin === String(v)}>{v}+</option>)}
-              </select>
-              <div class="stat-lbl">Min Rating</div>
-            </div>
-            {hasFilter && <a href="/" class="gf-clear" title="Clear filters">×</a>}
-          </div>
-
-          <div id="chips-wrapper">
+            <div id="chips-wrapper">
 
           {(availableSubgenres.length > 0 || subgenres.length > 0) && (() => {
             const all = [...new Set([...subgenres, ...availableSubgenres])].sort();
             return (
-              <div class="chips-wrapper" style="align-items: center;">
+              <div class="chips-wrapper">
+                <div class="stat-lbl">Subgenre(s)</div>
                 <div class="gf-chips">
                   {all.map(s => {
                     const on    = subgenres.includes(s);
@@ -274,7 +253,8 @@ if (!hasFilter) {
           {(availableDescriptors.length > 0 || descriptors.length > 0) && (() => {
             const all = [...new Set([...descriptors, ...availableDescriptors])].sort();
             return (
-              <div class="chips-wrapper" style="align-items: center;">
+              <div class="chips-wrapper">
+                <div class="stat-lbl">Descriptor(s)</div>
                 <div class="gf-chips">
                   {all.map(d => {
                     const on    = descriptors.includes(d);
@@ -291,6 +271,30 @@ if (!hasFilter) {
               </div>
             );
           })()}
+          </div>
+            <div id="date-rating-wrapper">
+              <div class="gf-wrap">
+                <div class="gf-year-wrap">
+                  <select name="year_from" class="gf-select gf-auto-submit">
+                    <option value="">From</option>
+                    {yearOptions.map(y => <option value={y} selected={yearFrom === String(y)}>{y}</option>)}
+                  </select>
+                  <span class="gf-sep">–</span>
+                  <select name="year_to" class="gf-select gf-auto-submit">
+                    <option value="">To</option>
+                    {[...yearOptions].reverse().map(y => <option value={y} selected={yearTo === String(y)}>{y}</option>)}
+                  </select>
+                </div>
+                <div class="stat-lbl">Year</div>
+              </div>
+              <div class="gf-wrap">
+                <select name="rating_min" class="gf-select gf-auto-submit">
+                  <option value="">Any</option>
+                  {[50,60,70,80,90].map(v => <option value={v} selected={ratingMin === String(v)}>{v}+</option>)}
+                </select>
+                <div class="stat-lbl">Rating</div>
+              </div>
+            </div>
           </div>
           
         </form>
@@ -380,12 +384,13 @@ if (!hasFilter) {
 </Layout>
 
 <style>
-#global-wrapper { display: flex; flex-direction: column; }
-#upper-wrapper { display: flex; flex-direction: row; gap: 25px; }
-#chips-wrapper { display: flex; flex-direction: column; gap: 5px; }
+#global-wrapper  { display: flex; flex-direction: row; gap: 24px; align-items: start; }
+#upper-wrapper   { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; max-width: 200px; }
+#chips-wrapper   { display: flex; flex-direction: column; gap: 5px; padding-bottom: 5px; }
+#date-rating-wrapper { display: flex; flex-direction: row; gap: 5px; width: 100%; }
 
 /* ── Stats ───────────────────────────────────────────────────────────────── */
-.activity-section { margin-bottom: 24px; }
+.activity-section { margin-bottom: 0; }
 .stat-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
 .stat-card  { padding: 0 18px 0 0; display: flex; flex-direction: column; gap: 5px; }
 .stat-val   { display: block; font-size: 22px; font-weight: 600; color: var(--text-hi); font-variant-numeric: tabular-nums; line-height: 1.2; height: 27px; }
@@ -394,12 +399,13 @@ if (!hasFilter) {
 /* ── Filter form ─────────────────────────────────────────────────────────── */
 .gf-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 
-.gf-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.gf-controls { display: flex; align-items: flex-start; gap: 5px; flex-wrap: wrap; flex-direction: column; }
 
 .gf-wrap { display: flex; flex-direction: column; gap: 5px; }
-.gf-wrap:first-child { width: 180px; }
+.gf-wrap:first-child { width: 100%; }
+#date-rating-wrapper .gf-wrap:first-child { width: 75%; }
 
-.gf-year-wrap { display: flex; align-items: center; gap: 4px; }
+.gf-year-wrap { display: flex; align-items: center; gap: 4px; width: 100%; }
 
 .gf-select {
   background: var(--bg);
@@ -413,16 +419,15 @@ if (!hasFilter) {
 }
 .gf-select:focus { outline: none; border-color: var(--accent); }
 
-.gf-year-wrap .gf-select { width: 72px; }
+.gf-year-wrap .gf-select { flex: 1; }
+.gf-wrap > .gf-select { width: 100%; }
 
 .gf-clear {
   font-size: 16px;
   line-height: 1;
   color: var(--text-muted);
   text-decoration: none;
-  padding: 4px 2px;
   border-radius: 3px;
-  align-self: flex-start;
   transition: color 0.1s;
 }
 .gf-clear:hover { color: var(--text); }
@@ -430,7 +435,7 @@ if (!hasFilter) {
 .gf-sep { font-size: 12px; color: var(--text-muted); }
 
 /* Chips (checkbox-based, auto-submit on change) */
-.chips-wrapper { display: flex; flex-direction: row; gap: 5px; }
+.chips-wrapper { display: flex; flex-direction: column; gap: 5px; }
 .gf-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 
 .gf-chip {
@@ -459,12 +464,12 @@ if (!hasFilter) {
 .gf-chip-cb { display: none; }
 
 /* ── Dashboard grid ──────────────────────────────────────────────────────── */
-.dash-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; align-items: start; }
+.dash-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; align-items: start; flex: 1; min-width: 0; }
 .dash-grid-wrapper { min-width: 0; }
 .dash-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 3px; }
 .dash-list .dash-row:first-child { border-top-left-radius: 3px; border-top-right-radius: 3px; }
 .dash-list .dash-row:last-child  { border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
-.dash-section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px 0; }
+.dash-section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 10px 0; }
 .dash-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
 .dash-empty { padding: 20px 14px; font-size: 12px; color: var(--text-muted); }
 .dash-list  { display: flex; flex-direction: column; }
@@ -508,9 +513,14 @@ if (!hasFilter) {
 .dash-rating-count { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .dash-logged-date  { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  #global-wrapper  { flex-direction: column; gap: 16px; }
+  #upper-wrapper   { width: 100%; padding-right: 0; border-right: none; max-width: 100vw; }
+  #date-rating-wrapper { flex-direction: row; gap: 12px; }
+  #date-rating-wrapper .gf-wrap:nth-child(2) { width: 25%; }
   .dash-grid { grid-template-columns: 1fr; }
   .gf-controls { gap: 6px; }
+  .gf-form { margin-bottom: 0; }
 }
 </style>
 
