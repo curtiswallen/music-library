@@ -856,7 +856,7 @@ tr[data-href] { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+  padding: 8px 8px;
   border-bottom: 1px solid var(--border);
   text-decoration: none;
   min-width: 0;
@@ -873,6 +873,7 @@ tr[data-href] { cursor: pointer; }
 .rel-tags .tag { font-size: 10px; margin: 0; }
 
 @media (max-width: 640px) {
+  .rel-row { padding: 8px 0; }
   .rel-row:hover { background: none; }
 }
 
