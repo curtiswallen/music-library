@@ -828,16 +828,14 @@ a.tag.tag-sketchy.tag-filtered { border-color: var(--red); }
 tr[data-href] { cursor: pointer; }
 
 /* ── Related sections ── */
-.related-section { 
-  margin-top: 36px; 
-  display: flex;
-  flex-direction: row;
+.related-section {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 36px;
-  flex-wrap: wrap;
+  align-items: start;
 }
-.related-section > * {
-  flex: 1 1 0%;
-}
+.related-section > * { min-width: 0; }
 .related-title {
   font-size: 11px;
   font-weight: 600;
@@ -847,6 +845,7 @@ tr[data-href] { cursor: pointer; }
   margin-bottom: 10px;
 }
 /* ── Related rows (More by / Similar albums) ── */
+.rel-list { overflow: hidden; }
 .rel-row {
   display: flex;
   align-items: center;
@@ -866,6 +865,11 @@ tr[data-href] { cursor: pointer; }
 .rel-right { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 3px; width: 220px; }
 .rel-tags { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; }
 .rel-tags .tag { font-size: 10px; margin: 0; }
+
+@media (max-width: 640px) {
+  .rel-row { padding: 8px 0; }
+  .rel-row:hover { background: none; }
+}
 
 /* ── Community stats & Also Logged By ── */
 .community-stat {
@@ -1017,7 +1021,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   z-index: 300;
 }
 @media (max-width: 640px) {
-  .track-note-cell { cursor: pointer; }
+  .track-note-cell { cursor: pointer; padding-right: 0 !important; text-align: right; }
+  .track-num { padding-left: 0 !important; text-align: left; }
 }
 .track-rating-input {
   width: 68px;
@@ -1410,7 +1415,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 /* ── Artist/related table cards on mobile ── */
 @media (max-width: 640px) {
 
-  .related-section { flex-direction: column; }
   .table-wrap { padding-bottom: 20px; }
   .rel-right { width: 110px; }
 
