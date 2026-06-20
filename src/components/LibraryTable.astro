@@ -92,7 +92,7 @@ const {
             <td>
               {a.country
                 ? <a href={buildParams({ country: a.country === currentCountry ? null : a.country })}
-                     class="flag-link"
+                     class="tip-link"
                      data-tip={a.country}
                      aria-label={a.country}>
                     <span class="added-cell">{cc ? cc.toUpperCase() : a.country}</span>

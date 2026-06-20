@@ -7,6 +7,13 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   const userId = locals.user?.id;
   if (!id || !userId) return new Response('Invalid', { status: 400 });
 
+  // Subtract this entry's duration before deleting (subquery reads the value while it still exists)
+  await env.DB.prepare(`
+    UPDATE users SET total_seconds = total_seconds
+      - (SELECT COALESCE(track_seconds, 0) FROM user_albums WHERE album_id = ? AND user_id = ?)
+    WHERE id = ?
+  `).bind(id, userId, userId).run();
+
   await env.DB.prepare('DELETE FROM user_albums WHERE album_id = ? AND user_id = ?')
     .bind(id, userId).run();
 
@@ -19,10 +26,15 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     await env.DB.prepare(`
       UPDATE albums SET
         logged_by_user_ids = (SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?),
-        all_subgenres  = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
-        all_descriptors = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]')
+        all_subgenres      = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
+        all_descriptors    = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]'),
+        genre_counts       = COALESCE((SELECT json_group_object(genre, cnt) FROM (SELECT genre, COUNT(*) as cnt FROM user_albums WHERE album_id = ? AND genre != '' GROUP BY genre)), '{}'),
+        subgenre_counts    = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
+        descriptor_counts  = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
+        avg_rating         = (SELECT AVG(rating)   FROM user_albums WHERE album_id = ? AND rating IS NOT NULL),
+        rating_count       = (SELECT COUNT(rating) FROM user_albums WHERE album_id = ? AND rating IS NOT NULL)
       WHERE id = ?
-    `).bind(id, id, id, id).run();
+    `).bind(id, id, id, id, id, id, id, id, id).run();
   }
 
   await invalidateLibraryOverview(env.GENRE_CACHE, userId);

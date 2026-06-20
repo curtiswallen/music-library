@@ -29,6 +29,7 @@ const showRecentlyAdded = isOwner || !profileUser.hide_added_at;
 type DashAlbum = {
   slug: string; artist: string; album: string; year: number | null;
   cover_url: string | null; rating: number | null; recommended: number;
+  added_at: string | null;
 };
 type StatsRow   = { total_albums: number; rated_count: number; avg_rating: number | null; total_seconds: number };
 type HeatmapRow = { day: string; count: number; seconds: number };
@@ -65,7 +66,7 @@ if (isOwner || !profileUser.is_private) {
 
   const recentPromise = showRecentlyAdded
     ? db.prepare(`
-        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended
+        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, ua.rating, ua.recommended, ua.added_at
         FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
         WHERE ua.is_hidden = 0
         ORDER BY ua.added_at DESC LIMIT 15
@@ -89,9 +90,9 @@ if (isOwner || !profileUser.is_private) {
     db.prepare(`
       SELECT COUNT(*) as total_albums, COUNT(rating) as rated_count,
              ROUND(AVG(CAST(rating AS REAL)), 1) as avg_rating,
-             COALESCE(SUM(track_seconds), 0) as total_seconds
+             (SELECT total_seconds FROM users WHERE id = ?) as total_seconds
       FROM user_albums WHERE user_id = ?${hiddenWhere}
-    `).bind(profileUser.id).first<StatsRow>(),
+    `).bind(profileUser.id, profileUser.id).first<StatsRow>(),
     showRecentlyAdded
       ? db.prepare(`
           SELECT DATE(added_at, '${tzMod}') as day,
@@ -176,6 +177,17 @@ function ordinal(n: number): string {
   return `${n}${s}`;
 }
 
+function fmtLoggedAt(dateStr: string | null, tz = 'UTC'): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, month: 'numeric', day: 'numeric', year: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d);
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+  return `${get('month')}/${get('day')}/${get('year')} ${get('hour')}:${get('minute')}`;
+}
+
 function fmtDuration(s: number): string {
   if (!s) return '—';
   const h = Math.floor(s / 3600);
@@ -193,18 +205,21 @@ const sections = [
     albums: recentAlbums,
     viewAllHref: `${libBase}?sort=added&dir=desc`,
     emptyText: 'No albums logged yet.',
+    showDate: true,
   }] : []),
   {
     title: 'Highest Rated',
     albums: topAlbums,
     viewAllHref: `${libBase}?sort=rating&dir=desc&rated=yes`,
     emptyText: 'No rated albums yet.',
+    showDate: false,
   },
   {
     title: 'Queue',
     albums: queueAlbums,
     viewAllHref: `${libBase}?rated=no&sort=added&dir=desc`,
     emptyText: 'Queue empty.',
+    showDate: false,
   },
 ];
 
@@ -276,7 +291,7 @@ if (!isOwner && !profileUser.is_private) {
           </div>
           <div class="stat-card">
             <span class="stat-val">{fmtDuration(stats.total_seconds)}</span>
-            <span class="stat-lbl">Listened</span>
+            <span class="stat-lbl">Logged</span>
           </div>
           <div class="stat-card">
             <span class="stat-val">{stats.rated_count}</span>
@@ -325,7 +340,7 @@ if (!isOwner && !profileUser.is_private) {
 
       {/* ── Dashboard panels ──────────────────────────────────────────────── */}
       <div class="dash-grid" style={`grid-template-columns: repeat(${sections.length}, 1fr)`}>
-        {sections.map(({ title, albums, viewAllHref, emptyText }) => (
+        {sections.map(({ title, albums, viewAllHref, emptyText, showDate }) => (
           <div class="dash-grid-wrapper">
             <div class="dash-section-header">
                 <h2 class="dash-title">{title}</h2>
@@ -350,8 +365,14 @@ if (!isOwner && !profileUser.is_private) {
                         </span>
                       </div>
                       {a.rating != null
-                        ? <span class={`dash-rating rating ${ratingClass(a.rating)}`}>{a.rating}</span>
-                        : <span class="dash-rating dash-rating-none">—</span>}
+                        ? <div class="dash-rating-wrap">
+                            <span class={`dash-rating rating ${ratingClass(a.rating)}`}>{a.rating}</span>
+                            {showDate && a.added_at && <span class="dash-logged-date">{fmtLoggedAt(a.added_at, profileUser.timezone || 'UTC')}</span>}
+                          </div>
+                        : <div class="dash-rating-wrap">
+                            <span class="dash-rating dash-rating-none">—</span>
+                            {showDate && a.added_at && <span class="dash-logged-date">{fmtLoggedAt(a.added_at, profileUser.timezone || 'UTC')}</span>}
+                          </div>}
                     </a>
                   ))}
                 </div>
@@ -551,13 +572,14 @@ if (!isOwner && !profileUser.is_private) {
   text-overflow: ellipsis;
   min-width: 0;
 }
+.dash-rating-wrap { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; }
 .dash-rating {
-  flex-shrink: 0;
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .dash-rating-none { color: var(--text-muted); font-weight: 400; }
+.dash-logged-date { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 @media (max-width: 900px) {
   .dash-grid { grid-template-columns: 1fr !important; }

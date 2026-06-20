@@ -15,11 +15,11 @@ const db = env.DB;
 const kv = env.GENRE_CACHE;
 
 const profileUser = await db.prepare(`
-  SELECT id, username, display_name, profile_url, is_private, hide_added_at, avatar_url
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url
   FROM users WHERE profile_url = ?
 `).bind(username).first<{
   id: number; username: string; display_name: string | null;
-  profile_url: string; is_private: number; hide_added_at: number; avatar_url: string | null;
+  profile_url: string; is_private: number; hide_added_at: number; timezone: string; avatar_url: string | null;
 }>();
 
 if (!profileUser) return new Response(null, { status: 404 });
@@ -37,8 +37,12 @@ if (Astro.request.method === 'POST') {
   const artist    = (data.getAll('artist') as string[]).map(s => s.trim()).filter(Boolean).join(' / ') || '';
   const albumName = (data.get('album') as string) || '';
 
-  const existing = await db.prepare('SELECT id FROM albums WHERE slug = ?')
-    .bind(slugParam).first<{ id: number }>();
+  const existing = await db.prepare(`
+    SELECT a.id, COALESCE(ua.track_seconds, 0) as old_track_seconds
+    FROM albums a
+    LEFT JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+    WHERE a.slug = ?
+  `).bind(profileUser.id, slugParam).first<{ id: number; old_track_seconds: number }>();
   if (!existing) return Astro.redirect(`/${profileUser.profile_url}`);
 
   const subgenres = JSON.stringify(
@@ -113,12 +117,20 @@ if (Astro.request.method === 'POST') {
     profileUser.id,
   ).run();
 
+  await db.prepare('UPDATE users SET total_seconds = total_seconds - ? + ? WHERE id = ?')
+    .bind(existing.old_track_seconds, trackSeconds, profileUser.id).run();
+
   await db.prepare(`
     UPDATE albums SET
-      all_subgenres  = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
-      all_descriptors = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]')
+      all_subgenres     = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
+      all_descriptors   = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]'),
+      genre_counts      = COALESCE((SELECT json_group_object(genre, cnt) FROM (SELECT genre, COUNT(*) as cnt FROM user_albums WHERE album_id = ? AND genre != '' GROUP BY genre)), '{}'),
+      subgenre_counts   = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
+      descriptor_counts = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
+      avg_rating        = (SELECT AVG(rating)   FROM user_albums WHERE album_id = ? AND rating IS NOT NULL),
+      rating_count      = (SELECT COUNT(rating) FROM user_albums WHERE album_id = ? AND rating IS NOT NULL)
     WHERE id = ?
-  `).bind(existing.id, existing.id, existing.id).run();
+  `).bind(existing.id, existing.id, existing.id, existing.id, existing.id, existing.id, existing.id, existing.id).run();
 
   await invalidateLibraryOverview(env.GENRE_CACHE, profileUser.id);
 
@@ -136,7 +148,7 @@ const row = await db.prepare(`
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.slug = ?
-`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string; logged_by_user_ids: string; all_subgenres: string; all_descriptors: string }>();
+`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string }>();
 
 if (!row) return new Response(null, { status: 404 });
 if (row.is_hidden && !isOwner) return new Response(null, { status: 404 });
@@ -252,9 +264,18 @@ const similar = candidates
   .sort((a, b) => b._score - a._score)
   .slice(0, 5);
 
-const addedAt = album.added_at
-  ? new Date(album.added_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-  : null;
+function fmtLoggedAt(dateStr: string | null, tz = 'UTC'): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, month: 'numeric', day: 'numeric', year: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d);
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+  return `${get('month')}/${get('day')}/${get('year')} ${get('hour')}:${get('minute')}`;
+}
+
+const addedAt = album.added_at ? fmtLoggedAt(album.added_at, profileUser.timezone || 'UTC') : null;
 
 // Only owners see the edit form — skip genre lookup for public visitors
 let genreMap: Record<string, string[]> = {};
@@ -307,7 +328,7 @@ if (!isOwner && !profileUser.is_private) {
         {artistParts.map((p, i) => (
           <>{i > 0 && <span class="breadcrumb-sep"> / </span>}<a href={`${libBase}/artist/${slugify(p)}`}>{p}</a></>
         ))}
-        {album.country && <span class="breadcrumb-tag flag-link" data-tip={album.country}>{countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}</span>}
+        {album.country && <span class="breadcrumb-tag tip-link" data-tip={album.country}>{countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}</span>}
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
@@ -536,7 +557,7 @@ if (!isOwner && !profileUser.is_private) {
                       </div>
                     </td>
                     <td>{a.artist}</td>
-                    <td>{cc && <span class="added-cell flag-link" data-tip={a.country}>{cc.toUpperCase()}</span>}</td>
+                    <td>{cc && <span class="added-cell tip-link" data-tip={a.country}>{cc.toUpperCase()}</span>}</td>
                     <td class="similar-album-cell">{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
                     <td style="color:var(--text-muted)">{a.year ?? ''}</td>
                     <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>

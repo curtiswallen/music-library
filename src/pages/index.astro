@@ -1,5 +1,539 @@
 ---
-const user = Astro.locals.user;
-if (user) return Astro.redirect(`/${user.profile_url}`);
-return Astro.redirect('/auth/login');
+import Layout from '../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+import { getGenreCache } from '../lib/genre-cache';
+import Combobox from '../components/Combobox.astro';
+
+const db           = env.DB;
+const kv           = env.GENRE_CACHE;
+const loggedInUser = Astro.locals.user;
+
+// ── Active filters ────────────────────────────────────────────────────────────
+const genre      = Astro.url.searchParams.get('genre')      ?? '';
+const subgenres  = Astro.url.searchParams.getAll('subgenre');
+const descriptors = Astro.url.searchParams.getAll('descriptor');
+const yearFrom   = Astro.url.searchParams.get('year_from')  ?? '';
+const yearTo     = Astro.url.searchParams.get('year_to')    ?? '';
+const ratingMin  = Astro.url.searchParams.get('rating_min') ?? '';
+const hasFilter  = !!(genre || subgenres.length || descriptors.length || yearFrom || yearTo || ratingMin);
+
+// ── Filter options ────────────────────────────────────────────────────────────
+const { groupedGenres } = await getGenreCache(kv, db);
+
+// ── SQL clause builders ───────────────────────────────────────────────────────
+const sharedClauses = [
+  ...(genre      ? [`ua.genre = ?`]                : []),
+  ...subgenres.map  (() => `ua.subgenres   LIKE ?`),
+  ...descriptors.map(() => `ua.descriptors LIKE ?`),
+  ...(yearFrom   ? [`a.year >= ?`]                 : []),
+  ...(yearTo     ? [`a.year <= ?`]                 : []),
+];
+const sharedParams = [
+  ...(genre      ? [genre]                          : []),
+  ...subgenres.map  (s => `%"${s}"%`),
+  ...descriptors.map(d => `%"${d}"%`),
+  ...(yearFrom   ? [Number(yearFrom)]               : []),
+  ...(yearTo     ? [Number(yearTo)]                 : []),
+];
+
+// rating_min means personal rating on recent, avg_rating on top-rated
+const recentWhere  = ['ua.is_hidden = 0', 'u.is_private = 0', 'ua.rating IS NOT NULL',
+  ...sharedClauses, ...(ratingMin ? [`ua.rating >= ?`]     : [])].join(' AND ');
+const topWhere     = ['a.rating_count > 0',
+  ...sharedClauses, ...(ratingMin ? [`a.avg_rating >= ?`]  : [])].join(' AND ');
+const recentParams = [...sharedParams, ...(ratingMin ? [Number(ratingMin)] : [])];
+const topParams    = [...sharedParams, ...(ratingMin ? [Number(ratingMin)] : [])];
+
+// Chip option queries use the full current filter — subgenres that co-exist with
+// all already-selected subgenres/descriptors are the only ones shown as clickable.
+const optWhere = [
+  `ua.is_hidden = 0`, `u.is_private = 0`, `ua.rating IS NOT NULL`, `value != ''`,
+  ...(genre      ? [`ua.genre = ?`]           : []),
+  ...subgenres.map  (() => `ua.subgenres   LIKE ?`),
+  ...descriptors.map(() => `ua.descriptors LIKE ?`),
+  ...(yearFrom   ? [`a.year >= ?`]            : []),
+  ...(yearTo     ? [`a.year <= ?`]            : []),
+  ...(ratingMin  ? [`ua.rating >= ?`]         : []),
+].join(' AND ');
+const optParams = [
+  ...(genre      ? [genre]                    : []),
+  ...subgenres.map  (s => `%"${s}"%`),
+  ...descriptors.map(d => `%"${d}"%`),
+  ...(yearFrom   ? [Number(yearFrom)]         : []),
+  ...(yearTo     ? [Number(yearTo)]           : []),
+  ...(ratingMin  ? [Number(ratingMin)]        : []),
+];
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+type RecentEntry = {
+  slug: string; artist: string; album: string; year: number | null;
+  cover_url: string | null; rating: number | null; recommended: number;
+  added_at: string | null;
+  user_profile_url: string; user_name: string; user_avatar_url: string | null;
+};
+type TopEntry = {
+  slug: string; artist: string; album: string; year: number | null;
+  cover_url: string | null; avg_rating: number; rating_count: number;
+  user_profile_url: string;
+};
+type GlobalStats = { total_albums: number; total_users: number; total_seconds: number; public_genres: string };
+
+// ── Queries ───────────────────────────────────────────────────────────────────
+const optQuery = (table: 'subgenres' | 'descriptors', where: string) => db.prepare(`
+  SELECT DISTINCT value
+  FROM user_albums ua
+  JOIN albums a ON a.id = ua.album_id
+  JOIN users u ON u.id = ua.user_id AND u.is_private = 0,
+  json_each(ua.${table})
+  WHERE ${where}
+  ORDER BY value
+`);
+const emptyOpts = Promise.resolve({ results: [] as { value: string }[] });
+
+const [recentRes, topRes, statsRes, subgRes, descRes] = await Promise.all([
+  db.prepare(`
+    SELECT a.slug, a.artist, a.album, a.year, a.cover_url,
+           ua.rating, ua.recommended, ua.added_at,
+           u.profile_url as user_profile_url,
+           COALESCE(u.display_name, u.username) as user_name,
+           u.avatar_url as user_avatar_url
+    FROM user_albums ua
+    JOIN albums a ON a.id = ua.album_id
+    JOIN users u ON u.id = ua.user_id
+    WHERE ${recentWhere}
+    ORDER BY ua.added_at DESC LIMIT 15
+  `).bind(...recentParams).all<RecentEntry>(),
+
+  db.prepare(`
+    SELECT a.slug, a.artist, a.album, a.year, a.cover_url,
+           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count,
+           MIN(u.profile_url) as user_profile_url
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id
+    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+    WHERE ${topWhere}
+    GROUP BY a.id
+    ORDER BY a.avg_rating DESC, a.rating_count DESC LIMIT 15
+  `).bind(...topParams).all<TopEntry>(),
+
+  db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM albums) as total_albums,
+      (SELECT COUNT(*) FROM users WHERE is_private = 0) as total_users,
+      (SELECT COALESCE(SUM(total_seconds), 0) FROM users WHERE is_private = 0) as total_seconds,
+      (SELECT json_group_array(DISTINCT key)
+       FROM albums, json_each(genre_counts)
+       WHERE genre_counts != '{}') as public_genres
+  `).first<GlobalStats>(),
+
+  genre ? optQuery('subgenres',   optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
+  genre ? optQuery('descriptors', optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
+]);
+
+const recentAlbums        = recentRes.results;
+const topAlbums           = topRes.results;
+const stats               = statsRes ?? { total_albums: 0, total_users: 0, total_seconds: 0, public_genres: '[]' };
+const availableSubgenres  = subgRes.results.map(r => r.value);
+const availableDescriptors = descRes.results.map(r => r.value);
+
+const pubGenreSet = new Set(JSON.parse(stats.public_genres ?? '[]') as string[]);
+const filteredGroupedGenres = groupedGenres
+  .map(g => ({ ...g, options: g.options.filter(o => pubGenreSet.has(o)) }))
+  .filter(g => g.options.length > 0);
+
+function fmtLoggedAt(dateStr: string | null, tz = 'UTC'): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, month: 'numeric', day: 'numeric', year: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(d);
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? '';
+  return `${get('month')}/${get('day')}/${get('year')} ${get('hour')}:${get('minute')}`;
+}
+
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 70) return 'rating-hi';
+  if (r >= 50) return 'rating-mid';
+  return 'rating-lo';
+}
+function fmtDuration(s: number): string {
+  if (!s) return '—';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  const d = Math.floor(h / 24), rh = h % 24;
+  if (d > 0) return rh > 0 ? `${d}d ${rh}h` : `${d}d`;
+  if (h > 0) return m  > 0 ? `${h}h ${m}m`  : `${h}h`;
+  return `${m}m`;
+}
+
+const currentYear = new Date().getFullYear();
+const yearOptions: number[] = [];
+for (let y = 1950; y <= currentYear; y++) yearOptions.push(y);
+
+if (!hasFilter) {
+  Astro.response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=3600');
+}
 ---
+
+<Layout title="Music Library">
+  <div class="page-header">
+    <h1>Music Library</h1>
+    <div style="display:flex;gap:8px;align-items:center">
+      {loggedInUser ? (
+        <>
+          <a href={`/${loggedInUser.profile_url}`} class="btn">My Dashboard</a>
+          {loggedInUser.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile">Admin</a>}
+        </>
+      ) : (
+        <a href="/auth/login" class="btn btn-primary">Sign In</a>
+      )}
+    </div>
+  </div>
+
+  <div id="global-wrapper">
+
+    <div id="upper-wrapper">
+
+      {/* ── Stats ──────────────────────────────────────────────────────────── */}
+      <div class="activity-section">
+        <div class="dash-title dash-section-header">Community Stats</div>
+        <div class="stat-cards">
+          <div class="stat-card">
+            <span class="stat-val">{stats.total_albums}</span>
+            <span class="stat-lbl">Albums</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-val">{stats.total_users}</span>
+            <span class="stat-lbl">Members</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-val">{fmtDuration(stats.total_seconds)}</span>
+            <span class="stat-lbl">Logged</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filter form ────────────────────────────────────────────────────── */}
+      <div class="filter-section">
+        <div class="dash-title dash-section-header">Filters</div>
+        <form method="get" action="/" id="filter-form" class="gf-form">
+          <div class="gf-controls">
+            <div class="gf-wrap">
+              <Combobox id="fp-genre" name="genre" groupedOptions={filteredGroupedGenres}
+                        value={genre} placeholder="Genre..." />
+              <div class="stat-lbl">Genre</div>
+            </div>
+            <div class="gf-wrap">
+              <div class="gf-year-wrap">
+                <select name="year_from" class="gf-select gf-auto-submit">
+                  <option value="">From</option>
+                  {yearOptions.map(y => <option value={y} selected={yearFrom === String(y)}>{y}</option>)}
+                </select>
+                <span class="gf-sep">–</span>
+                <select name="year_to" class="gf-select gf-auto-submit">
+                  <option value="">To</option>
+                  {[...yearOptions].reverse().map(y => <option value={y} selected={yearTo === String(y)}>{y}</option>)}
+                </select>
+              </div>
+              <div class="stat-lbl">Year</div>
+            </div>
+            <div class="gf-wrap">
+              <select name="rating_min" class="gf-select gf-auto-submit">
+                <option value="">Any</option>
+                {[50,60,70,80,90].map(v => <option value={v} selected={ratingMin === String(v)}>{v}+</option>)}
+              </select>
+              <div class="stat-lbl">Min Rating</div>
+            </div>
+            {hasFilter && <a href="/" class="gf-clear" title="Clear filters">×</a>}
+          </div>
+
+          <div id="chips-wrapper">
+
+          {(availableSubgenres.length > 0 || subgenres.length > 0) && (() => {
+            const all = [...new Set([...subgenres, ...availableSubgenres])].sort();
+            return (
+              <div class="chips-wrapper" style="align-items: center;">
+                <div class="gf-chips">
+                  {all.map(s => {
+                    const on    = subgenres.includes(s);
+                    const avail = availableSubgenres.includes(s);
+                    return (
+                      <label class={`gf-chip${on ? ' gf-chip-on' : ''}${on && !avail ? ' gf-chip-stale' : ''}`}>
+                        <input type="checkbox" name="subgenre" value={s}
+                              checked={on} class="gf-chip-cb" />
+                        {s}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {(availableDescriptors.length > 0 || descriptors.length > 0) && (() => {
+            const all = [...new Set([...descriptors, ...availableDescriptors])].sort();
+            return (
+              <div class="chips-wrapper" style="align-items: center;">
+                <div class="gf-chips">
+                  {all.map(d => {
+                    const on    = descriptors.includes(d);
+                    const avail = availableDescriptors.includes(d);
+                    return (
+                      <label class={`gf-chip${on ? ' gf-chip-on' : ''}${on && !avail ? ' gf-chip-stale' : ''} desc`}>
+                        <input type="checkbox" name="descriptor" value={d}
+                              checked={on} class="gf-chip-cb" />
+                        {d}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          </div>
+          
+        </form>
+      </div>
+
+    </div>
+
+    {/* ── Tables ─────────────────────────────────────────────────────────── */}
+    <div class="dash-grid">
+      <div class="dash-grid-wrapper">
+        <div class="dash-section-header">
+          <h2 class="dash-title">Recently Logged</h2>
+        </div>
+        <section class="dash-section">
+          {recentAlbums.length === 0 ? (
+            <p class="dash-empty">No albums logged yet.</p>
+          ) : (
+            <div class="dash-list">
+              {recentAlbums.map(a => (
+                <div class="dash-row">
+                  {a.cover_url
+                    ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
+                    : <div class="dash-cover dash-cover-empty" />}
+                  <div class="dash-info">
+                    <span class="dash-artist">{a.artist}</span>
+                    <span class="dash-album-name">
+                      {a.year && <span class="year-chip">{a.year}</span>}
+                      <span class="dash-album-text">{a.album}</span>
+                      {a.recommended === 1 && <span class="rec-star"> ★</span>}
+                    </span>
+                  </div>
+                  
+                  <div class="dash-rating-wrap">
+                    <span class={`dash-rating rating ${ratingClass(a.rating)}`}>{a.rating}</span>
+                    {a.added_at && <span class="dash-logged-date">{fmtLoggedAt(a.added_at, loggedInUser?.timezone ?? 'UTC')}</span>}
+                  </div>
+                  <a href={`/${a.user_profile_url}`}
+                     class="dash-user-avatar tip-link"
+                     data-tip={a.user_name}>
+                    {a.user_avatar_url
+                      ? <img src={a.user_avatar_url} class="user-avatar-sm" alt="" />
+                      : <div class="user-avatar-sm user-avatar-init">{a.user_name[0].toUpperCase()}</div>}
+                  </a>
+                  <a href={`/${a.user_profile_url}/album/${a.slug}`}
+                     class="dash-row-link"
+                     aria-label={`${a.artist} – ${a.album}`} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div class="dash-grid-wrapper">
+        <div class="dash-section-header">
+          <h2 class="dash-title">Highest Rated</h2>
+        </div>
+        <section class="dash-section">
+          {topAlbums.length === 0 ? (
+            <p class="dash-empty">No rated albums yet.</p>
+          ) : (
+            <div class="dash-list">
+              {topAlbums.map(a => (
+                <a href={`/${a.user_profile_url}/album/${a.slug}`} class="dash-row">
+                  {a.cover_url
+                    ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
+                    : <div class="dash-cover dash-cover-empty" />}
+                  <div class="dash-info">
+                    <span class="dash-artist">{a.artist}</span>
+                    <span class="dash-album-name">
+                      {a.year && <span class="year-chip">{a.year}</span>}
+                      <span class="dash-album-text">{a.album}</span>
+                    </span>
+                  </div>
+                  <div class="dash-rating-wrap">
+                    <span class={`dash-rating rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating.toFixed(1)}</span>
+                    <span class="dash-rating-count">{a.rating_count}×</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<style>
+#global-wrapper { display: flex; flex-direction: column; }
+#upper-wrapper { display: flex; flex-direction: row; gap: 25px; }
+#chips-wrapper { display: flex; flex-direction: column; gap: 5px; }
+
+/* ── Stats ───────────────────────────────────────────────────────────────── */
+.activity-section { margin-bottom: 24px; }
+.stat-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.stat-card  { padding: 0 18px 0 0; display: flex; flex-direction: column; gap: 5px; }
+.stat-val   { display: block; font-size: 22px; font-weight: 600; color: var(--text-hi); font-variant-numeric: tabular-nums; line-height: 1.2; height: 27px; }
+.stat-lbl   { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-top: 3px; }
+
+/* ── Filter form ─────────────────────────────────────────────────────────── */
+.gf-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+
+.gf-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+
+.gf-wrap { display: flex; flex-direction: column; gap: 5px; }
+.gf-wrap:first-child { width: 180px; }
+
+.gf-year-wrap { display: flex; align-items: center; gap: 4px; }
+
+.gf-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.gf-select:focus { outline: none; border-color: var(--accent); }
+
+.gf-year-wrap .gf-select { width: 72px; }
+
+.gf-clear {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 4px 2px;
+  border-radius: 3px;
+  align-self: flex-start;
+  transition: color 0.1s;
+}
+.gf-clear:hover { color: var(--text); }
+
+.gf-sep { font-size: 12px; color: var(--text-muted); }
+
+/* Chips (checkbox-based, auto-submit on change) */
+.chips-wrapper { display: flex; flex-direction: row; gap: 5px; }
+.gf-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.gf-chip {
+  display: inline-block;
+  align-items: center;
+  padding: 2px 6px;
+  margin: 1px 2px 1px 0;
+  height: 20px;
+  border-radius: 3px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.1s, color 0.1s;
+  letter-spacing: 0;
+}
+.desc { color: var(--accent-hi); }
+.gf-chip:hover { border-color: var(--border-hover); color: var(--text); }
+.desc:hover { color: var(--accent-hi); }
+.gf-chip-on { border-color: var(--accent); color: var(--text-hi); background: var(--bg-card); }
+.gf-chip-on:hover { border-color: var(--accent-hi); color: var(--text); }
+.gf-chip-stale { opacity: 0.45; }
+
+.gf-chip-cb { display: none; }
+
+/* ── Dashboard grid ──────────────────────────────────────────────────────── */
+.dash-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; align-items: start; }
+.dash-grid-wrapper { min-width: 0; }
+.dash-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 3px; }
+.dash-list .dash-row:first-child { border-top-left-radius: 3px; border-top-right-radius: 3px; }
+.dash-list .dash-row:last-child  { border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
+.dash-section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px 0; }
+.dash-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+.dash-empty { padding: 20px 14px; font-size: 12px; color: var(--text-muted); }
+.dash-list  { display: flex; flex-direction: column; }
+
+/* ── Row ─────────────────────────────────────────────────────────────────── */
+.dash-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  min-width: 0;
+  text-decoration: none;
+}
+.dash-row:last-child { border-bottom: none; }
+.dash-row:hover { background: var(--bg-hover); }
+.dash-row-link { position: absolute; inset: 0; z-index: 1; }
+
+.dash-cover { width: 36px; height: 36px; flex-shrink: 0; object-fit: cover; border-radius: 2px; border: 1px solid var(--border); }
+.dash-cover-empty { background: var(--bg-hover); }
+.dash-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; padding-right: 6px; }
+.dash-artist     { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-album-name { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; }
+.dash-album-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+.dash-user-avatar { position: relative; z-index: 2; flex-shrink: 0; border-radius: 50%; padding-left: 5px;}
+.user-avatar-sm {
+  width: 22px; height: 22px; border-radius: 50%;
+  object-fit: cover; display: block; border: 1px solid var(--border);
+}
+.user-avatar-init {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--bg-hover); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600; color: var(--text-muted);
+}
+.dash-rating { position: relative; z-index: 2; flex-shrink: 0; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+.dash-rating-wrap  { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; }
+.dash-rating-count { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.dash-logged-date  { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .dash-grid { grid-template-columns: 1fr; }
+  .gf-controls { gap: 6px; }
+}
+</style>
+
+<script is:inline>
+  (function () {
+    var form = document.getElementById('filter-form');
+    if (!form) return;
+
+    // Genre combobox fires 'change' on the text input when an option is selected
+    var genreInput = form.querySelector('.combo-input');
+    if (genreInput) {
+      genreInput.addEventListener('change', function () { form.submit(); });
+      // Enter after the dropdown closes (e.g. typed + Enter with no nav): submit
+      genreInput.addEventListener('keyup', function (e) {
+        if (e.key !== 'Enter') return;
+        var dropdown = this.closest('.combo') && this.closest('.combo').querySelector('.combo-dropdown');
+        if (dropdown && dropdown.hidden) form.submit();
+      });
+    }
+
+    // Year/rating selects and subgenre/descriptor chips: auto-submit on change
+    form.querySelectorAll('.gf-auto-submit, .gf-chip-cb').forEach(function (el) {
+      el.addEventListener('change', function () { form.submit(); });
+    });
+  })();
+</script>

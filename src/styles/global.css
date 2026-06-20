@@ -1502,9 +1502,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 
 /* ── Flag link (country filter chip with tooltip) ── */
-.flag-link { text-decoration: none; display: inline-flex; align-items: center; border-radius: 3px; transition: opacity 0.15s; position: relative; }
-.flag-link:hover { opacity: 1; }
-.flag-link::after {
+.tip-link { text-decoration: none; display: inline-flex; align-items: center; border-radius: 3px; transition: opacity 0.15s; position: relative; }
+.tip-link:hover { opacity: 1; }
+.tip-link::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 5px);
@@ -1522,4 +1522,4 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   transition: opacity 0.1s;
   z-index: 99;
 }
-.flag-link:hover::after { opacity: 1; }
+.tip-link:hover::after { opacity: 1; }

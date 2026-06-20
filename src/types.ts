@@ -29,6 +29,14 @@ export interface Album {
   year: number | null;
   cover_url: string | null;
   tracks: string;     // JSON: CanonicalTrack[] (may also have legacy full-Track data pre-setup)
+  logged_by_user_ids: string;  // JSON: number[]
+  all_subgenres: string;       // JSON: string[] — union of all users' subgenres
+  all_descriptors: string;     // JSON: string[] — union of all users' descriptors
+  genre_counts: string;        // JSON: Record<string, number>
+  subgenre_counts: string;     // JSON: Record<string, number>
+  descriptor_counts: string;   // JSON: Record<string, number>
+  avg_rating: number | null;
+  rating_count: number;
   created_at: string;
 }
 
