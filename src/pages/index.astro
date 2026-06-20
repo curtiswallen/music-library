@@ -10,12 +10,13 @@ const loggedInUser = Astro.locals.user;
 
 // ── Active filters ────────────────────────────────────────────────────────────
 const genre      = Astro.url.searchParams.get('genre')      ?? '';
+const country    = Astro.url.searchParams.get('country')    ?? '';
 const subgenres  = Astro.url.searchParams.getAll('subgenre');
 const descriptors = Astro.url.searchParams.getAll('descriptor');
 const yearFrom   = Astro.url.searchParams.get('year_from')  ?? '';
 const yearTo     = Astro.url.searchParams.get('year_to')    ?? '';
 const ratingMin  = Astro.url.searchParams.get('rating_min') ?? '';
-const hasFilter  = !!(genre || subgenres.length || descriptors.length || yearFrom || yearTo || ratingMin);
+const hasFilter  = !!(genre || country || subgenres.length || descriptors.length || yearFrom || yearTo || ratingMin);
 
 // ── Filter options ────────────────────────────────────────────────────────────
 const { groupedGenres } = await getGenreCache(kv, db);
@@ -23,6 +24,7 @@ const { groupedGenres } = await getGenreCache(kv, db);
 // ── SQL clause builders ───────────────────────────────────────────────────────
 const sharedClauses = [
   ...(genre      ? [`ua.genre = ?`]                : []),
+  ...(country    ? [`a.country = ?`]               : []),
   ...subgenres.map  (() => `ua.subgenres   LIKE ?`),
   ...descriptors.map(() => `ua.descriptors LIKE ?`),
   ...(yearFrom   ? [`a.year >= ?`]                 : []),
@@ -30,6 +32,7 @@ const sharedClauses = [
 ];
 const sharedParams = [
   ...(genre      ? [genre]                          : []),
+  ...(country    ? [country]                        : []),
   ...subgenres.map  (s => `%"${s}"%`),
   ...descriptors.map(d => `%"${d}"%`),
   ...(yearFrom   ? [Number(yearFrom)]               : []),
@@ -49,6 +52,7 @@ const topParams    = [...sharedParams, ...(ratingMin ? [Number(ratingMin)] : [])
 const optWhere = [
   `ua.is_hidden = 0`, `u.is_private = 0`, `ua.rating IS NOT NULL`, `value != ''`,
   ...(genre      ? [`ua.genre = ?`]           : []),
+  ...(country    ? [`a.country = ?`]          : []),
   ...subgenres.map  (() => `ua.subgenres   LIKE ?`),
   ...descriptors.map(() => `ua.descriptors LIKE ?`),
   ...(yearFrom   ? [`a.year >= ?`]            : []),
@@ -57,6 +61,7 @@ const optWhere = [
 ].join(' AND ');
 const optParams = [
   ...(genre      ? [genre]                    : []),
+  ...(country    ? [country]                  : []),
   ...subgenres.map  (s => `%"${s}"%`),
   ...descriptors.map(d => `%"${d}"%`),
   ...(yearFrom   ? [Number(yearFrom)]         : []),
@@ -77,6 +82,13 @@ type TopEntry = {
   user_profile_url: string;
 };
 type GlobalStats = { total_albums: number; total_users: number; total_seconds: number; public_genres: string };
+type FeaturedAlbum = {
+  slug: string; artist: string; album: string; year: number | null;
+  country: string | null; cover_url: string | null;
+  avg_rating: number | null; rating_count: number;
+  genre_counts: string; all_subgenres: string; all_descriptors: string;
+  user_profile_url: string;
+};
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 const optQuery = (table: 'subgenres' | 'descriptors', where: string) => db.prepare(`
@@ -90,7 +102,7 @@ const optQuery = (table: 'subgenres' | 'descriptors', where: string) => db.prepa
 `);
 const emptyOpts = Promise.resolve({ results: [] as { value: string }[] });
 
-const [recentRes, topRes, statsRes, subgRes, descRes] = await Promise.all([
+const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes] = await Promise.all([
   db.prepare(`
     SELECT a.slug, a.artist, a.album, a.year, a.cover_url,
            ua.rating, ua.recommended, ua.added_at,
@@ -128,6 +140,30 @@ const [recentRes, topRes, statsRes, subgRes, descRes] = await Promise.all([
 
   genre ? optQuery('subgenres',   optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
   genre ? optQuery('descriptors', optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
+
+  db.prepare(`
+    SELECT a.slug, a.artist, a.album, a.year, a.country, a.cover_url,
+           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count,
+           a.genre_counts, a.all_subgenres, a.all_descriptors,
+           MIN(u.profile_url) as user_profile_url
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id
+    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+    WHERE a.id = COALESCE(
+      (SELECT id FROM albums WHERE id >= ABS(RANDOM()) % (SELECT MAX(id) FROM albums) + 1 AND rating_count > 0 AND all_subgenres NOT LIKE '%"sketchy"%' LIMIT 1),
+      (SELECT id FROM albums WHERE rating_count > 0 AND all_subgenres NOT LIKE '%"sketchy"%' LIMIT 1)
+    )
+    GROUP BY a.id
+  `).first<FeaturedAlbum>(),
+
+  db.prepare(`
+    SELECT DISTINCT a.country
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id
+    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+    WHERE a.country IS NOT NULL AND a.country != '' AND ua.is_hidden = 0 AND ua.rating IS NOT NULL
+    ORDER BY a.country
+  `).all<{ country: string }>(),
 ]);
 
 const recentAlbums        = recentRes.results;
@@ -135,6 +171,14 @@ const topAlbums           = topRes.results;
 const stats               = statsRes ?? { total_albums: 0, total_users: 0, total_seconds: 0, public_genres: '[]' };
 const availableSubgenres  = subgRes.results.map(r => r.value);
 const availableDescriptors = descRes.results.map(r => r.value);
+
+const featured = featuredRes ?? null;
+const featuredGenres: string[]      = featured ? Object.entries(JSON.parse(featured.genre_counts  || '{}')).sort((a,b) => (b[1] as number) - (a[1] as number)).map(([g]) => g) : [];
+const featuredSubgenres: string[]   = featured ? JSON.parse(featured.all_subgenres  || '[]') : [];
+const featuredDescriptors: string[] = featured ? JSON.parse(featured.all_descriptors || '[]') : [];
+
+const countryList    = countriesRes.results.map(r => r.country);
+const groupedCountries = countryList.length > 0 ? [{ group: '', options: countryList }] : [];
 
 const pubGenreSet = new Set(JSON.parse(stats.public_genres ?? '[]') as string[]);
 const filteredGroupedGenres = groupedGenres
@@ -195,105 +239,164 @@ if (!hasFilter) {
 
     <div id="upper-wrapper">
 
-      {/* ── Stats ──────────────────────────────────────────────────────────── */}
-      <div class="activity-section">
-        <div class="dash-title dash-section-header">Community Stats</div>
-        <div class="stat-cards">
-          <div class="stat-card">
-            <span class="stat-val">{stats.total_albums}</span>
-            <span class="stat-lbl">Albums</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-val">{stats.total_users}</span>
-            <span class="stat-lbl">Members</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-val">{fmtDuration(stats.total_seconds)}</span>
-            <span class="stat-lbl">Logged</span>
+      {/* ── Album Spotlight ────────────────────────────────────────────────── */}
+      {featured && (
+        <div class="album-spotlight" id="album-spotlight">
+          <div class="dash-title dash-section-header">Random Album</div>
+
+          <a href={`/${featured.user_profile_url}/album/${featured.slug}`} class="spotlight-card">
+            <div class="spotlight-cover-wrap">
+              {featured.cover_url
+                ? <img src={featured.cover_url} class="spotlight-cover" alt="" />
+                : <div class="spotlight-cover-empty" />}
+            </div>
+            <div class="spotlight-data-wrap">
+              <div class="spotlight-body">
+                <div class="spotlight-artist">{featured.artist}</div>
+                <div class="spotlight-album">{featured.album}</div>
+                {(featured.year || featured.country) && (
+                  <div class="spotlight-meta">
+                    {featured.year && <span>{featured.year}</span>}
+                    {featured.year && featured.country && <span class="spotlight-sep">·</span>}
+                    {featured.country && <span>{featured.country}</span>}
+                  </div>
+                )}
+                {featuredGenres.length > 0 && (
+                  <>
+                    {featuredGenres.map(g => <span class="spotlight-genre">{g}</span>)}
+                  </>
+                )}  
+              </div>
+              <div class="spotlight-details">
+                {featured.avg_rating != null && (
+                  <div class="spotlight-rating">
+                    <span class={`spotlight-score rating ${ratingClass(featured.avg_rating)}`}>{featured.avg_rating.toFixed(1)}</span>
+                    <span class="spotlight-count">{featured.rating_count}×</span>
+                  </div>
+                )}
+                {featuredSubgenres.length > 0 && (
+                  <div class="spotlight-chips">
+                    {featuredSubgenres.slice(0, 6).map(s => <span class="spotlight-chip">{s}</span>)}
+                  </div>
+                )}
+                {featuredDescriptors.length > 0 && (
+                  <div class="spotlight-chips">
+                    {featuredDescriptors.slice(0, 6).map(d => <span class="spotlight-chip spotlight-chip-desc">{d}</span>)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </a>
+
+        </div>
+      )}
+
+      <div id="stats-filters-wrapper">
+        {/* ── Stats ──────────────────────────────────────────────────────────── */}
+        <div class="activity-section">
+          <div class="dash-title dash-section-header">Community Stats</div>
+          <div class="stat-cards">
+            <div class="stat-card">
+              <span class="stat-val">{stats.total_albums}</span>
+              <span class="stat-lbl">Albums</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val">{stats.total_users}</span>
+              <span class="stat-lbl">Members</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val">{fmtDuration(stats.total_seconds)}</span>
+              <span class="stat-lbl">Logged</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* ── Filter form ────────────────────────────────────────────────────── */}
-      <div class="filter-section">
-        <div class="dash-title dash-section-header">Filters</div>
-        <form method="get" action="/" id="filter-form" class="gf-form">
-          <div class="gf-controls">
-            <div class="gf-wrap">
-              <Combobox id="fp-genre" name="genre" groupedOptions={filteredGroupedGenres}
-                        value={genre} placeholder="Genre..." />
-              <div class="stat-lbl">Genre</div>
-            </div>
-            <div class="gf-wrap">
-              <div class="gf-year-wrap">
-                <select name="year_from" class="gf-select gf-auto-submit">
-                  <option value="">From</option>
-                  {yearOptions.map(y => <option value={y} selected={yearFrom === String(y)}>{y}</option>)}
-                </select>
-                <span class="gf-sep">–</span>
-                <select name="year_to" class="gf-select gf-auto-submit">
-                  <option value="">To</option>
-                  {[...yearOptions].reverse().map(y => <option value={y} selected={yearTo === String(y)}>{y}</option>)}
-                </select>
+        {/* ── Filter form ────────────────────────────────────────────────────── */}
+        <div class="filter-section">
+          <div class="dash-title dash-section-header">Filters</div>
+          <form method="get" action="/" id="filter-form" class="gf-form">
+            <div class="gf-controls">
+              <div class="gf-wrap">
+                <Combobox id="fp-genre" name="genre" groupedOptions={filteredGroupedGenres}
+                          value={genre} placeholder="Genre..." />
+                <div class="stat-lbl">Genre</div>
               </div>
-              <div class="stat-lbl">Year</div>
-            </div>
-            <div class="gf-wrap">
-              <select name="rating_min" class="gf-select gf-auto-submit">
-                <option value="">Any</option>
-                {[50,60,70,80,90].map(v => <option value={v} selected={ratingMin === String(v)}>{v}+</option>)}
-              </select>
-              <div class="stat-lbl">Min Rating</div>
-            </div>
-            {hasFilter && <a href="/" class="gf-clear" title="Clear filters">×</a>}
-          </div>
-
-          <div id="chips-wrapper">
-
-          {(availableSubgenres.length > 0 || subgenres.length > 0) && (() => {
-            const all = [...new Set([...subgenres, ...availableSubgenres])].sort();
-            return (
-              <div class="chips-wrapper" style="align-items: center;">
-                <div class="gf-chips">
-                  {all.map(s => {
-                    const on    = subgenres.includes(s);
-                    const avail = availableSubgenres.includes(s);
-                    return (
-                      <label class={`gf-chip${on ? ' gf-chip-on' : ''}${on && !avail ? ' gf-chip-stale' : ''}`}>
-                        <input type="checkbox" name="subgenre" value={s}
-                              checked={on} class="gf-chip-cb" />
-                        {s}
-                      </label>
-                    );
-                  })}
+              <div class="gf-wrap gf-country">
+                <Combobox id="fp-country" name="country" groupedOptions={groupedCountries}
+                          value={country} placeholder="Country..." />
+                <div class="stat-lbl">Country</div>
+              </div>
+              <div class="gf-wrap">
+                <div class="gf-year-wrap">
+                  <select name="year_from" class="gf-select gf-auto-submit">
+                    <option value="">From</option>
+                    {yearOptions.map(y => <option value={y} selected={yearFrom === String(y)}>{y}</option>)}
+                  </select>
+                  <span class="gf-sep">–</span>
+                  <select name="year_to" class="gf-select gf-auto-submit">
+                    <option value="">To</option>
+                    {[...yearOptions].reverse().map(y => <option value={y} selected={yearTo === String(y)}>{y}</option>)}
+                  </select>
                 </div>
+                <div class="stat-lbl">Year</div>
               </div>
-            );
-          })()}
+              <div class="gf-wrap">
+                <select name="rating_min" class="gf-select gf-auto-submit">
+                  <option value="">Any</option>
+                  {[50,60,70,80,90].map(v => <option value={v} selected={ratingMin === String(v)}>{v}+</option>)}
+                </select>
+                <div class="stat-lbl">Min Rating</div>
+              </div>
+              {hasFilter && <a href="/" class="gf-clear" title="Clear filters">×</a>}
+            </div>
 
-          {(availableDescriptors.length > 0 || descriptors.length > 0) && (() => {
-            const all = [...new Set([...descriptors, ...availableDescriptors])].sort();
-            return (
-              <div class="chips-wrapper" style="align-items: center;">
-                <div class="gf-chips">
-                  {all.map(d => {
-                    const on    = descriptors.includes(d);
-                    const avail = availableDescriptors.includes(d);
-                    return (
-                      <label class={`gf-chip${on ? ' gf-chip-on' : ''}${on && !avail ? ' gf-chip-stale' : ''} desc`}>
-                        <input type="checkbox" name="descriptor" value={d}
-                              checked={on} class="gf-chip-cb" />
-                        {d}
-                      </label>
-                    );
-                  })}
+            <div id="chips-wrapper">
+
+            {(availableSubgenres.length > 0 || subgenres.length > 0) && (() => {
+              const all = [...new Set([...subgenres, ...availableSubgenres])].sort();
+              return (
+                <div class="chips-wrapper" style="align-items: center;">
+                  <div class="gf-chips">
+                    {all.map(s => {
+                      const on    = subgenres.includes(s);
+                      const avail = availableSubgenres.includes(s);
+                      return (
+                        <label class={`gf-chip${on ? ' gf-chip-on' : ''}${on && !avail ? ' gf-chip-stale' : ''}`}>
+                          <input type="checkbox" name="subgenre" value={s}
+                                checked={on} class="gf-chip-cb" />
+                          {s}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })()}
-          </div>
-          
-        </form>
+              );
+            })()}
+
+            {(availableDescriptors.length > 0 || descriptors.length > 0) && (() => {
+              const all = [...new Set([...descriptors, ...availableDescriptors])].sort();
+              return (
+                <div class="chips-wrapper" style="align-items: center;">
+                  <div class="gf-chips">
+                    {all.map(d => {
+                      const on    = descriptors.includes(d);
+                      const avail = availableDescriptors.includes(d);
+                      return (
+                        <label class={`gf-chip${on ? ' gf-chip-on' : ''}${on && !avail ? ' gf-chip-stale' : ''} desc`}>
+                          <input type="checkbox" name="descriptor" value={d}
+                                checked={on} class="gf-chip-cb" />
+                          {d}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+            </div>
+            
+          </form>
+        </div>
       </div>
 
     </div>
@@ -383,21 +486,24 @@ if (!hasFilter) {
 #global-wrapper { display: flex; flex-direction: column; }
 #upper-wrapper { display: flex; flex-direction: row; gap: 25px; }
 #chips-wrapper { display: flex; flex-direction: column; gap: 5px; }
+#stats-filters-wrapper { display: flex; flex-direction: column; gap: 5px; }
 
 /* ── Stats ───────────────────────────────────────────────────────────────── */
-.activity-section { margin-bottom: 24px; }
+.activity-section { margin-bottom: 0; }
 .stat-cards { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
 .stat-card  { padding: 0 18px 0 0; display: flex; flex-direction: column; gap: 5px; }
 .stat-val   { display: block; font-size: 22px; font-weight: 600; color: var(--text-hi); font-variant-numeric: tabular-nums; line-height: 1.2; height: 27px; }
 .stat-lbl   { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-top: 3px; }
 
 /* ── Filter form ─────────────────────────────────────────────────────────── */
-.gf-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.gf-form { display: flex; flex-direction: column; gap: 8px; }
 
 .gf-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 
 .gf-wrap { display: flex; flex-direction: column; gap: 5px; }
 .gf-wrap:first-child { width: 180px; }
+
+.gf-country { width: 125px; }
 
 .gf-year-wrap { display: flex; align-items: center; gap: 4px; }
 
@@ -465,6 +571,7 @@ if (!hasFilter) {
 .dash-list .dash-row:first-child { border-top-left-radius: 3px; border-top-right-radius: 3px; }
 .dash-list .dash-row:last-child  { border-bottom-left-radius: 3px; border-bottom-right-radius: 3px; }
 .dash-section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px 0; }
+.filter-section .dash-section-header { padding: 0 14px 10px 0; }
 .dash-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
 .dash-empty { padding: 20px 14px; font-size: 12px; color: var(--text-muted); }
 .dash-list  { display: flex; flex-direction: column; }
@@ -508,32 +615,99 @@ if (!hasFilter) {
 .dash-rating-count { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .dash-logged-date  { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* ── Album Spotlight ─────────────────────────────────────────────────────── */
+.album-spotlight { flex-shrink: 0; }
+.spotlight-card {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  text-decoration: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: border-color 0.1s;
+  min-height: 130px;
+}
+.spotlight-card:hover { border-color: var(--border-hover); }
+.spotlight-cover-wrap { flex-shrink: 0; height: 130px; width: 130px; }
+.spotlight-cover       { width: 100%; height: 100%; object-fit: cover; }
+.spotlight-cover-empty { width: 100%; height: 100%; background: var(--bg-hover); }
+.spotlight-data-wrap { display: flex; flex-direction: row; width: 100%;  }
+.spotlight-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; width: 10vw; }
+.spotlight-details { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; padding: 8px 10px; width: 8vw; }
+.spotlight-artist { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spotlight-album  { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spotlight-genre { font-size: 10px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.spotlight-meta   { font-size: 10px; color: var(--text-muted); display: flex; gap: 4px; align-items: center; margin-top: 1px; }
+.spotlight-sep    { color: var(--border-hover); }
+.spotlight-chips  { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; justify-content: flex-end; }
+.spotlight-chip   { font-size: 10px; padding: 1px 5px; border-radius: 2px; border: 1px solid var(--border); color: var(--text-muted); background: var(--bg-hover); }
+.spotlight-chip-desc { color: var(--accent-hi); }
+.spotlight-rating { display: flex; align-items: baseline; gap: 5px; }
+.spotlight-score  { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.spotlight-count  { font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
 @media (max-width: 640px) {
+  #global-wrapper { gap: 10px; }
+  #upper-wrapper { flex-direction: column; }
+  #stats-filters-wrapper { gap: 20px; }
+  .album-spotlight { display: none; }
+  .filter-section { display: none; }
   .dash-grid { grid-template-columns: 1fr; }
-  .gf-controls { gap: 6px; }
 }
 </style>
 
 <script is:inline>
   (function () {
-    var form = document.getElementById('filter-form');
-    if (!form) return;
+    var FEAT_KEY = 'featured-album-html';
+    var NAV_FLAG = 'homepage-filter-nav';
 
-    // Genre combobox fires 'change' on the text input when an option is selected
-    var genreInput = form.querySelector('.combo-input');
-    if (genreInput) {
-      genreInput.addEventListener('change', function () { form.submit(); });
-      // Enter after the dropdown closes (e.g. typed + Enter with no nav): submit
-      genreInput.addEventListener('keyup', function (e) {
-        if (e.key !== 'Enter') return;
-        var dropdown = this.closest('.combo') && this.closest('.combo').querySelector('.combo-dropdown');
-        if (dropdown && dropdown.hidden) form.submit();
+    // On load: if we set the flag just before navigating (filter submit), restore the cached card.
+    // Otherwise this is a fresh arrival — store whatever the server rendered.
+    var spotlight = document.getElementById('album-spotlight');
+    if (spotlight) {
+      if (sessionStorage.getItem(NAV_FLAG)) {
+        sessionStorage.removeItem(NAV_FLAG);
+        try {
+          var cached = sessionStorage.getItem(FEAT_KEY);
+          if (cached) { spotlight.outerHTML = cached; }
+        } catch (e) {}
+      } else {
+        try { sessionStorage.setItem(FEAT_KEY, spotlight.outerHTML); } catch (e) {}
+      }
+    }
+
+    // Clear-filters link also counts as a filter nav (preserves spotlight)
+    var clearBtn = document.querySelector('.gf-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        try { sessionStorage.setItem(NAV_FLAG, '1'); } catch (e) {}
       });
     }
 
+    var form = document.getElementById('filter-form');
+    if (!form) return;
+
+    // Set the flag then submit — flag survives the navigation so the next load knows it's a filter nav
+    function doSubmit() {
+      try { sessionStorage.setItem(NAV_FLAG, '1'); } catch (e) {}
+      form.submit();
+    }
+
+    // Each combobox fires 'change' on its text input when an option is selected
+    form.querySelectorAll('.combo-input').forEach(function (comboInput) {
+      comboInput.addEventListener('change', function () { doSubmit(); });
+      comboInput.addEventListener('keyup', function (e) {
+        if (e.key !== 'Enter') return;
+        var dropdown = this.closest('.combo') && this.closest('.combo').querySelector('.combo-dropdown');
+        if (dropdown && dropdown.hidden) doSubmit();
+      });
+    });
+
     // Year/rating selects and subgenre/descriptor chips: auto-submit on change
     form.querySelectorAll('.gf-auto-submit, .gf-chip-cb').forEach(function (el) {
-      el.addEventListener('change', function () { form.submit(); });
+      el.addEventListener('change', function () { doSubmit(); });
     });
   })();
 </script>
