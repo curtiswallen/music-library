@@ -332,7 +332,7 @@ tr:hover td { background: var(--bg-hover); }
 .col-artist { max-width: 150px; }
 .col-album { max-width: 300px; }
 .col-album a { display: flex; align-items: center; gap: 3px; overflow: hidden; }
-.col-album-text { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.col-album-text { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
 /* Hide year chips inside album cells on desktop — year has its own column */
 .col-album a .col-album-year,
 .artist-tbl td a .col-album-year,
@@ -340,7 +340,8 @@ tr:hover td { background: var(--bg-hover); }
 .similar-tbl td .col-album-year { display: none; }
 .table-wrap.similar-tbl { overflow-x: clip; overflow-y: visible; }
 .rec-star { flex-shrink: 0; }
-.col-genre { max-width: 150px; }
+.col-year { font-size: 11px; }
+.col-genre { max-width: 150px; font-size: 11px; }
 .col-subgenres { max-width: 150px; }
 .added-cell {
   color: var(--text-muted);
@@ -391,6 +392,7 @@ tr:hover td { background: var(--bg-hover); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 11px;
 }
 .notes-tip-body {
   display: none;
@@ -844,6 +846,26 @@ tr[data-href] { cursor: pointer; }
   color: var(--text-muted);
   margin-bottom: 10px;
 }
+/* ── Related rows (More by / Similar albums) ── */
+.rel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  min-width: 0;
+  transition: background 0.1s;
+}
+.rel-row:last-child { border-bottom: none; }
+.rel-row:hover { background: var(--bg-hover); }
+.rel-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
+.rel-title { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rel-sub { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; }
+.rel-sub-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rel-right { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 3px; width: 220px; }
+.rel-tags { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; }
+.rel-tags .tag { font-size: 10px; margin: 0; }
 
 /* ── Community stats & Also Logged By ── */
 .community-stat {
@@ -1390,49 +1412,30 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
   .related-section { flex-direction: column; }
   .table-wrap { padding-bottom: 20px; }
+  .rel-right { width: 110px; }
 
-  .artist-tbl,
-  .more-by-tbl,
-  .similar-tbl { overflow-x: hidden; }
+  .artist-tbl { overflow-x: hidden; }
 
-  .artist-tbl table, .artist-tbl tbody,
-  .more-by-tbl table, .more-by-tbl tbody,
-  .similar-tbl table, .similar-tbl tbody { display: block; }
+  .artist-tbl table, .artist-tbl tbody { display: block; }
 
-  .artist-tbl thead,
-  .more-by-tbl thead,
-  .similar-tbl thead { display: none; }
+  .artist-tbl thead { display: none; }
 
-  .artist-tbl tbody tr,
-  .more-by-tbl tbody tr,
-  .similar-tbl tbody tr {
+  .artist-tbl tbody tr {
     display: grid;
     column-gap: 3px;
     align-items: center;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
+    grid-template-columns: 44px minmax(0, 6fr) auto;
   }
-  .artist-tbl tbody tr,
-  .more-by-tbl tbody tr { grid-template-columns: 44px minmax(0, 6fr) auto; }
-  .similar-tbl tbody tr { grid-template-columns: 44px minmax(0, 6fr) minmax(0, 1fr); }
 
-  .artist-tbl tbody tr:hover td,
-  .more-by-tbl tbody tr:hover td,
-  .similar-tbl tbody tr:hover td { background: none; }
+  .artist-tbl tbody tr:hover td { background: none; }
 
-  .artist-tbl tbody td,
-  .more-by-tbl tbody td,
-  .similar-tbl tbody td { border: none; padding: 2px 0; }
+  .artist-tbl tbody td { border: none; padding: 2px 0; }
 
-  .similar-tbl tbody tr::after { display: none; }
+  .artist-tbl tbody tr[data-href] { cursor: pointer; }
 
-  .artist-tbl tbody tr[data-href],
-  .more-by-tbl tbody tr[data-href],
-  .similar-tbl tbody tr[data-href] { cursor: pointer; }
-
-  .artist-tbl tbody td a,
-  .more-by-tbl tbody td a,
-  .similar-tbl tbody td a { pointer-events: none; }
+  .artist-tbl tbody td a { pointer-events: none; }
 
   /* ── Artist page table: cover(1) album(2) year(3) genre(4) subs(5) descs(6) rating(7) notes(8) ── */
   .artist-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1; } /* cover */
@@ -1456,49 +1459,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
     grid-column: 3; grid-row: 1; text-align: right;
   }
 
-  /* ── More by table: cover(1) album(2) year(3) rating(4) subs(5) ── */
-  .more-by-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1; } /* cover */
-  .more-by-tbl tbody td:nth-child(2) { /* album */
-    grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden;
-    font-size: 11px; color: var(--text-muted);
-  }
-  .more-by-tbl tbody td:nth-child(2) a {
-    display: flex; align-items: center; gap: 3px; overflow: hidden;
-  }
-  .more-by-tbl tbody td:nth-child(2) .col-album-text {
-    flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .more-by-tbl tbody td:nth-child(2) a .col-album-year { display: inline-block; }
-  .more-by-tbl tbody td:nth-child(3) { display: none; } /* year — shown as chip */
-  .more-by-tbl tbody td:nth-child(4) { /* rating */
-    grid-column: 3; grid-row: 1; text-align: right;
-  }
-  .more-by-tbl tbody td:nth-child(5) { display: none; }
-
-  /* ── Similar table: cover(1) artist(2) country(3) album(4) year(5) rating(6) subs(7) ── */
-  .similar-tbl tbody td:nth-child(1) { grid-column: 1; grid-row: 1 / span 2; } /* cover */
-  .similar-tbl tbody td:nth-child(2) { /* artist */
-    grid-column: 2; grid-row: 1;
-    min-width: 0; color: var(--text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    font-weight: 600; font-size: 12px;
-  }
-  .similar-tbl tbody td:nth-child(3) { display: none; } /* country */
-  .similar-tbl tbody td:nth-child(4) { /* album */
-    grid-column: 2; grid-row: 2;
-    min-width: 0; overflow: hidden;
-    display: flex; align-items: center; gap: 3px;
-    font-size: 11px; color: var(--text-muted);
-  }
-  .similar-tbl tbody td:nth-child(4) .col-album-text {
-    flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .similar-tbl tbody td:nth-child(4) .col-album-year { display: inline-block; }
-  .similar-tbl tbody td:nth-child(5) { display: none; } /* year — shown as chip */
-  .similar-tbl tbody td:nth-child(6) { /* rating */
-    grid-column: 3; grid-row: 1 / span 2; align-self: center; text-align: right;
-  }
-  .similar-tbl tbody td:nth-child(7) { display: none; }
 }
 
 /* ── Flag link (country filter chip with tooltip) ── */

@@ -514,27 +514,30 @@ if (!isOwner && !profileUser.is_private) {
       {artistAlbums.length > 0 && (
         <div class="more-by">
           <p class="related-title">More by {album.artist} in {isOwner ? 'my' : `${displayName}'s`} library</p>
-          <div class="table-wrap more-by-tbl">
-            <table><tbody>
-              {artistAlbums.map(a => {
-                const aSubs: string[] = JSON.parse(a.subgenres || '[]');
-                return (
-                  <tr data-href={`${libBase}/album/${a.slug}`}>
-                    <td style="width:44px">
-                      <div class="cover-thumb" style="background:#000;overflow:hidden">
-                        {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
-                          style="width:100%;height:100%;object-fit:cover;display:block"
-                          onerror="this.style.display='none'" />}
+          <div class="rel-list">
+            {artistAlbums.map(a => {
+              const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+              const sorted = sortSubs(aSubs);
+              return (
+                <a href={`${libBase}/album/${a.slug}`} class="rel-row">
+                  {a.cover_url
+                    ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
+                    : <div class="cover-thumb" />}
+                  <div class="rel-info">
+                    <span class="rel-title">{a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span>
+                    {a.year != null && <span class="rel-sub"><span class="year-chip">{a.year}</span></span>}
+                  </div>
+                  <div class="rel-right">
+                    <span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span>
+                    {sorted.length > 0 && (
+                      <div class="rel-tags">
+                        {sorted.map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}
                       </div>
-                    </td>
-                    <td><a href={`${libBase}/album/${a.slug}`}>{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
-                    <td style="color:var(--text-muted)">{a.year ?? ''}</td>
-                    <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-                    <td>{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
-                  </tr>
-                );
-              })}
-            </tbody></table>
+                    )}
+                  </div>
+                </a>
+              );
+            })}
           </div>
         </div>
       )}
@@ -542,30 +545,37 @@ if (!isOwner && !profileUser.is_private) {
       {similar.length > 0 && (
         <div class="more-by">
           <p class="related-title">Similar albums in {isOwner ? 'my' : `${displayName}'s`} library</p>
-          <div class="table-wrap similar-tbl">
-            <table><tbody>
-              {similar.map(a => {
-                const aSubs: string[] = JSON.parse(a.subgenres || '[]');
-                const cc = countryCode(a.country).toLowerCase();
-                return (
-                  <tr data-href={`${libBase}/album/${a.slug}`}>
-                    <td style="width:44px">
-                      <div class="cover-thumb" style="background:#000;overflow:hidden">
-                        {a.cover_url && <img src={a.cover_url} alt="" loading="lazy"
-                          style="width:100%;height:100%;object-fit:cover;display:block"
-                          onerror="this.style.display='none'" />}
+          <div class="rel-list">
+            {similar.map(a => {
+              const aSubs: string[] = JSON.parse(a.subgenres || '[]');
+              const sorted = sortSubs(aSubs);
+              const cc = countryCode(a.country).toLowerCase();
+              return (
+                <a href={`${libBase}/album/${a.slug}`} class="rel-row">
+                  {a.cover_url
+                    ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
+                    : <div class="cover-thumb" />}
+                  <div class="rel-info">
+                    <span class="rel-title">
+                      {a.artist}
+                      {cc && <span class="added-cell tip-link" data-tip={a.country}> {cc.toUpperCase()}</span>}
+                    </span>
+                    <span class="rel-sub">
+                      {a.year != null && <span class="year-chip">{a.year}</span>}
+                      <span class="rel-sub-text">{a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span>
+                    </span>
+                  </div>
+                  <div class="rel-right">
+                    <span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span>
+                    {sorted.length > 0 && (
+                      <div class="rel-tags">
+                        {sorted.map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}
                       </div>
-                    </td>
-                    <td>{a.artist}</td>
-                    <td>{cc && <span class="added-cell tip-link" data-tip={a.country}>{cc.toUpperCase()}</span>}</td>
-                    <td class="similar-album-cell">{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</td>
-                    <td style="color:var(--text-muted)">{a.year ?? ''}</td>
-                    <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-                    <td class="related-tags">{sortSubs(aSubs).map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}</td>
-                  </tr>
-                );
-              })}
-            </tbody></table>
+                    )}
+                  </div>
+                </a>
+              );
+            })}
           </div>
         </div>
       )}

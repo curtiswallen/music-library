@@ -107,7 +107,7 @@ const {
                 {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
               </a>
             </td>
-            <td>{a.year ?? ''}</td>
+            <td class="col-year">{a.year ?? ''}</td>
             <td class="col-genre">
               {a.genre && (
                 <a href={buildParams({ genre: a.genre === currentGenre ? null : a.genre, subgenre: [], excl: [] })}
