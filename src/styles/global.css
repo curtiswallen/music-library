@@ -348,6 +348,9 @@ tr:hover td { background: var(--bg-hover); }
   font-size: 11px;
   white-space: nowrap;
 }
+.rel-title .added-cell {
+  font-size: 10px;
+}
 
 .tag {
   display: inline-block;
@@ -377,6 +380,9 @@ tr:hover td { background: var(--bg-hover); }
   line-height: 1.5;
   flex-shrink: 0;
 }
+.dash-artist-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dash-artist-wrap .dash-artist { flex: 0 1 auto; min-width: 0; }
+.dash-cc { font-size: 10px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; margin-bottom: -2px; }
 
 .rating-hi  { color: var(--green); }
 .rating-mid { color: var(--yellow); }
