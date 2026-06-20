@@ -227,8 +227,30 @@ if (!hasFilter) {
     <div style="display:flex;gap:8px;align-items:center">
       {loggedInUser ? (
         <>
-          <a href={`/${loggedInUser.profile_url}`} class="btn">My Dashboard</a>
-          {loggedInUser.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile">Admin</a>}
+          <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
+          <a href={`/${loggedInUser.profile_url}`} class="btn nav-hide-mobile">My Dashboard</a>
+          {loggedInUser!.is_admin === 1 &&
+            <a href="/admin" class="btn nav-hide-mobile">Admin</a>
+          }
+          <a href="/settings" class="btn icon-btn nav-hide-mobile" aria-label="Settings" data-tip="Settings">⚙</a>
+          <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
+            <button class="btn" type="submit">Sign out</button>
+          </form>
+          <div class="nav-hamburger" id="nav-hamburger">
+            <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
+            <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
+              <div class="nav-hamburger-header">
+                {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
+                <span>{loggedInUser!.display_name || loggedInUser!.username}</span>
+              </div>
+              <a href={`/${loggedInUser.profile_url}`} class="nav-hamburger-item">Dashboard</a>
+              {loggedInUser!.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
+              <a href="/settings" class="nav-hamburger-item">Settings</a>
+              <form method="post" action="/auth/logout" style="margin:0">
+                <button type="submit" class="nav-hamburger-item">Sign out</button>
+              </form>
+            </div>
+          </div>
         </>
       ) : (
         <a href="/auth/login" class="btn btn-primary">Sign In</a>
@@ -607,6 +629,7 @@ if (!hasFilter) {
 .dash-album-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 .dash-user-avatar { position: relative; z-index: 2; flex-shrink: 0; border-radius: 50%; padding-left: 5px;}
+.user-avatar    { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
 .user-avatar-sm {
   width: 22px; height: 22px; border-radius: 50%;
   object-fit: cover; display: block; border: 1px solid var(--border);
@@ -718,5 +741,21 @@ if (!hasFilter) {
     form.querySelectorAll('.gf-auto-submit, .gf-chip-cb').forEach(function (el) {
       el.addEventListener('change', function () { doSubmit(); });
     });
+
+    var btn  = document.getElementById('nav-hamburger-btn');
+      var menu = document.getElementById('nav-hamburger-menu');
+      if (!btn || !menu) return;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var open = menu.hidden;
+        menu.hidden = !open;
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('#nav-hamburger')) {
+          menu.hidden = true;
+          btn.setAttribute('aria-expanded', 'false');
+        }
+      });
   })();
 </script>
