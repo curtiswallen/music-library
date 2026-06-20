@@ -129,8 +129,10 @@ if (Astro.request.method === 'POST') {
     trackSeconds,
   ).run();
 
-  await db.prepare('UPDATE users SET total_seconds = total_seconds + ? WHERE id = ?')
-    .bind(trackSeconds, user.id).run();
+  if (data.get('rating')) {
+    await db.prepare('UPDATE users SET total_seconds = total_seconds + ? WHERE id = ?')
+      .bind(trackSeconds, user.id).run();
+  }
 
   await db.prepare(`
     UPDATE albums SET

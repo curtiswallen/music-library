@@ -38,11 +38,11 @@ if (Astro.request.method === 'POST') {
   const albumName = (data.get('album') as string) || '';
 
   const existing = await db.prepare(`
-    SELECT a.id, COALESCE(ua.track_seconds, 0) as old_track_seconds
+    SELECT a.id, COALESCE(ua.track_seconds, 0) as old_track_seconds, ua.rating as old_rating
     FROM albums a
     LEFT JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
     WHERE a.slug = ?
-  `).bind(profileUser.id, slugParam).first<{ id: number; old_track_seconds: number }>();
+  `).bind(profileUser.id, slugParam).first<{ id: number; old_track_seconds: number; old_rating: number | null }>();
   if (!existing) return Astro.redirect(`/${profileUser.profile_url}`);
 
   const subgenres = JSON.stringify(
@@ -117,8 +117,12 @@ if (Astro.request.method === 'POST') {
     profileUser.id,
   ).run();
 
-  await db.prepare('UPDATE users SET total_seconds = total_seconds - ? + ? WHERE id = ?')
-    .bind(existing.old_track_seconds, trackSeconds, profileUser.id).run();
+  const oldEffective = existing.old_rating != null ? existing.old_track_seconds : 0;
+  const newEffective = data.get('rating') ? trackSeconds : 0;
+  if (oldEffective !== newEffective) {
+    await db.prepare('UPDATE users SET total_seconds = total_seconds - ? + ? WHERE id = ?')
+      .bind(oldEffective, newEffective, profileUser.id).run();
+  }
 
   await db.prepare(`
     UPDATE albums SET
@@ -461,7 +465,7 @@ if (!isOwner && !profileUser.is_private) {
           </div>
         )}
         {addedAt && (isOwner || !profileUser.hide_added_at) && (
-          <p class="added-at">Logged on {addedAt}</p>
+          <p class="added-at">{album.rating == null ? 'Queued on' : 'Logged on'} {addedAt}</p>
         )}
       </div>
 

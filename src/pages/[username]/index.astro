@@ -83,7 +83,7 @@ if (isOwner || !profileUser.is_private) {
       ORDER BY ua.rating DESC LIMIT 15
     `).bind(profileUser.id).all<DashAlbum>(),
     db.prepare(`
-      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended
+      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
       WHERE ua.is_hidden = 0 AND ua.rating IS NULL
       ORDER BY ua.added_at DESC LIMIT 15
@@ -100,7 +100,7 @@ if (isOwner || !profileUser.is_private) {
                  COUNT(*) as count,
                  COALESCE(SUM(track_seconds), 0) as seconds
           FROM user_albums
-          WHERE user_id = ? AND DATE(added_at, '${tzMod}') > DATE('${localToday}', '-371 days')${hiddenWhere}
+          WHERE user_id = ? AND rating IS NOT NULL AND DATE(added_at, '${tzMod}') > DATE('${localToday}', '-371 days')${hiddenWhere}
           GROUP BY day
         `).bind(profileUser.id).all<HeatmapRow>()
       : Promise.resolve({ results: [] as HeatmapRow[] }),
@@ -220,7 +220,7 @@ const sections = [
     albums: queueAlbums,
     viewAllHref: `${libBase}?rated=no&sort=added&dir=desc`,
     emptyText: 'Queue empty.',
-    showDate: false,
+    showDate: true,
   },
 ];
 

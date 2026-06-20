@@ -7,10 +7,10 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   const userId = locals.user?.id;
   if (!id || !userId) return new Response('Invalid', { status: 400 });
 
-  // Subtract this entry's duration before deleting (subquery reads the value while it still exists)
+  // Only subtract duration for rated entries; queued (unrated) entries never counted
   await env.DB.prepare(`
     UPDATE users SET total_seconds = total_seconds
-      - (SELECT COALESCE(track_seconds, 0) FROM user_albums WHERE album_id = ? AND user_id = ?)
+      - (SELECT COALESCE(track_seconds, 0) FROM user_albums WHERE album_id = ? AND user_id = ? AND rating IS NOT NULL)
     WHERE id = ?
   `).bind(id, userId, userId).run();
 
