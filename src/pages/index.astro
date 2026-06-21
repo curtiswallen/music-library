@@ -82,7 +82,11 @@ type TopEntry = {
   cover_url: string | null; avg_rating: number; rating_count: number;
   country: string | null; genre_counts: string; user_profile_url: string;
 };
-type GlobalStats = { total_albums: number; total_users: number; total_seconds: number; public_genres: string };
+type GlobalStats = {
+  total_albums: number; total_users: number; total_seconds: number; public_genres: string;
+  avg_rating: number | null; artist_count: number; country_count: number;
+  recommended_count: number; total_ratings: number;
+};
 type FeaturedAlbum = {
   slug: string; artist: string; album: string; year: number | null;
   country: string | null; cover_url: string | null;
@@ -135,6 +139,11 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
           COUNT(DISTINCT a.id) as total_albums,
           COUNT(DISTINCT u.id) as total_users,
           COALESCE(SUM(ua.track_seconds), 0) as total_seconds,
+          ROUND(AVG(ua.rating), 1) as avg_rating,
+          COUNT(DISTINCT a.artist) as artist_count,
+          COUNT(DISTINCT a.country) as country_count,
+          COUNT(CASE WHEN ua.recommended = 1 THEN 1 END) as recommended_count,
+          COUNT(*) as total_ratings,
           (SELECT json_group_array(DISTINCT key)
            FROM albums, json_each(genre_counts)
            WHERE genre_counts != '{}') as public_genres
@@ -148,6 +157,11 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
           (SELECT COUNT(*) FROM albums) as total_albums,
           (SELECT COUNT(*) FROM users WHERE is_private = 0) as total_users,
           (SELECT COALESCE(SUM(total_seconds), 0) FROM users WHERE is_private = 0) as total_seconds,
+          (SELECT ROUND(AVG(rating), 1) FROM user_albums WHERE rating IS NOT NULL AND is_hidden = 0) as avg_rating,
+          (SELECT COUNT(DISTINCT artist) FROM albums) as artist_count,
+          (SELECT COUNT(DISTINCT country) FROM albums WHERE country IS NOT NULL AND country != '') as country_count,
+          (SELECT COUNT(*) FROM user_albums WHERE recommended = 1 AND is_hidden = 0) as recommended_count,
+          (SELECT COUNT(*) FROM user_albums WHERE rating IS NOT NULL AND is_hidden = 0) as total_ratings,
           (SELECT json_group_array(DISTINCT key)
            FROM albums, json_each(genre_counts)
            WHERE genre_counts != '{}') as public_genres
@@ -187,7 +201,7 @@ const topAlbums    = topRes.results.map(a => ({
   topGenre: (Object.entries(JSON.parse(a.genre_counts || '{}') as Record<string, number>)
     .sort((x, y) => y[1] - x[1])[0]?.[0]) ?? '',
 }));
-const stats               = statsRes ?? { total_albums: 0, total_users: 0, total_seconds: 0, public_genres: '[]' };
+const stats               = statsRes ?? { total_albums: 0, total_users: 0, total_seconds: 0, avg_rating: null, artist_count: 0, country_count: 0, recommended_count: 0, total_ratings: 0, public_genres: '[]' };
 const availableSubgenres  = subgRes.results.map(r => r.value);
 const availableDescriptors = descRes.results.map(r => r.value);
 
@@ -340,6 +354,26 @@ if (!hasFilter) {
             <div class="stat-card">
               <span class="stat-val">{stats.total_albums}</span>
               <span class="stat-lbl">Albums</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val">{stats.total_ratings}</span>
+              <span class="stat-lbl">Ratings</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val">{stats.avg_rating ?? '—'}</span>
+              <span class="stat-lbl">Avg Rating</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val">{stats.artist_count}</span>
+              <span class="stat-lbl">Artists</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val">{stats.country_count}</span>
+              <span class="stat-lbl">Countries</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val">{stats.recommended_count}</span>
+              <span class="stat-lbl">Recommended</span>
             </div>
             <div class="stat-card">
               <span class="stat-val">{stats.total_users}</span>
