@@ -74,13 +74,13 @@ const optParams = [
 type RecentEntry = {
   slug: string; artist: string; album: string; year: number | null;
   cover_url: string | null; rating: number | null; recommended: number;
-  added_at: string | null; country: string | null;
+  added_at: string | null; country: string | null; genre: string | null;
   user_profile_url: string; user_name: string; user_avatar_url: string | null;
 };
 type TopEntry = {
   slug: string; artist: string; album: string; year: number | null;
   cover_url: string | null; avg_rating: number; rating_count: number;
-  country: string | null; user_profile_url: string;
+  country: string | null; genre_counts: string; user_profile_url: string;
 };
 type GlobalStats = { total_albums: number; total_users: number; total_seconds: number; public_genres: string };
 type FeaturedAlbum = {
@@ -106,7 +106,7 @@ const emptyOpts = Promise.resolve({ results: [] as { value: string }[] });
 const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes] = await Promise.all([
   db.prepare(`
     SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country,
-           ua.rating, ua.recommended, ua.added_at,
+           ua.rating, ua.recommended, ua.added_at, ua.genre,
            u.profile_url as user_profile_url,
            COALESCE(u.display_name, u.username) as user_name,
            u.avatar_url as user_avatar_url
@@ -119,7 +119,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
 
   db.prepare(`
     SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country,
-           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count,
+           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts,
            MIN(u.profile_url) as user_profile_url
     FROM albums a
     JOIN user_albums ua ON ua.album_id = a.id
@@ -167,8 +167,12 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
   `).all<{ country: string }>(),
 ]);
 
-const recentAlbums        = recentRes.results;
-const topAlbums           = topRes.results;
+const recentAlbums = recentRes.results;
+const topAlbums    = topRes.results.map(a => ({
+  ...a,
+  topGenre: (Object.entries(JSON.parse(a.genre_counts || '{}') as Record<string, number>)
+    .sort((x, y) => y[1] - x[1])[0]?.[0]) ?? '',
+}));
 const stats               = statsRes ?? { total_albums: 0, total_users: 0, total_seconds: 0, public_genres: '[]' };
 const availableSubgenres  = subgRes.results.map(r => r.value);
 const availableDescriptors = descRes.results.map(r => r.value);
@@ -444,6 +448,7 @@ if (!hasFilter) {
                     <div class="dash-artist-wrap">
                       <span class="dash-artist">{a.artist}</span>
                       {a.country && countryCode(a.country) && <span class="dash-cc">{countryCode(a.country).toUpperCase()}</span>}
+                      {a.genre && <span class="dash-genre">{a.genre}</span>}
                     </div>
                     <span class="dash-album-name">
                       {a.year && <span class="year-chip">{a.year}</span>}
@@ -491,6 +496,7 @@ if (!hasFilter) {
                     <div class="dash-artist-wrap">
                       <span class="dash-artist">{a.artist}</span>
                       {a.country && countryCode(a.country) && <span class="dash-cc">{countryCode(a.country).toUpperCase()}</span>}
+                      {a.topGenre && <span class="dash-genre">{a.topGenre}</span>}
                     </div>
                     <span class="dash-album-name">
                       {a.year && <span class="year-chip">{a.year}</span>}
@@ -623,7 +629,7 @@ if (!hasFilter) {
 
 .dash-cover { width: 36px; height: 36px; flex-shrink: 0; object-fit: cover; border-radius: 2px; border: 1px solid var(--border); }
 .dash-cover-empty { background: var(--bg-hover); }
-.dash-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; padding-right: 6px; }
+.dash-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 5px; }
 .dash-artist     { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-album-name { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; }
 .dash-album-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -641,7 +647,7 @@ if (!hasFilter) {
   font-size: 10px; font-weight: 600; color: var(--text-muted);
 }
 .dash-rating { position: relative; z-index: 2; flex-shrink: 0; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
-.dash-rating-wrap  { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; }
+.dash-rating-wrap  { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 5px; }
 .dash-rating-count { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .dash-logged-date  { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 

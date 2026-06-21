@@ -383,6 +383,8 @@ tr:hover td { background: var(--bg-hover); }
 .dash-artist-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .dash-artist-wrap .dash-artist { flex: 0 1 auto; min-width: 0; }
 .dash-cc { font-size: 10px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; margin-bottom: -2px; }
+.dash-rating-row { display: flex; align-items: center; gap: 4px; }
+.dash-genre { font-size: 9px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; background: var(--bg-card); border: 1px solid var(--border); padding: 0px 5px; border-radius: 3px; }
 
 .rating-hi  { color: var(--green); }
 .rating-mid { color: var(--yellow); }

@@ -30,7 +30,7 @@ const showRecentlyAdded = isOwner || !profileUser.hide_added_at;
 type DashAlbum = {
   slug: string; artist: string; album: string; year: number | null;
   cover_url: string | null; rating: number | null; recommended: number;
-  added_at: string | null; country: string | null;
+  added_at: string | null; country: string | null; genre: string | null;
 };
 type StatsRow   = { total_albums: number; rated_count: number; avg_rating: number | null; total_seconds: number };
 type HeatmapRow = { day: string; count: number; seconds: number };
@@ -67,7 +67,7 @@ if (isOwner || !profileUser.is_private) {
 
   const recentPromise = showRecentlyAdded
     ? db.prepare(`
-        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at
+        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at, ua.genre
         FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
         WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
         ORDER BY ua.added_at DESC LIMIT 15
@@ -77,13 +77,13 @@ if (isOwner || !profileUser.is_private) {
   const [recentRes, topRes, queueRes, statsRes, heatmapRes] = await Promise.all([
     recentPromise,
     db.prepare(`
-      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended
+      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.genre
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
       WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
       ORDER BY ua.rating DESC LIMIT 15
     `).bind(profileUser.id).all<DashAlbum>(),
     db.prepare(`
-      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at
+      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at, ua.genre
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
       WHERE ua.is_hidden = 0 AND ua.rating IS NULL
       ORDER BY ua.added_at DESC LIMIT 15
@@ -361,6 +361,7 @@ if (!isOwner && !profileUser.is_private) {
                         <div class="dash-artist-wrap">
                           <span class="dash-artist">{a.artist}</span>
                           {a.country && countryCode(a.country) && <span class="dash-cc">{countryCode(a.country).toUpperCase()}</span>}
+                          {a.genre && <span class="dash-genre">{a.genre}</span>}
                         </div>
                         <span class="dash-album-name">
                           {a.year && <span class="year-chip">{a.year}</span>}
@@ -402,12 +403,12 @@ if (!isOwner && !profileUser.is_private) {
 
 .stat-cards {
   display: flex;
-  gap: 10px;
+  gap: 20px;
   flex-wrap: wrap;
   margin-bottom: 20px;
 }
 .stat-card {
-  padding: 0 18px 0 0;
+  padding: 0;
 }
 .stat-val {
   display: block;
@@ -549,8 +550,7 @@ if (!isOwner && !profileUser.is_private) {
   flex-direction: column;
   min-width: 0;
   flex: 1;
-  gap: 1px;
-  padding-right: 10px;
+  gap: 5px;
 }
 .dash-artist {
   font-size: 12px;
@@ -575,7 +575,7 @@ if (!isOwner && !profileUser.is_private) {
   text-overflow: ellipsis;
   min-width: 0;
 }
-.dash-rating-wrap { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 1px; }
+.dash-rating-wrap { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 5px; }
 .dash-rating {
   font-size: 12px;
   font-weight: 600;
