@@ -238,41 +238,11 @@ if (!isOwner && !profileUser.is_private) {
       <h1>{displayName}</h1>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      {isOwner ? (
-        <>
-          <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
-          {loggedInUser!.is_admin === 1 &&
-            <a href="/admin" class="btn nav-hide-mobile">Admin</a>
-          }
-          <a href="/settings" class="btn icon-btn nav-hide-mobile" aria-label="Settings" data-tip="Settings">⚙</a>
-          <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
-            <button class="btn" type="submit">Sign out</button>
-          </form>
-          <div class="nav-hamburger" id="nav-hamburger">
-            <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
-            <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
-              <div class="nav-hamburger-header">
-                {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
-                <span>{loggedInUser!.display_name || loggedInUser!.username}</span>
-              </div>
-              <a href={libBase} class="nav-hamburger-item">Library</a>
-              {loggedInUser!.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
-              <a href="/settings" class="nav-hamburger-item">Settings</a>
-              <form method="post" action="/auth/logout" style="margin:0">
-                <button type="submit" class="nav-hamburger-item">Sign out</button>
-              </form>
-            </div>
-          </div>
-        </>
-      ) : loggedInUser ? (
-        <>
-          <a href={`/${loggedInUser.profile_url}/`} class="btn">← My Dashboard</a>
-        </>
-      ) : (
-        <>
-          <a href={libBase} class="btn">Library</a>
-          <a href="/auth/login" class="btn">Sign In</a>
-        </>
+      {!isOwner && loggedInUser && (
+        <a href={`/${loggedInUser.profile_url}/`} class="btn">← My Dashboard</a>
+      )}
+      {!isOwner && !loggedInUser && (
+        <a href={libBase} class="btn">Library</a>
       )}
     </div>
   </div>
@@ -395,7 +365,7 @@ if (!isOwner && !profileUser.is_private) {
 </Layout>
 
 <style>
-#dashboard-wrapper { display: flex; flex-direction: row; gap: 28px; }
+#dashboard-wrapper { display: flex; flex-direction: row; gap: 28px; width: 100%; }
 
 .profile-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .user-avatar    { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
@@ -629,21 +599,4 @@ if (!isOwner && !profileUser.is_private) {
     }
   })();
 
-  (function () {
-    var btn  = document.getElementById('nav-hamburger-btn');
-    var menu = document.getElementById('nav-hamburger-menu');
-    if (!btn || !menu) return;
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var open = menu.hidden;
-      menu.hidden = !open;
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-    document.addEventListener('click', function (e) {
-      if (!e.target.closest('#nav-hamburger')) {
-        menu.hidden = true;
-        btn.setAttribute('aria-expanded', 'false');
-      }
-    });
-  })();
 </script>

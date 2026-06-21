@@ -268,38 +268,6 @@ if (!hasFilter) {
 <Layout title="Music Library">
   <div class="page-header">
     <h1>Music Library</h1>
-    <div style="display:flex;gap:8px;align-items:center">
-      {loggedInUser ? (
-        <>
-          <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
-          <a href={`/${loggedInUser.profile_url}`} class="btn nav-hide-mobile">My Dashboard</a>
-          {loggedInUser!.is_admin === 1 &&
-            <a href="/admin" class="btn nav-hide-mobile">Admin</a>
-          }
-          <a href="/settings" class="btn icon-btn nav-hide-mobile" aria-label="Settings" data-tip="Settings">⚙</a>
-          <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
-            <button class="btn" type="submit">Sign out</button>
-          </form>
-          <div class="nav-hamburger" id="nav-hamburger">
-            <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
-            <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
-              <div class="nav-hamburger-header">
-                {loggedInUser!.avatar_url && <img src={loggedInUser!.avatar_url} class="user-avatar" alt="" />}
-                <span>{loggedInUser!.display_name || loggedInUser!.username}</span>
-              </div>
-              <a href={`/${loggedInUser.profile_url}`} class="nav-hamburger-item">Dashboard</a>
-              {loggedInUser!.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
-              <a href="/settings" class="nav-hamburger-item">Settings</a>
-              <form method="post" action="/auth/logout" style="margin:0">
-                <button type="submit" class="nav-hamburger-item">Sign out</button>
-              </form>
-            </div>
-          </div>
-        </>
-      ) : (
-        <a href="/auth/login" class="btn btn-primary">Sign In</a>
-      )}
-    </div>
   </div>
 
   <div id="global-wrapper">
@@ -589,7 +557,9 @@ if (!hasFilter) {
 </Layout>
 
 <style>
-#global-wrapper { display: flex; flex-direction: column; }
+h1 { padding-top: 4px; }
+
+#global-wrapper { display: flex; flex-direction: column; width: 100%; }
 #upper-wrapper { display: flex; flex-direction: row; gap: 25px; }
 #chips-wrapper { display: flex; flex-direction: column; gap: 5px; }
 #stats-filters-wrapper { display: flex; flex-direction: column; gap: 15px; }
@@ -820,20 +790,5 @@ if (!hasFilter) {
       el.addEventListener('change', function () { doSubmit(); });
     });
 
-    var btn  = document.getElementById('nav-hamburger-btn');
-      var menu = document.getElementById('nav-hamburger-menu');
-      if (!btn || !menu) return;
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var open = menu.hidden;
-        menu.hidden = !open;
-        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      });
-      document.addEventListener('click', function (e) {
-        if (!e.target.closest('#nav-hamburger')) {
-          menu.hidden = true;
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      });
   })();
 </script>

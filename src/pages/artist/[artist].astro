@@ -150,10 +150,9 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
       <span class="count" style="margin-left:4px">({albums.length} album{albums.length !== 1 ? 's' : ''})</span>
     </div>
     <div style="display:flex;gap:8px">
-      {loggedInUser
-        ? <a href={`/${loggedInUser.profile_url}/artist/${artistSlug}`} class="btn">My Library</a>
-        : <a href="/auth/login" class="btn">Sign In</a>
-      }
+      {loggedInUser && (
+        <a href={`/${loggedInUser.profile_url}/artist/${artistSlug}`} class="btn">My Library</a>
+      )}
     </div>
   </div>
 
@@ -266,7 +265,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
                       <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
                     ))}
                   </td>
-                  <td><span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating ?? '—'}</span></td>
+                  <td><span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating?.toFixed(1) ?? '—'}</span></td>
                   <td class="added-cell">{a.rating_count > 0 ? a.rating_count : '—'}</td>
                 </tr>
               );

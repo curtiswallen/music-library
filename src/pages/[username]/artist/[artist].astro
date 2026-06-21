@@ -149,12 +149,8 @@ function sortedSubs(subs: string[]) {
       <span class="count" style="margin-left:4px">({albums.length} album{albums.length !== 1 ? 's' : ''})</span>
     </div>
     <div style="display:flex;gap:8px">
-      {isOwner && <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>}
       {!isOwner && loggedInUser && (
         <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
-      )}
-      {!isOwner && !loggedInUser && (
-        <a href="/auth/login" class="btn">Sign In</a>
       )}
     </div>
   </div>
