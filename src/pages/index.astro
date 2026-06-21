@@ -129,15 +129,29 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
     ORDER BY a.avg_rating DESC, a.rating_count DESC LIMIT 15
   `).bind(...topParams).all<TopEntry>(),
 
-  db.prepare(`
-    SELECT
-      (SELECT COUNT(*) FROM albums) as total_albums,
-      (SELECT COUNT(*) FROM users WHERE is_private = 0) as total_users,
-      (SELECT COALESCE(SUM(total_seconds), 0) FROM users WHERE is_private = 0) as total_seconds,
-      (SELECT json_group_array(DISTINCT key)
-       FROM albums, json_each(genre_counts)
-       WHERE genre_counts != '{}') as public_genres
-  `).first<GlobalStats>(),
+  hasFilter
+    ? db.prepare(`
+        SELECT
+          COUNT(DISTINCT a.id) as total_albums,
+          COUNT(DISTINCT u.id) as total_users,
+          COALESCE(SUM(ua.track_seconds), 0) as total_seconds,
+          (SELECT json_group_array(DISTINCT key)
+           FROM albums, json_each(genre_counts)
+           WHERE genre_counts != '{}') as public_genres
+        FROM user_albums ua
+        JOIN albums a ON a.id = ua.album_id
+        JOIN users u ON u.id = ua.user_id
+        WHERE ${recentWhere}
+      `).bind(...recentParams).first<GlobalStats>()
+    : db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM albums) as total_albums,
+          (SELECT COUNT(*) FROM users WHERE is_private = 0) as total_users,
+          (SELECT COALESCE(SUM(total_seconds), 0) FROM users WHERE is_private = 0) as total_seconds,
+          (SELECT json_group_array(DISTINCT key)
+           FROM albums, json_each(genre_counts)
+           WHERE genre_counts != '{}') as public_genres
+      `).first<GlobalStats>(),
 
   genre ? optQuery('subgenres',   optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
   genre ? optQuery('descriptors', optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
