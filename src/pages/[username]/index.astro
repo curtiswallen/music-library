@@ -237,14 +237,6 @@ if (!isOwner && !profileUser.is_private) {
       {profileUser.avatar_url && <img src={profileUser.avatar_url} class="profile-avatar" alt="" />}
       <h1>{displayName}</h1>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      {!isOwner && loggedInUser && (
-        <a href={`/${loggedInUser.profile_url}/`} class="btn">← My Dashboard</a>
-      )}
-      {!isOwner && !loggedInUser && (
-        <a href={libBase} class="btn">Library</a>
-      )}
-    </div>
   </div>
 
   {(!isOwner && !!profileUser.is_private) ? (

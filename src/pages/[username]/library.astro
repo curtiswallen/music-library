@@ -208,13 +208,6 @@ if (!isOwner && !profileUser.is_private) {
         {(isOwner || !profileUser.is_private) && <span class="count">({albums.length} albums)</span>}
       </h1>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      {!isOwner && (
-        loggedInUser
-          ? <a href={`/${loggedInUser.profile_url}/library`} class="btn">← My Library</a>
-          : null
-      )}
-    </div>
   </div>
   {(!isOwner && !!profileUser.is_private) ? (
     <div class="empty-state">
