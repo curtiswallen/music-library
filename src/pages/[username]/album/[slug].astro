@@ -477,7 +477,7 @@ if (!isOwner && !profileUser.is_private) {
         )}
         <p class="added-at">
           {addedAt && (isOwner || !profileUser.hide_added_at)
-            ? <>{album.rating == null ? 'Queued on' : 'Logged on'} {addedAt} · <a href={`/album/${slugParam}`} class="global-entry-link">Community entry</a></>
+            ? <>{album.rating == null ? 'Queued on ' : 'Logged on '} {addedAt} · <a href={`/album/${slugParam}`} class="global-entry-link">Community entry</a></>
             : <a href={`/album/${slugParam}`} class="global-entry-link">Community entry</a>
           }
         </p>
