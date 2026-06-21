@@ -1200,7 +1200,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 
 /* ── Artist page ── */
-.artist-header { margin-bottom: 24px; }
 .mobile-section-title { display: none; }
 .artist-type-section:last-child { padding-bottom: 200px; }
 .artist-type-section + .artist-type-section { margin-top: 32px; }
