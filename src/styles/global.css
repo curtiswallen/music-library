@@ -1041,7 +1041,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   z-index: 300;
 }
 @media (max-width: 640px) {
-  .track-note-cell { cursor: pointer; padding-right: 0 !important; text-align: right; }
+  .track-note-cell { cursor: pointer; padding-right: 0 !important; }
   .track-num { padding-left: 0 !important; text-align: left; }
 }
 .track-rating-input {
