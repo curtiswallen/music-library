@@ -27,9 +27,11 @@ const libBase      = `/${username}/library`;
 
 const showRecentlyAdded = isOwner || !profileUser.hide_added_at;
 
+const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
+
 type DashAlbum = {
   slug: string; artist: string; album: string; year: number | null;
-  cover_url: string | null; rating: number | null; recommended: number;
+  cover_url: string | null; release_type: string | null; rating: number | null; recommended: number;
   added_at: string | null; country: string | null; genre: string | null;
 };
 type StatsRow   = { total_albums: number; rated_count: number; avg_rating: number | null; total_seconds: number };
@@ -67,7 +69,7 @@ if (isOwner || !profileUser.is_private) {
 
   const recentPromise = showRecentlyAdded
     ? db.prepare(`
-        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at, ua.genre
+        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type, ua.rating, ua.recommended, ua.added_at, ua.genre
         FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
         WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
         ORDER BY ua.added_at DESC LIMIT 15
@@ -77,13 +79,13 @@ if (isOwner || !profileUser.is_private) {
   const [recentRes, topRes, queueRes, statsRes, heatmapRes] = await Promise.all([
     recentPromise,
     db.prepare(`
-      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.genre
+      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type, ua.rating, ua.recommended, ua.genre
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
       WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
       ORDER BY ua.rating DESC LIMIT 15
     `).bind(profileUser.id).all<DashAlbum>(),
     db.prepare(`
-      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, ua.rating, ua.recommended, ua.added_at, ua.genre
+      SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type, ua.rating, ua.recommended, ua.added_at, ua.genre
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
       WHERE ua.is_hidden = 0 AND ua.rating IS NULL
       ORDER BY ua.added_at DESC LIMIT 15
@@ -365,6 +367,7 @@ if (!isOwner && !profileUser.is_private) {
                         </div>
                         <span class="dash-album-name">
                           {a.year && <span class="year-chip">{a.year}</span>}
+                          {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type]}</span>}
                           <span class="dash-album-text">{a.album}</span>
                           {a.recommended === 1 && <span class="rec-star" title="Recommended"> ★</span>}
                         </span>
@@ -588,7 +591,7 @@ if (!isOwner && !profileUser.is_private) {
   .dash-grid { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 640px) {
-  .stat-cards { gap: 8px; margin-bottom: 0; }
+  .stat-cards { gap: 20px; margin-bottom: 0; justify-content: space-between; }
   #dashboard-wrapper { flex-direction: column; gap: 20px; }
   .hm-grid, .hm-header { display: none; }
   .activity-section { margin-bottom: 0; }

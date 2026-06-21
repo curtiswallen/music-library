@@ -1,5 +1,431 @@
 ---
-const user = Astro.locals.user;
-if (!user?.profile_url) return Astro.redirect('/auth/login');
-return Astro.redirect(`/${user.profile_url}/album/${Astro.params.slug}`, 301);
+import Layout from '../../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+import { slugify, countryCode } from '../../lib/utils';
+
+const { slug: slugParam } = Astro.params;
+if (!slugParam) return new Response(null, { status: 404 });
+
+const db = env.DB;
+
+const album = await db.prepare(`
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
+         a.artist_mbid, a.mbid,
+         ROUND(a.avg_rating, 1) as avg_rating, a.rating_count,
+         a.genre_counts, a.all_subgenres, a.all_descriptors
+  FROM albums a
+  WHERE a.slug = ?
+`).bind(slugParam).first<{
+  id: number; slug: string; artist: string; album: string; country: string;
+  year: number | null; cover_url: string | null; release_type: string | null;
+  artist_mbid: string | null; mbid: string | null;
+  avg_rating: number | null; rating_count: number;
+  genre_counts: string; all_subgenres: string; all_descriptors: string;
+}>();
+
+if (!album) return new Response(null, { status: 404 });
+
+const [
+  { results: loggedBy },
+  { results: moreBy },
+  { results: otherEditions },
+  { results: releaseRows },
+] = await Promise.all([
+  db.prepare(`
+    SELECT u.display_name, u.profile_url, u.avatar_url, ua.rating, ua.genre, ua.added_at, ua.notes
+    FROM user_albums ua
+    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+    WHERE ua.album_id = ? AND ua.is_hidden = 0
+    ORDER BY ua.added_at DESC
+    LIMIT 10
+  `).bind(album.id).all<{
+    display_name: string | null; profile_url: string; avatar_url: string | null;
+    rating: number | null; genre: string; added_at: string; notes: string | null;
+  }>(),
+
+  db.prepare(`
+    SELECT a.id, a.slug, a.artist, a.album, a.year, a.cover_url, a.release_type,
+           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts
+    FROM albums a
+    WHERE (
+      a.artist = ?
+      OR a.artist LIKE ? || ' / %'
+      OR a.artist LIKE '% / ' || ?
+      OR a.artist LIKE '% / ' || ? || ' / %'
+    )
+    AND a.id != ?
+    AND a.id IN (
+      SELECT DISTINCT ua.album_id FROM user_albums ua
+      JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+      WHERE ua.is_hidden = 0
+    )
+    ORDER BY a.year ASC NULLS LAST
+  `).bind(album.artist, album.artist, album.artist, album.artist, album.id).all<{
+    id: number; slug: string; artist: string; album: string;
+    year: number | null; cover_url: string | null; release_type: string | null;
+    avg_rating: number | null; rating_count: number; genre_counts: string;
+  }>(),
+
+  db.prepare(`
+    SELECT a.id, a.slug, a.album, a.year, a.release_type,
+           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count
+    FROM albums a
+    WHERE LOWER(a.artist) = LOWER(?) AND LOWER(a.album) = LOWER(?) AND a.id != ?
+    AND a.id IN (
+      SELECT DISTINCT ua.album_id FROM user_albums ua
+      JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+      WHERE ua.is_hidden = 0
+    )
+    ORDER BY a.year ASC NULLS LAST
+  `).bind(album.artist, album.album, album.id).all<{
+    id: number; slug: string; album: string; year: number | null; release_type: string | null;
+    avg_rating: number | null; rating_count: number;
+  }>(),
+
+  db.prepare(`
+    SELECT ua.release_mbid, ua.release_title, ua.release_data
+    FROM user_albums ua
+    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+    WHERE ua.album_id = ? AND ua.is_hidden = 0 AND ua.release_mbid IS NOT NULL
+    GROUP BY ua.release_mbid
+    LIMIT 2
+  `).bind(album.id).all<{
+    release_mbid: string; release_title: string | null; release_data: string | null;
+  }>(),
+]);
+
+if (loggedBy.length === 0) return new Response(null, { status: 404 });
+
+interface ReleaseInfo {
+  format: string; date: string; country: string; disambiguation: string;
+  barcode: string; trackCount: number;
+  labels: Array<{ name: string; catalog: string }>;
+}
+const singleRelease = releaseRows.length === 1 ? releaseRows[0] : null;
+let releaseInfo: ReleaseInfo | null = null;
+if (singleRelease?.release_data) {
+  try { releaseInfo = JSON.parse(singleRelease.release_data) as ReleaseInfo; } catch {}
+}
+const releaseTitle = singleRelease?.release_title ?? null;
+
+// Similar albums based on global subgenres/descriptors
+const genreCountsObj: Record<string, number> = (() => {
+  try { return JSON.parse(album.genre_counts || '{}') as Record<string, number>; } catch { return {}; }
+})();
+const topGenre = Object.entries(genreCountsObj).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+const currentSubs:  string[] = (() => { try { return JSON.parse(album.all_subgenres  || '[]') as string[]; } catch { return []; } })();
+const currentDescs: string[] = (() => { try { return JSON.parse(album.all_descriptors || '[]') as string[]; } catch { return []; } })();
+
+let similar: Array<{
+  slug: string; artist: string; album: string; country: string;
+  year: number | null; cover_url: string | null; release_type: string | null;
+  avg_rating: number | null; rating_count: number; _score: number; subs: string[];
+}> = [];
+
+if (topGenre && currentSubs.length > 0) {
+  const { results: candidates } = await db.prepare(`
+    SELECT a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
+           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.all_subgenres, a.all_descriptors
+    FROM albums a
+    WHERE a.artist != ? AND a.id != ?
+    AND a.genre_counts LIKE ?
+    AND a.id IN (
+      SELECT DISTINCT ua.album_id FROM user_albums ua
+      JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+      WHERE ua.is_hidden = 0
+    )
+    LIMIT 300
+  `).bind(album.artist, album.id, `%"${topGenre}"%`).all<{
+    slug: string; artist: string; album: string; country: string;
+    year: number | null; cover_url: string | null; release_type: string | null;
+    avg_rating: number | null; rating_count: number; all_subgenres: string; all_descriptors: string;
+  }>();
+
+  similar = candidates
+    .map(c => {
+      const cSubs:  string[] = (() => { try { return JSON.parse(c.all_subgenres  || '[]') as string[]; } catch { return []; } })();
+      const cDescs: string[] = (() => { try { return JSON.parse(c.all_descriptors || '[]') as string[]; } catch { return []; } })();
+      const sMatch = currentSubs.filter(s => cSubs.some(cs => cs.toLowerCase() === s.toLowerCase())).length;
+      const dMatch = currentDescs.filter(d => cDescs.some(cd => cd.toLowerCase() === d.toLowerCase())).length;
+      return { ...c, _score: sMatch * 2 + dMatch * 3, subs: cSubs };
+    })
+    .filter(c => c._score >= 2)
+    .sort((a, b) => b._score - a._score)
+    .slice(0, 5);
+}
+
+const loggedInUser = Astro.locals.user;
+
+let myEntry = false;
+if (loggedInUser) {
+  const mine = await db.prepare(
+    'SELECT 1 FROM user_albums WHERE album_id = ? AND user_id = ? LIMIT 1'
+  ).bind(album.id, loggedInUser.id).first();
+  myEntry = mine != null;
+}
+
+const artistParts  = album.artist.split(' / ').map(s => s.trim()).filter(Boolean);
+
+const genreEntries = Object.entries(genreCountsObj).sort((a, b) => b[1] - a[1]);
+const allSubs:  string[] = currentSubs;
+const allDescs: string[] = [...currentDescs].sort((a, b) => a.localeCompare(b));
+
+const TYPE_LABELS: Record<string, string> = {
+  lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other',
+};
+function releaseTypeLabel(t: string | null): string { return t ? (TYPE_LABELS[t] ?? t) : ''; }
+
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 70) return 'rating-hi';
+  if (r >= 50) return 'rating-mid';
+  return 'rating-lo';
+}
+
+function topGenreFn(gc: string): string {
+  try {
+    const obj = JSON.parse(gc || '{}') as Record<string, number>;
+    const entries = Object.entries(obj);
+    if (!entries.length) return '';
+    return entries.sort((a, b) => b[1] - a[1])[0][0];
+  } catch { return ''; }
+}
+
+function fmtDate(dateStr: string | null): string {
+  if (!dateStr) return '';
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return ''; }
+}
+
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 ---
+
+<Layout title={`${album.artist} — ${album.album}`}>
+  <div class="page-header">
+    <div class="breadcrumb">
+      <h1><a href="/">Music Library</a></h1>
+      <h1><span class="breadcrumb-sep">›</span></h1>
+      <h1>
+        {artistParts.map((p, i) => (
+          <>{i > 0 && <span class="breadcrumb-sep"> / </span>}<a href={`/artist/${slugify(p)}`}>{p}</a></>
+        ))}
+        {album.country && (
+          <span class="breadcrumb-tag tip-link" data-tip={album.country}>
+            {countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}
+          </span>
+        )}
+      </h1>
+      <h1><span class="breadcrumb-sep">›</span></h1>
+      <h1><span class="breadcrumb-current">{album.album}</span></h1>
+    </div>
+    <div style="display:flex;gap:8px">
+      {loggedInUser && myEntry && (
+        <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">My Entry</a>
+      )}
+      {!loggedInUser && (
+        <a href="/auth/login" class="btn">Sign In</a>
+      )}
+    </div>
+  </div>
+
+  <div class="view-panel">
+    <div class="album-hero">
+      <div class="cover-col">
+        <div class="cover-box-lg">
+          {album.cover_url && (
+            <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
+          )}
+        </div>
+
+        {(releaseInfo || releaseTitle) && (
+          <div class="release-detail">
+            {releaseInfo ? (
+              <dl class="release-dl">
+                {releaseInfo.format         && <><dt>Format</dt><dd>{releaseInfo.format}</dd></>}
+                {releaseInfo.date           && <><dt>Released</dt><dd>{releaseInfo.date}</dd></>}
+                {releaseInfo.country        && <><dt>Country</dt><dd>{releaseInfo.country}</dd></>}
+                {releaseInfo.labels.map(l  => <><dt>Label</dt><dd>{l.name}{l.catalog ? ` — ${l.catalog}` : ''}</dd></>)}
+                {releaseInfo.barcode        && <><dt>Barcode</dt><dd>{releaseInfo.barcode}</dd></>}
+                {releaseInfo.disambiguation && <><dt>Edition</dt><dd>{releaseInfo.disambiguation}</dd></>}
+              </dl>
+            ) : (
+              <p class="release-name">{releaseTitle}</p>
+            )}
+          </div>
+        )}
+
+        {otherEditions.length > 0 && (
+          <section class="also-logged" style="margin-top:12px">
+            <p class="attr-label">Other Editions</p>
+            <div class="also-logged-list">
+              {otherEditions.map(e => (
+                <a href={`/album/${e.slug}`} class="also-logged-item">
+                  <span class="also-logged-name">
+                    {e.year && <span class="year-chip" style="margin-right:4px">{e.year}</span>}
+                    {e.release_type && <span class="type-chip" style="margin-right:4px">{releaseTypeLabel(e.release_type)}</span>}
+                    {e.album}
+                  </span>
+                  {e.avg_rating != null && (
+                    <span class={`rating ${ratingClass(e.avg_rating)}`}>{e.avg_rating}</span>
+                  )}
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section class="also-logged" style="margin-top:12px">
+          <p class="attr-label">Logged By</p>
+          <div class="also-logged-list">
+            {loggedBy.map(l => (
+              <a href={`/${l.profile_url}/album/${slugParam}`} class="also-logged-item">
+                {l.avatar_url
+                  ? <img src={l.avatar_url} class="also-logged-avatar" alt="" />
+                  : <span class="also-logged-avatar also-logged-placeholder" />
+                }
+                <span class="also-logged-name">
+                  {l.display_name || l.profile_url}
+                  {l.added_at && <span class="also-logged-date"> · {fmtDate(l.added_at)}</span>}
+                </span>
+                {l.rating != null && (
+                  <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
+                )}
+              </a>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <div class="album-meta">
+        <div class="album-mobile-header">
+          <p class="album-meta-artist">
+            {artistParts.map((p, i) => (
+              <>{i > 0 && <span> / </span>}<a href={`/artist/${slugify(p)}`}>{p}</a></>
+            ))}
+          </p>
+          <p class="album-meta-title">{album.album}</p>
+        </div>
+        <div class="album-upper-wrapper">
+          <div class="album-header">
+            <div class="album-attrs">
+              {album.year && <span>{album.year}</span>}
+              {album.release_type && <span class="type-chip">{releaseTypeLabel(album.release_type)}</span>}
+              {genreEntries[0] && <span class="album-genre-label">{genreEntries[0][0]}</span>}
+              {album.avg_rating != null && (
+                <span class={`rating ${ratingClass(album.avg_rating)}`}>{album.avg_rating} / 100</span>
+              )}
+              {album.rating_count > 0 && (
+                <span class="community-stat">{album.rating_count} rating{album.rating_count !== 1 ? 's' : ''}</span>
+              )}
+            </div>
+            {genreEntries.length > 1 && (
+              <div class="album-tags">
+                {genreEntries.slice(1).map(([g]) => (
+                  <span class="tag">{g}</span>
+                ))}
+              </div>
+            )}
+            {allSubs.length > 0 && (
+              <div class="album-tags">
+                {allSubs.map(s => (
+                  <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+                ))}
+              </div>
+            )}
+            {allDescs.length > 0 && (
+              <div class="album-tags">
+                {allDescs.map(d => <span class="tag descriptor-tag">{d}</span>)}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="related-section">
+      {moreBy.length > 0 && (
+        <div class="more-by">
+          <p class="related-title">More by {album.artist}</p>
+          <div class="rel-list">
+            {moreBy.map(a => {
+              const genre = topGenreFn(a.genre_counts);
+              return (
+                <a href={`/album/${a.slug}`} class="rel-row">
+                  {a.cover_url
+                    ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
+                    : <div class="cover-thumb" />}
+                  <div class="rel-info">
+                    <span class="rel-title">{a.album}</span>
+                    {(a.year != null || a.release_type) && (
+                      <span class="rel-sub">
+                        {a.year != null && <span class="year-chip">{a.year}</span>}
+                        {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
+                      </span>
+                    )}
+                  </div>
+                  <div class="rel-right">
+                    {a.avg_rating != null
+                      ? <span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating}</span>
+                      : <span class="rating" />
+                    }
+                    {genre && <div class="rel-tags"><span class="tag">{genre}</span></div>}
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {similar.length > 0 && (
+        <div class="more-by">
+          <p class="related-title">Similar albums</p>
+          <div class="rel-list">
+            {similar.map(a => {
+              const cc = countryCode(a.country).toLowerCase();
+              const sorted = [...a.subs].sort((x, y) => x === 'Sketchy' ? -1 : y === 'Sketchy' ? 1 : 0);
+              return (
+                <a href={`/album/${a.slug}`} class="rel-row">
+                  {a.cover_url
+                    ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
+                    : <div class="cover-thumb" />}
+                  <div class="rel-info">
+                    <span class="rel-title">
+                      {a.artist}
+                      {cc && <span class="added-cell tip-link" data-tip={a.country}> {cc.toUpperCase()}</span>}
+                    </span>
+                    <span class="rel-sub">
+                      {a.year != null && <span class="year-chip">{a.year}</span>}
+                      {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
+                      <span class="rel-sub-text">{a.album}</span>
+                    </span>
+                  </div>
+                  <div class="rel-right">
+                    {a.avg_rating != null
+                      ? <span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating}</span>
+                      : <span class="rating" />
+                    }
+                    {sorted.length > 0 && (
+                      <div class="rel-tags">
+                        {sorted.map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}
+                      </div>
+                    )}
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  </div>
+</Layout>
+
+<style>
+  .also-logged-date {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+</style>

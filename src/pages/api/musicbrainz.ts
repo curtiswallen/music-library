@@ -19,7 +19,7 @@ export const GET: APIRoute = async (context) => {
     const rows = userId
       ? await env.DB
           .prepare(
-            `SELECT a.id, a.artist, a.album, a.year, a.country, a.cover_url, a.mbid, a.tracks, a.slug,
+            `SELECT a.id, a.artist, a.album, a.year, a.country, a.cover_url, a.mbid, a.tracks, a.slug, a.release_type,
                     CASE WHEN ua.album_id IS NOT NULL THEN 1 ELSE 0 END AS in_library
              FROM albums a
              LEFT JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
@@ -32,7 +32,7 @@ export const GET: APIRoute = async (context) => {
           .all<DBRow>()
       : await env.DB
           .prepare(
-            `SELECT id, artist, album, year, country, cover_url, mbid, tracks, slug, 0 AS in_library
+            `SELECT id, artist, album, year, country, cover_url, mbid, tracks, slug, release_type, 0 AS in_library
              FROM albums
              WHERE artist LIKE ? OR album LIKE ?
              ORDER BY CASE WHEN artist LIKE ? THEN 0 ELSE 1 END
@@ -46,20 +46,21 @@ export const GET: APIRoute = async (context) => {
       let dbTracks: DBTrack[] | undefined;
       try { dbTracks = JSON.parse(row.tracks || '[]'); } catch {}
       results.push({
-        mbid:      row.mbid ?? '',
-        title:     row.album,
-        artist:    row.artist,
-        artists:   row.artist.split(' / ').map((s: string) => s.trim()).filter(Boolean),
-        artistId:  '',
-        year:      row.year ? String(row.year) : '',
-        tags:      [],
-        coverUrl:  row.cover_url ?? (row.mbid ? `https://coverartarchive.org/release-group/${row.mbid}/front-250` : ''),
-        dbId:      row.id,
-        country:   row.country ?? '',
-        slug:      row.slug,
-        fromDb:    true,
-        inLibrary: row.in_library === 1,
-        dbTracks:  dbTracks?.length ? dbTracks : undefined,
+        mbid:        row.mbid ?? '',
+        title:       row.album,
+        artist:      row.artist,
+        artists:     row.artist.split(' / ').map((s: string) => s.trim()).filter(Boolean),
+        artistId:    '',
+        year:        row.year ? String(row.year) : '',
+        tags:        [],
+        coverUrl:    row.cover_url ?? (row.mbid ? `https://coverartarchive.org/release-group/${row.mbid}/front-250` : ''),
+        releaseType: row.release_type ?? '',
+        dbId:        row.id,
+        country:     row.country ?? '',
+        slug:        row.slug,
+        fromDb:      true,
+        inLibrary:   row.in_library === 1,
+        dbTracks:    dbTracks?.length ? dbTracks : undefined,
       });
     }
   } catch { /* DB unavailable — continue with MB only */ }
@@ -83,18 +84,19 @@ export const GET: APIRoute = async (context) => {
       const artist = ac.map(c => (c.artist?.name ?? '') + (c.joinphrase ?? '')).join('').trim()
         || (ac[0]?.artist?.name ?? '');
       mbResults.push({
-        mbid:      rg.id,
-        title:     rg.title,
+        mbid:        rg.id,
+        title:       rg.title,
         artist,
-        artists:   ac.map(c => c.artist?.name ?? '').filter(Boolean),
-        artistId:  ac[0]?.artist?.id ?? '',
-        year:      rg['first-release-date']?.slice(0, 4) ?? '',
-        tags:      (rg.genres ?? rg.tags ?? [])
-                     .sort((a, b) => b.count - a.count)
-                     .slice(0, 8)
-                     .map(t => t.name),
-        coverUrl:  `https://coverartarchive.org/release-group/${rg.id}/front-250`,
-        inLibrary: false,
+        artists:     ac.map(c => c.artist?.name ?? '').filter(Boolean),
+        artistId:    ac[0]?.artist?.id ?? '',
+        year:        rg['first-release-date']?.slice(0, 4) ?? '',
+        tags:        (rg.genres ?? rg.tags ?? [])
+                       .sort((a, b) => b.count - a.count)
+                       .slice(0, 8)
+                       .map(t => t.name),
+        coverUrl:    `https://coverartarchive.org/release-group/${rg.id}/front-250`,
+        releaseType: mapReleaseType(rg['primary-type'], rg['secondary-types']),
+        inLibrary:   false,
       });
     }
   } catch { /* MB unavailable */ }
@@ -131,20 +133,21 @@ const json = (data: unknown) =>
   });
 
 interface SearchResult {
-  mbid:      string;
-  title:     string;
-  artist:    string;
-  artists:   string[];
-  artistId:  string;
-  year:      string;
-  tags:      string[];
-  coverUrl:  string;
-  dbId?:     number;
-  country?:  string;
-  slug?:     string;
-  fromDb?:   boolean;
-  inLibrary?: boolean;
-  dbTracks?: DBTrack[];
+  mbid:        string;
+  title:       string;
+  artist:      string;
+  artists:     string[];
+  artistId:    string;
+  year:        string;
+  tags:        string[];
+  coverUrl:    string;
+  releaseType: string;
+  dbId?:       number;
+  country?:    string;
+  slug?:       string;
+  fromDb?:     boolean;
+  inLibrary?:  boolean;
+  dbTracks?:   DBTrack[];
 }
 
 interface DBTrack {
@@ -154,16 +157,17 @@ interface DBTrack {
 }
 
 interface DBRow {
-  id:         number;
-  artist:     string;
-  album:      string;
-  year:       number | null;
-  country:    string;
-  cover_url:  string | null;
-  mbid:       string | null;
-  tracks:     string;
-  slug:       string;
-  in_library: number;
+  id:           number;
+  artist:       string;
+  album:        string;
+  year:         number | null;
+  country:      string;
+  cover_url:    string | null;
+  mbid:         string | null;
+  tracks:       string;
+  slug:         string;
+  in_library:   number;
+  release_type: string | null;
 }
 
 interface MBResponse {
@@ -171,8 +175,22 @@ interface MBResponse {
     id: string;
     title: string;
     'first-release-date'?: string;
+    'primary-type'?:    string;
+    'secondary-types'?: string[];
     'artist-credit'?: Array<{ artist: { id: string; name: string }; joinphrase?: string }>;
     genres?: Array<{ name: string; count: number }>;
     tags?:   Array<{ name: string; count: number }>;
   }>;
+}
+
+function mapReleaseType(primary?: string, secondary?: string[]): string {
+  const sec = (secondary ?? []).map(s => s.toLowerCase());
+  if (sec.includes('demo')) return 'demo';
+  if (sec.includes('compilation')) return 'compilation';
+  const p = (primary ?? '').toLowerCase();
+  if (p === 'album') return 'lp';
+  if (p === 'ep') return 'ep';
+  if (p === 'single') return 'single';
+  if (p) return 'other';
+  return '';
 }

@@ -3,6 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import AlbumForm from '../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
 import { generateUniqueSlug, normalizeSearch } from '../lib/utils';
+import { syncArtistData } from '../lib/artist-cache';
 import { getGenreCache } from '../lib/genre-cache';
 import { invalidateLibraryOverview } from '../lib/library-cache';
 
@@ -12,10 +13,12 @@ const kv   = env.GENRE_CACHE;
 
 if (Astro.request.method === 'POST') {
   const data      = await Astro.request.formData();
-  const artist    = (data.getAll('artist') as string[]).map(s => s.trim()).filter(Boolean).join(' / ') || '';
-  const album     = (data.get('album') as string) || '';
-  const mbid      = (data.get('mbid') as string) || null;
-  const dbAlbumId = (data.get('db_album_id') as string)
+  const artist      = (data.getAll('artist') as string[]).map(s => s.trim()).filter(Boolean).join(' / ') || '';
+  const album       = (data.get('album') as string) || '';
+  const mbid        = (data.get('mbid') as string) || null;
+  const artistMbid  = (data.get('artist_mbid') as string) || null;
+  const releaseType = (data.get('release_type') as string) || null;
+  const dbAlbumId   = (data.get('db_album_id') as string)
     ? parseInt(data.get('db_album_id') as string) : null;
 
   const subgenres = JSON.stringify(
@@ -65,8 +68,8 @@ if (Astro.request.method === 'POST') {
     } else {
       albumSlug = await generateUniqueSlug(db, artist, album);
       const r = await db.prepare(`
-        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text, artist_mbid, release_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         mbid, albumSlug, artist, album,
         (data.get('country') as string) || '',
@@ -74,6 +77,7 @@ if (Astro.request.method === 'POST') {
         (data.get('cover_url') as string) || null,
         canonicalTracks,
         normalizeSearch(`${artist} ${album}`),
+        artistMbid, releaseType,
       ).run();
       albumId = r.meta.last_row_id as number;
     }
@@ -87,8 +91,8 @@ if (Astro.request.method === 'POST') {
     } else {
       albumSlug = await generateUniqueSlug(db, artist, album);
       const r = await db.prepare(`
-        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text, artist_mbid, release_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         null, albumSlug, artist, album,
         (data.get('country') as string) || '',
@@ -96,6 +100,7 @@ if (Astro.request.method === 'POST') {
         (data.get('cover_url') as string) || null,
         canonicalTracks,
         normalizeSearch(`${artist} ${album}`),
+        artistMbid, releaseType,
       ).run();
       albumId = r.meta.last_row_id as number;
     }
@@ -149,6 +154,11 @@ if (Astro.request.method === 'POST') {
 
   await invalidateLibraryOverview(kv, user.id);
 
+  if (artistMbid) {
+    const primaryArtist = artist.split(' / ')[0].trim();
+    Astro.locals.cfContext.waitUntil(syncArtistData(db, artistMbid, primaryArtist));
+  }
+
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
 }
 
@@ -171,20 +181,21 @@ import { initAlbumForm, setArtists, setDescriptors, populateReleaseSelect, readG
 import type { TrackData } from '../lib/album-form';
 
 interface MBResult {
-  mbid:      string;
-  title:     string;
-  artist:    string;
-  artists:   string[];
-  artistId:  string;
-  year:      string;
-  tags:      string[];
-  coverUrl:  string;
-  dbId?:     number;
-  country?:  string;
-  slug?:     string;
-  fromDb?:   boolean;
-  inLibrary?: boolean;
-  dbTracks?: Array<{ pos: number; title: string; length: number | null }>;
+  mbid:        string;
+  title:       string;
+  artist:      string;
+  artists:     string[];
+  artistId:    string;
+  year:        string;
+  tags:        string[];
+  coverUrl:    string;
+  releaseType: string;
+  dbId?:       number;
+  country?:    string;
+  slug?:       string;
+  fromDb?:     boolean;
+  inLibrary?:  boolean;
+  dbTracks?:   Array<{ pos: number; title: string; length: number | null }>;
 }
 
 const profileUrl = (document.getElementById('add-wrapper') as HTMLElement).dataset.profileUrl!;
@@ -251,6 +262,8 @@ function pick(r: MBResult) {
   }
   set('f-mbid',        r.mbid ?? '');
   set('f-db-album-id', r.dbId ? String(r.dbId) : '');
+  set('f-artist-mbid', r.artistId ?? '');
+  set('f-release-type', r.releaseType ?? '');
   setArtists(r.artists?.length ? r.artists : r.artist.split(' / '));
   set('f-album',  r.title);
   set('f-year',   r.year);
@@ -376,6 +389,8 @@ document.getElementById('clear-form-btn')?.addEventListener('click', () => {
   setArtists(['']);
   set('f-mbid', '');
   set('f-db-album-id', '');
+  set('f-artist-mbid', '');
+  set('f-release-type', '');
   set('f-album', '');
   set('f-year', '');
   set('f-country', '');

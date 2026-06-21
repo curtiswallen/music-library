@@ -3,6 +3,7 @@ import Layout from '../../../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
 import { slugify, countryCode } from '../../../lib/utils';
 import { mdInline } from '../../../lib/markdown';
+import type { ArtistRow, MembersData } from '../../../lib/artist-cache';
 
 const { username, artist: artistSlug } = Astro.params;
 if (!username || !artistSlug) return new Response(null, { status: 404 });
@@ -43,7 +44,7 @@ for (const row of allArtists) {
 if (!artistName) return new Response(null, { status: 404 });
 
 const { results: albums } = await db.prepare(`
-  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.artist_mbid, a.release_type,
          ua.genre, ua.subgenres, ua.descriptors, ua.rating, ua.notes, ua.recommended
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
@@ -56,9 +57,68 @@ const { results: albums } = await db.prepare(`
   ORDER BY a.year ASC NULLS LAST
 `).bind(profileUser.id, artistName, artistName, artistName, artistName).all<{
   id: number; slug: string; artist: string; album: string; country: string;
-  year: number | null; cover_url: string | null;
+  year: number | null; cover_url: string | null; artist_mbid: string | null; release_type: string | null;
   genre: string; subgenres: string; descriptors: string; rating: number | null; notes: string; recommended: number;
 }>();
+
+const artistMbid = albums.find(a => a.artist_mbid)?.artist_mbid ?? null;
+
+const TYPE_ORDER: { type: string | null; label: string }[] = [
+  { type: 'lp',          label: 'LP'          },
+  { type: 'ep',          label: 'EP'          },
+  { type: 'single',      label: 'Single'      },
+  { type: 'compilation', label: 'Compilation' },
+  { type: 'demo',        label: 'Demo'        },
+  { type: null,          label: 'Other'       },
+];
+
+const albumsByType = TYPE_ORDER.map(({ type, label }) => ({
+  label,
+  albums: type === null
+    ? albums.filter(a => !a.release_type || a.release_type === 'other')
+    : albums.filter(a => a.release_type === type),
+})).filter(s => s.albums.length > 0);
+
+const multipleTypes = albumsByType.length > 1;
+
+let artistRow: ArtistRow | null = null;
+let membersData: MembersData = { current: [], original: [], former: [] };
+if (artistMbid) {
+  artistRow = await db.prepare('SELECT * FROM artists WHERE mbid = ?')
+    .bind(artistMbid).first<ArtistRow>();
+  if (artistRow) {
+    try { membersData = JSON.parse(artistRow.members_data) as MembersData; } catch {}
+  }
+}
+
+const memberSections = [
+  { label: 'Members',          list: membersData.current  },
+  { label: 'Original Members', list: membersData.original },
+  { label: 'Former Members',   list: membersData.former   },
+].filter(s => s.list.length > 0).map(s => {
+  const half = Math.ceil(s.list.length / 2);
+  return { ...s, col1: s.list.slice(0, half), col2: s.list.slice(half) };
+});
+
+const artistCountry = albums[0]?.country ?? null;
+const locationStr = (() => {
+  const loc = artistRow?.formation_location ?? null;
+  if (!loc) return null;
+  if (!artistCountry) return loc;
+  const locLow     = loc.toLowerCase();
+  const countryLow = artistCountry.toLowerCase();
+  if (locLow === countryLow || locLow.endsWith(`, ${countryLow}`)) return loc;
+  return `${loc}, ${artistCountry}`;
+})();
+
+const artistDateStr = artistRow
+  ? [
+      artistRow.inception && (artistRow.dissolution
+        ? `${artistRow.inception}–${artistRow.dissolution}`
+        : `${artistRow.inception}–present`),
+      locationStr,
+    ].filter(Boolean).join(' · ')
+  : '';
 
 if (!isOwner && !profileUser.is_private) {
   Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
@@ -101,67 +161,122 @@ function sortedSubs(subs: string[]) {
 
   <h2 class="mobile-section-title">{artistName}</h2>
 
-  <div class="table-wrap artist-tbl">
-    <table>
-      <thead>
-        <tr>
-          <th></th>
-          <th>Album</th>
-          <th>Year</th>
-          <th>Genre</th>
-          <th>Subgenres</th>
-          <th>Descriptors</th>
-          <th>Rating <span class="rating-tip">?<span class="rating-tip-body">
-            <div class="rating-tip-row"><strong>100</strong><span>Masterpiece / Perfect</span></div>
-            <div class="rating-tip-row"><strong>90</strong><span>Amazing / Fantastic</span></div>
-            <div class="rating-tip-row"><strong>80</strong><span>Great / Excellent</span></div>
-            <div class="rating-tip-row"><strong>70</strong><span>Very Good / Solid</span></div>
-            <div class="rating-tip-row"><strong>60</strong><span>Good / Serviceable</span></div>
-            <div class="rating-tip-row"><strong>50</strong><span>Decent / Mixed Opinion</span></div>
-            <div class="rating-tip-row"><strong>40</strong><span>Acceptable / Unremarkable</span></div>
-            <div class="rating-tip-row"><strong>30</strong><span>Mediocre / Poor</span></div>
-            <div class="rating-tip-row"><strong>20</strong><span>Bad / Terrible</span></div>
-            <div class="rating-tip-row"><strong>10</strong><span>Abysmal / Worthless</span></div>
-          </span></span></th>
-          <th>Notes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {albums.map(a => {
-          const ownSubs:  string[] = JSON.parse(a.subgenres  || '[]') as string[];
-          const ownDescs: string[] = (JSON.parse(a.descriptors || '[]') as string[]).sort((x, y) => x.localeCompare(y));
-          return (
-            <tr data-href={`${libBase}/album/${a.slug}`}>
-              <td>
-                <div class="cover-thumb" style="background:#000;overflow:hidden">
-                  {a.cover_url && (
-                    <img src={a.cover_url} alt="" loading="lazy"
-                         style="width:100%;height:100%;object-fit:contain;display:block"
-                         onerror="this.style.display='none'" />
-                  )}
-                </div>
-              </td>
-              <td><a href={`${libBase}/album/${a.slug}`}>{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
-              <td>{a.year ?? ''}</td>
-              <td>{a.genre && <span class="genre">{a.genre}</span>}</td>
-              <td>
-                {sortedSubs(ownSubs).map(s => (
-                  <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
-                ))}
-              </td>
-              <td>
-                {ownDescs.map(d => (
-                  <span class="tag descriptor-tag">{d}</span>
-                ))}
-              </td>
-              <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-              <td class="notes-cell"><span set:html={a.notes ? mdInline(a.notes.split(/\r?\n/)[0]) : ''} /></td>
+  {artistRow && (
+    <div class="artist-info-panel">
+      <div class="artist-info-top">
+        {artistRow.logo_url && (
+          <img src={artistRow.logo_url} class="artist-info-logo" alt="" onerror="this.remove()" />
+        )}
+        <div class="artist-info-meta">
+          {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
+          {memberSections.length > 0 && (
+            <div class="artist-info-members-grid">
+              {memberSections.map(s => {
+                const renderItem = (m: typeof s.list[0]) => {
+                  const dateStr = m.beginYear
+                    ? (m.isActive ? `${m.beginYear}–present` : m.endYear ? `${m.beginYear}–${m.endYear}` : m.beginYear)
+                    : (m.endYear ? `until ${m.endYear}` : null);
+                  return (
+                    <li>
+                      {m.name}
+                      {m.instruments.length > 0 && (
+                        <span class="member-instruments"> — {m.instruments.join(', ')}</span>
+                      )}
+                      {dateStr && <span class="member-dates"> ({dateStr})</span>}
+                    </li>
+                  );
+                };
+                return (
+                  <div class="artist-info-member-section">
+                    <h4>{s.label}</h4>
+                    <div class="member-cols">
+                      <ul>{s.col1.map(renderItem)}</ul>
+                      {s.col2.length > 0 && <ul>{s.col2.map(renderItem)}</ul>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      {artistRow.wiki_blurb && (
+        <div class="artist-info-blurb">
+          <p>{artistRow.wiki_blurb}</p>
+          {artistRow.wiki_url && (
+            <a href={artistRow.wiki_url} target="_blank" rel="noopener noreferrer" class="artist-info-wiki-link">Wikipedia ↗</a>
+          )}
+        </div>
+      )}
+    </div>
+  )}
+
+  {albumsByType.map(({ label, albums: group }) => (
+    <div class="artist-type-section">
+      {multipleTypes && <h3 class="artist-type-heading">{label}</h3>}
+      <div class="table-wrap artist-tbl">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Album</th>
+              <th>Year</th>
+              <th>Genre</th>
+              <th>Subgenres</th>
+              <th>Descriptors</th>
+              <th>Rating <span class="rating-tip">?<span class="rating-tip-body">
+                <div class="rating-tip-row"><strong>100</strong><span>Masterpiece / Perfect</span></div>
+                <div class="rating-tip-row"><strong>90</strong><span>Amazing / Fantastic</span></div>
+                <div class="rating-tip-row"><strong>80</strong><span>Great / Excellent</span></div>
+                <div class="rating-tip-row"><strong>70</strong><span>Very Good / Solid</span></div>
+                <div class="rating-tip-row"><strong>60</strong><span>Good / Serviceable</span></div>
+                <div class="rating-tip-row"><strong>50</strong><span>Decent / Mixed Opinion</span></div>
+                <div class="rating-tip-row"><strong>40</strong><span>Acceptable / Unremarkable</span></div>
+                <div class="rating-tip-row"><strong>30</strong><span>Mediocre / Poor</span></div>
+                <div class="rating-tip-row"><strong>20</strong><span>Bad / Terrible</span></div>
+                <div class="rating-tip-row"><strong>10</strong><span>Abysmal / Worthless</span></div>
+              </span></span></th>
+              <th>Notes</th>
             </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
+          </thead>
+          <tbody>
+            {group.map(a => {
+              const ownSubs:  string[] = JSON.parse(a.subgenres  || '[]') as string[];
+              const ownDescs: string[] = (JSON.parse(a.descriptors || '[]') as string[]).sort((x, y) => x.localeCompare(y));
+              return (
+                <tr data-href={`${libBase}/album/${a.slug}`}>
+                  <td>
+                    <div class="cover-thumb" style="background:#000;overflow:hidden">
+                      {a.cover_url && (
+                        <img src={a.cover_url} alt="" loading="lazy"
+                             style="width:100%;height:100%;object-fit:contain;display:block"
+                             onerror="this.style.display='none'" />
+                      )}
+                    </div>
+                  </td>
+                  <td><a href={`${libBase}/album/${a.slug}`}>{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+                  <td>{a.year ?? ''}</td>
+                  <td>{a.genre && <span class="genre">{a.genre}</span>}</td>
+                  <td>
+                    {sortedSubs(ownSubs).map(s => (
+                      <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+                    ))}
+                  </td>
+                  <td>
+                    {ownDescs.map(d => (
+                      <span class="tag descriptor-tag">{d}</span>
+                    ))}
+                  </td>
+                  <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
+                  <td class="notes-cell"><span set:html={a.notes ? mdInline(a.notes.split(/\r?\n/)[0]) : ''} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ))}
 </Layout>
 
 <script>

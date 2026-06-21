@@ -20,6 +20,8 @@ interface Props {
   buildParams: (o: Record<string, string | string[] | null | undefined>) => string;
 }
 
+const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
+
 const {
   albums,
   base,
@@ -103,6 +105,7 @@ const {
             <td class="col-album">
               <a href={`${base}/album/${a.slug}`}>
                 {a.year != null && <span class="year-chip col-album-year">{a.year}</span>}
+                {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type] ?? a.release_type}</span>}
                 <span class="col-album-text">{a.album}</span>
                 {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}
               </a>

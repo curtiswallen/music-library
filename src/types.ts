@@ -38,6 +38,8 @@ export interface Album {
   avg_rating: number | null;
   rating_count: number;
   created_at: string;
+  artist_mbid: string | null;
+  release_type: string | null;
 }
 
 /** Per-user subjective data for one album */
@@ -70,6 +72,7 @@ export interface LibraryEntry {
   country: string;
   year: number | null;
   cover_url: string | null;
+  release_type: string | null;
   // from user_albums
   genre: string;
   subgenres: string;

@@ -1,5 +1,288 @@
 ---
-const user = Astro.locals.user;
-if (!user?.profile_url) return Astro.redirect('/auth/login');
-return Astro.redirect(`/${user.profile_url}/artist/${Astro.params.artist}`, 301);
+import Layout from '../../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+import { slugify, countryCode } from '../../lib/utils';
+import type { ArtistRow, MembersData } from '../../lib/artist-cache';
+
+const { artist: artistSlug } = Astro.params;
+if (!artistSlug) return new Response(null, { status: 404 });
+
+const db = env.DB;
+
+const { results: allArtists } = await db.prepare(`
+  SELECT DISTINCT a.artist FROM albums a
+  WHERE a.id IN (
+    SELECT DISTINCT ua.album_id FROM user_albums ua
+    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+    WHERE ua.is_hidden = 0
+  )
+`).all<{ artist: string }>();
+
+let artistName: string | undefined;
+for (const row of allArtists) {
+  const parts = row.artist.split(' / ').map((s: string) => s.trim());
+  const match = parts.find(p => slugify(p) === artistSlug);
+  if (match) { artistName = match; break; }
+}
+if (!artistName) return new Response(null, { status: 404 });
+
+const { results: albums } = await db.prepare(`
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.artist_mbid, a.release_type,
+         ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts, a.all_subgenres
+  FROM albums a
+  WHERE (
+    a.artist = ?
+    OR a.artist LIKE ? || ' / %'
+    OR a.artist LIKE '% / ' || ?
+    OR a.artist LIKE '% / ' || ? || ' / %'
+  )
+  AND a.id IN (
+    SELECT DISTINCT ua.album_id FROM user_albums ua
+    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+    WHERE ua.is_hidden = 0
+  )
+  ORDER BY a.year ASC NULLS LAST
+`).bind(artistName, artistName, artistName, artistName).all<{
+  id: number; slug: string; artist: string; album: string; country: string;
+  year: number | null; cover_url: string | null; artist_mbid: string | null; release_type: string | null;
+  avg_rating: number | null; rating_count: number; genre_counts: string; all_subgenres: string;
+}>();
+
+if (albums.length === 0) return new Response(null, { status: 404 });
+
+const artistMbid = albums.find(a => a.artist_mbid)?.artist_mbid ?? null;
+
+const TYPE_ORDER: { type: string | null; label: string }[] = [
+  { type: 'lp',          label: 'LP'          },
+  { type: 'ep',          label: 'EP'          },
+  { type: 'single',      label: 'Single'      },
+  { type: 'compilation', label: 'Compilation' },
+  { type: 'demo',        label: 'Demo'        },
+  { type: null,          label: 'Other'       },
+];
+
+const albumsByType = TYPE_ORDER.map(({ type, label }) => ({
+  label,
+  albums: type === null
+    ? albums.filter(a => !a.release_type || a.release_type === 'other')
+    : albums.filter(a => a.release_type === type),
+})).filter(s => s.albums.length > 0);
+
+const multipleTypes = albumsByType.length > 1;
+
+let artistRow: ArtistRow | null = null;
+let membersData: MembersData = { current: [], original: [], former: [] };
+if (artistMbid) {
+  artistRow = await db.prepare('SELECT * FROM artists WHERE mbid = ?')
+    .bind(artistMbid).first<ArtistRow>();
+  if (artistRow) {
+    try { membersData = JSON.parse(artistRow.members_data) as MembersData; } catch {}
+  }
+}
+
+const memberSections = [
+  { label: 'Members',          list: membersData.current  },
+  { label: 'Original Members', list: membersData.original },
+  { label: 'Former Members',   list: membersData.former   },
+].filter(s => s.list.length > 0).map(s => {
+  const half = Math.ceil(s.list.length / 2);
+  return { ...s, col1: s.list.slice(0, half), col2: s.list.slice(half) };
+});
+
+const artistCountry = albums[0]?.country ?? null;
+const locationStr = (() => {
+  const loc = artistRow?.formation_location ?? null;
+  if (!loc) return null;
+  if (!artistCountry) return loc;
+  const locLow     = loc.toLowerCase();
+  const countryLow = artistCountry.toLowerCase();
+  if (locLow === countryLow || locLow.endsWith(`, ${countryLow}`)) return loc;
+  return `${loc}, ${artistCountry}`;
+})();
+
+const artistDateStr = artistRow
+  ? [
+      artistRow.inception && (artistRow.dissolution
+        ? `${artistRow.inception}–${artistRow.dissolution}`
+        : `${artistRow.inception}–present`),
+      locationStr,
+    ].filter(Boolean).join(' · ')
+  : '';
+
+const loggedInUser = Astro.locals.user;
+
+const TYPE_LABELS: Record<string, string> = {
+  lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other',
+};
+
+function ratingClass(r: number | null) {
+  if (r == null) return '';
+  if (r >= 70) return 'rating-hi';
+  if (r >= 50) return 'rating-mid';
+  return 'rating-lo';
+}
+
+function topGenre(genreCounts: string): string {
+  try {
+    const gc = JSON.parse(genreCounts || '{}') as Record<string, number>;
+    const entries = Object.entries(gc);
+    if (!entries.length) return '';
+    return entries.sort((a, b) => b[1] - a[1])[0][0];
+  } catch { return ''; }
+}
+
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 ---
+
+<Layout title={artistName}>
+  <div class="page-header artist-header">
+    <div class="breadcrumb">
+      <h1><a href="/">Music Library</a></h1>
+      <h1><span class="breadcrumb-sep">›</span></h1>
+      <h1>
+        <span class="breadcrumb-current">{artistName}</span>
+        {albums[0].country && (
+          <span class="breadcrumb-tag tip-link" data-tip={albums[0].country}>
+            {countryCode(albums[0].country) ? countryCode(albums[0].country).toUpperCase() : albums[0].country}
+          </span>
+        )}
+      </h1>
+      <span class="count" style="margin-left:4px">({albums.length} album{albums.length !== 1 ? 's' : ''})</span>
+    </div>
+    <div style="display:flex;gap:8px">
+      {loggedInUser
+        ? <a href={`/${loggedInUser.profile_url}/artist/${artistSlug}`} class="btn">My Library</a>
+        : <a href="/auth/login" class="btn">Sign In</a>
+      }
+    </div>
+  </div>
+
+  <h2 class="mobile-section-title">{artistName}</h2>
+
+  {artistRow && (
+    <div class="artist-info-panel">
+      <div class="artist-info-top">
+        {artistRow.logo_url && (
+          <img src={artistRow.logo_url} class="artist-info-logo" alt="" onerror="this.remove()" />
+        )}
+        <div class="artist-info-meta">
+          {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
+          {memberSections.length > 0 && (
+            <div class="artist-info-members-grid">
+              {memberSections.map(s => {
+                const renderItem = (m: typeof s.list[0]) => {
+                  const dateStr = m.beginYear
+                    ? (m.isActive ? `${m.beginYear}–present` : m.endYear ? `${m.beginYear}–${m.endYear}` : String(m.beginYear))
+                    : (m.endYear ? `until ${m.endYear}` : null);
+                  return (
+                    <li>
+                      {m.name}
+                      {m.instruments.length > 0 && (
+                        <span class="member-instruments"> — {m.instruments.join(', ')}</span>
+                      )}
+                      {dateStr && <span class="member-dates"> ({dateStr})</span>}
+                    </li>
+                  );
+                };
+                return (
+                  <div class="artist-info-member-section">
+                    <h4>{s.label}</h4>
+                    <div class="member-cols">
+                      <ul>{s.col1.map(renderItem)}</ul>
+                      {s.col2.length > 0 && <ul>{s.col2.map(renderItem)}</ul>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+      {artistRow.wiki_blurb && (
+        <div class="artist-info-blurb">
+          <p>{artistRow.wiki_blurb}</p>
+          {artistRow.wiki_url && (
+            <a href={artistRow.wiki_url} target="_blank" rel="noopener noreferrer" class="artist-info-wiki-link">Wikipedia ↗</a>
+          )}
+        </div>
+      )}
+    </div>
+  )}
+
+  {albumsByType.map(({ label, albums: group }) => (
+    <div class="artist-type-section">
+      {multipleTypes && <h3 class="artist-type-heading">{label}</h3>}
+      <div class="table-wrap artist-tbl">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Album</th>
+              <th>Year</th>
+              <th>Genre</th>
+              <th class="col-subgenres">Subgenres</th>
+              <th>Avg Rating <span class="rating-tip">?<span class="rating-tip-body">
+                <div class="rating-tip-row"><strong>100</strong><span>Masterpiece / Perfect</span></div>
+                <div class="rating-tip-row"><strong>90</strong><span>Amazing / Fantastic</span></div>
+                <div class="rating-tip-row"><strong>80</strong><span>Great / Excellent</span></div>
+                <div class="rating-tip-row"><strong>70</strong><span>Very Good / Solid</span></div>
+                <div class="rating-tip-row"><strong>60</strong><span>Good / Serviceable</span></div>
+                <div class="rating-tip-row"><strong>50</strong><span>Decent / Mixed Opinion</span></div>
+                <div class="rating-tip-row"><strong>40</strong><span>Acceptable / Unremarkable</span></div>
+                <div class="rating-tip-row"><strong>30</strong><span>Mediocre / Poor</span></div>
+                <div class="rating-tip-row"><strong>20</strong><span>Bad / Terrible</span></div>
+                <div class="rating-tip-row"><strong>10</strong><span>Abysmal / Worthless</span></div>
+              </span></span></th>
+              <th># Ratings</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.map(a => {
+              const genre = topGenre(a.genre_counts);
+              const subs: string[] = (() => { try { return JSON.parse(a.all_subgenres || '[]') as string[]; } catch { return []; } })();
+              const sorted = [...subs].sort((x, y) => x === 'Sketchy' ? -1 : y === 'Sketchy' ? 1 : 0);
+              return (
+                <tr data-href={`/album/${a.slug}`}>
+                  <td>
+                    <div class="cover-thumb" style="background:#000;overflow:hidden">
+                      {a.cover_url && (
+                        <img src={a.cover_url} alt="" loading="lazy"
+                             style="width:100%;height:100%;object-fit:contain;display:block"
+                             onerror="this.style.display='none'" />
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <a href={`/album/${a.slug}`}>
+                      {a.year != null && <span class="year-chip col-album-year">{a.year}</span>}
+                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type] ?? a.release_type}</span>}
+                      <span class="col-album-text">{a.album}</span>
+                    </a>
+                  </td>
+                  <td>{a.year ?? ''}</td>
+                  <td>{genre && <span class="genre">{genre}</span>}</td>
+                  <td class="col-subgenres">
+                    {sorted.map(s => (
+                      <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>
+                    ))}
+                  </td>
+                  <td><span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating ?? '—'}</span></td>
+                  <td class="added-cell">{a.rating_count > 0 ? a.rating_count : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ))}
+</Layout>
+
+<script>
+document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
+  tr.addEventListener('click', e => {
+    if ((e.target as Element).closest('a')) return;
+    window.location.href = tr.dataset.href!;
+  });
+});
+</script>

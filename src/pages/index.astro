@@ -3,6 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
 import { getGenreCache } from '../lib/genre-cache';
 import { countryCode } from '../lib/utils';
+
+const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
 import Combobox from '../components/Combobox.astro';
 
 const db           = env.DB;
@@ -10,34 +12,42 @@ const kv           = env.GENRE_CACHE;
 const loggedInUser = Astro.locals.user;
 
 // ── Active filters ────────────────────────────────────────────────────────────
-const genre      = Astro.url.searchParams.get('genre')      ?? '';
-const country    = Astro.url.searchParams.get('country')    ?? '';
-const subgenres  = Astro.url.searchParams.getAll('subgenre');
+const genre       = Astro.url.searchParams.get('genre')        ?? '';
+const country     = Astro.url.searchParams.get('country')      ?? '';
+const releaseType = Astro.url.searchParams.get('release_type') ?? '';
+const subgenres   = Astro.url.searchParams.getAll('subgenre');
 const descriptors = Astro.url.searchParams.getAll('descriptor');
-const yearFrom   = Astro.url.searchParams.get('year_from')  ?? '';
-const yearTo     = Astro.url.searchParams.get('year_to')    ?? '';
-const ratingMin  = Astro.url.searchParams.get('rating_min') ?? '';
-const hasFilter  = !!(genre || country || subgenres.length || descriptors.length || yearFrom || yearTo || ratingMin);
+const yearFrom    = Astro.url.searchParams.get('year_from')    ?? '';
+const yearTo      = Astro.url.searchParams.get('year_to')      ?? '';
+const ratingMin   = Astro.url.searchParams.get('rating_min')   ?? '';
+const hasFilter   = !!(genre || country || releaseType || subgenres.length || descriptors.length || yearFrom || yearTo || ratingMin);
 
 // ── Filter options ────────────────────────────────────────────────────────────
 const { groupedGenres } = await getGenreCache(kv, db);
 
 // ── SQL clause builders ───────────────────────────────────────────────────────
+const releaseTypeClause = releaseType === 'other'
+  ? `(a.release_type = 'other' OR a.release_type IS NULL)`
+  : releaseType ? `a.release_type = ?` : null;
+const releaseTypeParams = releaseType && releaseType !== 'other' ? [releaseType] : [];
+
 const sharedClauses = [
-  ...(genre      ? [`ua.genre = ?`]                : []),
-  ...(country    ? [`a.country = ?`]               : []),
+  ...(genre         ? [`ua.genre = ?`]                : []),
+  ...(country       ? [`a.country = ?`]               : []),
+  ...(releaseTypeClause ? [releaseTypeClause]          : []),
   ...subgenres.map  (() => `ua.subgenres   LIKE ?`),
   ...descriptors.map(() => `ua.descriptors LIKE ?`),
-  ...(yearFrom   ? [`a.year >= ?`]                 : []),
-  ...(yearTo     ? [`a.year <= ?`]                 : []),
+  ...(yearFrom      ? [`a.year >= ?`]                 : []),
+  ...(yearTo        ? [`a.year <= ?`]                 : []),
 ];
 const sharedParams = [
-  ...(genre      ? [genre]                          : []),
-  ...(country    ? [country]                        : []),
+  ...(genre         ? [genre]                         : []),
+  ...(country       ? [country]                       : []),
+  ...releaseTypeParams,
   ...subgenres.map  (s => `%"${s}"%`),
   ...descriptors.map(d => `%"${d}"%`),
-  ...(yearFrom   ? [Number(yearFrom)]               : []),
-  ...(yearTo     ? [Number(yearTo)]                 : []),
+  ...(yearFrom      ? [Number(yearFrom)]              : []),
+  ...(yearTo        ? [Number(yearTo)]                : []),
 ];
 
 // rating_min means personal rating on recent, avg_rating on top-rated
@@ -52,20 +62,22 @@ const topParams    = [...sharedParams, ...(ratingMin ? [Number(ratingMin)] : [])
 // all already-selected subgenres/descriptors are the only ones shown as clickable.
 const optWhere = [
   `ua.is_hidden = 0`, `u.is_private = 0`, `ua.rating IS NOT NULL`, `value != ''`,
-  ...(genre      ? [`ua.genre = ?`]           : []),
-  ...(country    ? [`a.country = ?`]          : []),
+  ...(genre               ? [`ua.genre = ?`]           : []),
+  ...(country             ? [`a.country = ?`]          : []),
+  ...(releaseTypeClause   ? [releaseTypeClause]         : []),
   ...subgenres.map  (() => `ua.subgenres   LIKE ?`),
   ...descriptors.map(() => `ua.descriptors LIKE ?`),
-  ...(yearFrom   ? [`a.year >= ?`]            : []),
-  ...(yearTo     ? [`a.year <= ?`]            : []),
-  ...(ratingMin  ? [`ua.rating >= ?`]         : []),
+  ...(yearFrom            ? [`a.year >= ?`]            : []),
+  ...(yearTo              ? [`a.year <= ?`]            : []),
+  ...(ratingMin           ? [`ua.rating >= ?`]         : []),
 ].join(' AND ');
 const optParams = [
-  ...(genre      ? [genre]                    : []),
-  ...(country    ? [country]                  : []),
+  ...(genre               ? [genre]                    : []),
+  ...(country             ? [country]                  : []),
+  ...releaseTypeParams,
   ...subgenres.map  (s => `%"${s}"%`),
   ...descriptors.map(d => `%"${d}"%`),
-  ...(yearFrom   ? [Number(yearFrom)]         : []),
+  ...(yearFrom            ? [Number(yearFrom)]         : []),
   ...(yearTo     ? [Number(yearTo)]           : []),
   ...(ratingMin  ? [Number(ratingMin)]        : []),
 ];
@@ -73,13 +85,13 @@ const optParams = [
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RecentEntry = {
   slug: string; artist: string; album: string; year: number | null;
-  cover_url: string | null; rating: number | null; recommended: number;
+  cover_url: string | null; release_type: string | null; rating: number | null; recommended: number;
   added_at: string | null; country: string | null; genre: string | null;
   user_profile_url: string; user_name: string; user_avatar_url: string | null;
 };
 type TopEntry = {
   slug: string; artist: string; album: string; year: number | null;
-  cover_url: string | null; avg_rating: number; rating_count: number;
+  cover_url: string | null; release_type: string | null; avg_rating: number; rating_count: number;
   country: string | null; genre_counts: string; user_profile_url: string;
 };
 type GlobalStats = {
@@ -109,7 +121,7 @@ const emptyOpts = Promise.resolve({ results: [] as { value: string }[] });
 
 const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes] = await Promise.all([
   db.prepare(`
-    SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country,
+    SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type,
            ua.rating, ua.recommended, ua.added_at, ua.genre,
            u.profile_url as user_profile_url,
            COALESCE(u.display_name, u.username) as user_name,
@@ -122,7 +134,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
   `).bind(...recentParams).all<RecentEntry>(),
 
   db.prepare(`
-    SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country,
+    SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type,
            ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts,
            MIN(u.profile_url) as user_profile_url
     FROM albums a
@@ -416,6 +428,15 @@ if (!hasFilter) {
                 <div class="stat-lbl">Year</div>
               </div>
               <div class="gf-wrap">
+                <select name="release_type" class="gf-select gf-auto-submit">
+                  <option value="">All types</option>
+                  {(['lp','ep','single','compilation','demo','other'] as const).map(t => (
+                    <option value={t} selected={releaseType === t}>{TYPE_LABELS[t]}</option>
+                  ))}
+                </select>
+                <div class="stat-lbl">Type</div>
+              </div>
+              <div class="gf-wrap">
                 <select name="rating_min" class="gf-select gf-auto-submit">
                   <option value="">Any</option>
                   {[50,60,70,80,90].map(v => <option value={v} selected={ratingMin === String(v)}>{v}+</option>)}
@@ -500,6 +521,7 @@ if (!hasFilter) {
                     </div>
                     <span class="dash-album-name">
                       {a.year && <span class="year-chip">{a.year}</span>}
+                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type]}</span>}
                       <span class="dash-album-text">{a.album}</span>
                       {a.recommended === 1 && <span class="rec-star"> ★</span>}
                     </span>
@@ -536,7 +558,7 @@ if (!hasFilter) {
           ) : (
             <div class="dash-list">
               {topAlbums.map(a => (
-                <a href={`/${a.user_profile_url}/album/${a.slug}`} class="dash-row">
+                <a href={`/album/${a.slug}`} class="dash-row">
                   {a.cover_url
                     ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
                     : <div class="dash-cover dash-cover-empty" />}
@@ -548,6 +570,7 @@ if (!hasFilter) {
                     </div>
                     <span class="dash-album-name">
                       {a.year && <span class="year-chip">{a.year}</span>}
+                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type]}</span>}
                       <span class="dash-album-text">{a.album}</span>
                     </span>
                   </div>
@@ -573,7 +596,7 @@ if (!hasFilter) {
 
 /* ── Stats ───────────────────────────────────────────────────────────────── */
 .activity-section { margin-bottom: 0; }
-.stat-cards { display: flex; gap: 20px; flex-wrap: wrap; }
+.stat-cards { display: flex; flex-wrap: wrap; justify-content: space-between; }
 .stat-card  { display: flex; flex-direction: column; gap: 5px; }
 .stat-val   { display: block; font-size: 22px; font-weight: 600; color: var(--text-hi); font-variant-numeric: tabular-nums; line-height: 1.2; height: 27px; }
 .stat-lbl   { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
@@ -741,6 +764,7 @@ if (!hasFilter) {
   .dash-grid { grid-template-columns: 1fr; }
   .dash-row { padding: 8px 0; }
   .dash-row:hover { background: none; }
+  .stat-cards { justify-content: flex-start; gap: 20px; }
 }
 </style>
 

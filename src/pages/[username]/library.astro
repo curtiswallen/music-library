@@ -31,18 +31,21 @@ const base         = `/${username}`;
 const filterBase   = `/${username}/library`;
 
 // ── URL params ────────────────────────────────────────────────────────────────
-const q           = Astro.url.searchParams.get('q')           ?? '';
-const genre       = Astro.url.searchParams.get('genre')       ?? '';
+const q           = Astro.url.searchParams.get('q')              ?? '';
+const genre       = Astro.url.searchParams.get('genre')          ?? '';
+const releaseType = Astro.url.searchParams.get('release_type')   ?? '';
 const subgenres   = Astro.url.searchParams.getAll('subgenre');
-const recommended = Astro.url.searchParams.get('recommended') ?? '';
-const country     = Astro.url.searchParams.get('country')     ?? '';
-const yearFrom    = Astro.url.searchParams.get('year_from')   ?? '';
-const yearTo      = Astro.url.searchParams.get('year_to')     ?? '';
+const recommended = Astro.url.searchParams.get('recommended')    ?? '';
+const country     = Astro.url.searchParams.get('country')        ?? '';
+const yearFrom    = Astro.url.searchParams.get('year_from')      ?? '';
+const yearTo      = Astro.url.searchParams.get('year_to')        ?? '';
 const excludes          = Astro.url.searchParams.getAll('excl');
 const descriptorFilters = Astro.url.searchParams.getAll('descriptor');
-const ratingMin   = Astro.url.searchParams.get('rating_min')  ?? '';
-const ratingMax   = Astro.url.searchParams.get('rating_max')  ?? '';
-const rated       = Astro.url.searchParams.get('rated')       ?? '';
+const ratingMin   = Astro.url.searchParams.get('rating_min')     ?? '';
+const ratingMax   = Astro.url.searchParams.get('rating_max')     ?? '';
+const rated       = Astro.url.searchParams.get('rated')          ?? '';
+
+const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
 
 const showAddedAt = isOwner || !profileUser.hide_added_at;
 const VALID_SORTS: Record<string, string> = {
@@ -63,10 +66,14 @@ const clauses: string[] = isOwner ? [] : ['ua.is_hidden = 0'];
 const params:  (string | number)[] = [];
 
 if (q) { clauses.push('(a.artist LIKE ? OR a.album LIKE ? OR a.search_text LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${normalizeSearch(q)}%`); }
-if (country)   { clauses.push('a.country = ?');    params.push(country); }
-if (yearFrom)  { clauses.push('a.year >= ?');      params.push(Number(yearFrom)); }
-if (yearTo)    { clauses.push('a.year <= ?');      params.push(Number(yearTo)); }
-if (genre)     { clauses.push('ua.genre = ?');     params.push(genre); }
+if (country)     { clauses.push('a.country = ?');    params.push(country); }
+if (yearFrom)    { clauses.push('a.year >= ?');      params.push(Number(yearFrom)); }
+if (yearTo)      { clauses.push('a.year <= ?');      params.push(Number(yearTo)); }
+if (genre)       { clauses.push('ua.genre = ?');     params.push(genre); }
+if (releaseType) {
+  if (releaseType === 'other') clauses.push(`(a.release_type = 'other' OR a.release_type IS NULL)`);
+  else { clauses.push('a.release_type = ?'); params.push(releaseType); }
+}
 for (const s of subgenres)         { clauses.push('ua.subgenres LIKE ?');    params.push(`%"${s}"%`); }
 for (const s of excludes)          { clauses.push('ua.subgenres NOT LIKE ?'); params.push(`%"${s}"%`); }
 for (const d of descriptorFilters) { clauses.push('ua.descriptors LIKE ?');   params.push(`%"${d}"%`); }
@@ -85,7 +92,7 @@ const libraryGenreSet = new Set<string>();
 if (isOwner || !profileUser.is_private) {
   const where = clauses.length ? `AND ${clauses.join(' AND ')}` : '';
   const { results } = await db.prepare(`
-    SELECT a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+    SELECT a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
            ua.genre, ua.subgenres, ua.descriptors, ua.rating, ua.notes, ua.recommended, ua.is_hidden, ua.added_at
     FROM albums a
     JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
@@ -112,6 +119,7 @@ function buildParams(o: Record<string, string | string[] | null | undefined> = {
   const defaults: Record<string, string | string[]> = {};
   if (q)               defaults.q            = q;
   if (country)         defaults.country      = country;
+  if (releaseType)     defaults.release_type = releaseType;
   if (yearFrom)        defaults.year_from    = yearFrom;
   if (yearTo)          defaults.year_to      = yearTo;
   if (ratingMin)       defaults.rating_min   = ratingMin;
@@ -167,12 +175,12 @@ function yearChipLabel() {
 
 const activeFilterCount = [
   !!country, !!(yearFrom || yearTo), !!(ratingMin || ratingMax),
-  !!rated, !!genre, subgenres.length > 0, excludes.length > 0, descriptorFilters.length > 0,
+  !!rated, !!genre, !!releaseType, subgenres.length > 0, excludes.length > 0, descriptorFilters.length > 0,
 ].filter(Boolean).length;
 
-const hasAnyFilter = !!(q || country || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length || excludes.length || descriptorFilters.length || recommended);
+const hasAnyFilter = !!(q || country || releaseType || yearFrom || yearTo || ratingMin || ratingMax || rated || genre || subgenres.length || excludes.length || descriptorFilters.length || recommended);
 const clearFiltersHref = buildParams({
-  q: null, country: null, year_from: null, year_to: null,
+  q: null, country: null, release_type: null, year_from: null, year_to: null,
   rating_min: null, rating_max: null, rated: null,
   genre: null, subgenre: [], excl: [], descriptor: [], recommended: null,
 });
@@ -303,6 +311,12 @@ if (!isOwner && !profileUser.is_private) {
                 <a href={buildParams({ rated: null })} class="chip-remove">×</a>
               </span>
             )}
+            {releaseType && (
+              <span class="fchip">
+                {TYPE_LABELS[releaseType] ?? releaseType}
+                <a href={buildParams({ release_type: null })} class="chip-remove">×</a>
+              </span>
+            )}
             {genre && (
               <span class="fchip">
                 {genre}
@@ -360,6 +374,15 @@ if (!isOwner && !profileUser.is_private) {
                   { label: 'Unrated only', value: 'no'  },
                 ]}
                 placeholder="All albums" />
+            </div>
+            <div class="fp-field-fixed">
+              <label class="fp-label">Type</label>
+              <select name="release_type" class="fp-select">
+                <option value="">All types</option>
+                {(['lp','ep','single','compilation','demo','other'] as const).map(t => (
+                  <option value={t} selected={releaseType === t}>{TYPE_LABELS[t]}</option>
+                ))}
+              </select>
             </div>
             <div class="fp-field-fixed">
               <label class="fp-label">Genre</label>
@@ -456,6 +479,8 @@ if (!isOwner && !profileUser.is_private) {
 .fp-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
 .year-range-inputs { display: flex; align-items: center; gap: 6px; }
 .fp-year-input { width: 72px; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 4px; font-size: 13px; font-family: inherit; -moz-appearance: textfield; appearance: textfield; }
+.fp-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 4px 6px; border-radius: 4px; font-size: 12px; font-family: inherit; cursor: pointer; width: 100%; }
+.fp-select:focus { outline: none; border-color: var(--accent); }
 .fp-year-input::-webkit-inner-spin-button, .fp-year-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .year-sep { color: var(--text-muted); font-size: 13px; }
 .filter-panel :global(.combo-input) { width: 100%; box-sizing: border-box; }

@@ -21,6 +21,8 @@ interface FormValues {
   release_title?: string | null;
   release_data?: string | null;
   descriptors?: string[] | null;
+  artist_mbid?: string | null;
+  release_type?: string | null;
 }
 
 interface Props {
@@ -75,6 +77,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
   <input type="hidden" name="release_mbid"  id="f-release-mbid"  value={values.release_mbid ?? ''} />
   <input type="hidden" name="release_title" id="f-release-title" value={values.release_title ?? ''} />
   <input type="hidden" name="release_data"  id="f-release-data"  value={values.release_data ?? ''} />
+  <input type="hidden" name="artist_mbid"   id="f-artist-mbid"   value={values.artist_mbid ?? ''} />
 
   <div class="form-edit-layout">
 
@@ -131,6 +134,19 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
         <div class="form-group">
           <label for="f-year">Year</label>
           <input id="f-year" name="year" type="number" min="1900" max="2099" value={values.year ?? ''} />
+        </div>
+
+        <div class="form-group">
+          <label for="f-release-type">Type</label>
+          <select id="f-release-type" name="release_type">
+            <option value="">—</option>
+            <option value="lp"          selected={values.release_type === 'lp'}>LP</option>
+            <option value="ep"          selected={values.release_type === 'ep'}>EP</option>
+            <option value="compilation" selected={values.release_type === 'compilation'}>Compilation</option>
+            <option value="demo"        selected={values.release_type === 'demo'}>Demo</option>
+            <option value="single"      selected={values.release_type === 'single'}>Single</option>
+            <option value="other"       selected={values.release_type === 'other'}>Other</option>
+          </select>
         </div>
 
         <div class="form-group">

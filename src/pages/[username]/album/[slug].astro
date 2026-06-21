@@ -5,6 +5,7 @@ import { env } from 'cloudflare:workers';
 import type { Album, UserAlbum, Track } from '../../../types';
 import { slugify, generateUniqueSlug, countryCode, normalizeSearch } from '../../../lib/utils';
 import { md } from '../../../lib/markdown';
+import { syncArtistData } from '../../../lib/artist-cache';
 import { getGenreCache } from '../../../lib/genre-cache';
 import { invalidateLibraryOverview } from '../../../lib/library-cache';
 
@@ -79,7 +80,8 @@ if (Astro.request.method === 'POST') {
   await db.prepare(`
     UPDATE albums SET
       artist = ?, album = ?, country = ?, year = ?,
-      slug = ?, cover_url = ?, mbid = ?, tracks = ?, search_text = ?
+      slug = ?, cover_url = ?, mbid = ?, tracks = ?, search_text = ?,
+      artist_mbid = ?, release_type = ?
     WHERE id = ?
   `).bind(
     artist, albumName,
@@ -90,6 +92,8 @@ if (Astro.request.method === 'POST') {
     (data.get('mbid') as string) || null,
     canonicalTracks,
     normalizeSearch(`${artist} ${albumName}`),
+    (data.get('artist_mbid') as string) || null,
+    (data.get('release_type') as string) || null,
     existing.id,
   ).run();
 
@@ -141,6 +145,12 @@ if (Astro.request.method === 'POST') {
 
   await invalidateLibraryOverview(env.GENRE_CACHE, profileUser.id);
 
+  const editedArtistMbid = (data.get('artist_mbid') as string) || null;
+  if (editedArtistMbid) {
+    const primaryArtist = artist.split(' / ')[0].trim();
+    Astro.locals.cfContext.waitUntil(syncArtistData(db, editedArtistMbid, primaryArtist));
+  }
+
   return Astro.redirect(`/${profileUser.profile_url}/album/${newSlug}`);
 }
 
@@ -149,6 +159,7 @@ const row = await db.prepare(`
   SELECT
     a.id, a.mbid, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.tracks,
     a.logged_by_user_ids, a.all_subgenres, a.all_descriptors,
+    a.artist_mbid, a.release_type,
     ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
     ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at,
     ua.release_mbid, ua.release_title, ua.release_data, ua.descriptors
@@ -218,6 +229,9 @@ function ratingClass(r: number | null) {
   return 'rating-lo';
 }
 
+const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
+function releaseTypeLabel(t: string | null): string { return t ? (TYPE_LABELS[t] ?? t) : ''; }
+
 function sortSubs(subs: string[]) {
   return [...subs].sort((a, b) => a === 'Sketchy' ? -1 : b === 'Sketchy' ? 1 : 0);
 }
@@ -227,7 +241,7 @@ const displayName  = profileUser.display_name || profileUser.username;
 const artistParts  = album.artist.split(' / ').map(s => s.trim()).filter(Boolean);
 
 const { results: artistAlbums } = await db.prepare(`
-  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
          ua.subgenres, ua.rating, ua.recommended
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
@@ -235,19 +249,19 @@ const { results: artistAlbums } = await db.prepare(`
   ORDER BY a.year ASC NULLS LAST
 `).bind(profileUser.id, album.artist, album.id).all<{
   id: number; slug: string; artist: string; album: string; country: string;
-  year: number | null; cover_url: string | null; subgenres: string; rating: number | null; recommended: boolean;
+  year: number | null; cover_url: string | null; release_type: string | null; subgenres: string; rating: number | null; recommended: boolean;
 }>();
 
 const albumCountry = countryCode(album.country);
 const { results: candidates } = await db.prepare(`
-  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url,
+  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
          ua.subgenres, ua.rating, ua.recommended, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.artist != ? AND ua.genre = ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
 `).bind(profileUser.id, album.artist, album.genre ?? '').all<{
   id: number; slug: string; artist: string; album: string; country: string;
-  year: number | null; cover_url: string | null; subgenres: string; rating: number | null;
+  year: number | null; cover_url: string | null; release_type: string | null; subgenres: string; rating: number | null;
   recommended: boolean; descriptors: string;
 }>();
 
@@ -424,6 +438,7 @@ if (!isOwner && !profileUser.is_private) {
           <div class="album-header">
             <div class="album-attrs">
               {album.year && <span>{album.year}</span>}
+              {album.release_type && <span class="type-chip">{releaseTypeLabel(album.release_type)}</span>}
               {album.genre && <span class="album-genre-label">{album.genre}</span>}
               {album.rating != null && (
                 <span class={`rating ${ratingClass(album.rating)}`}>{album.rating} / 100</span>
@@ -467,9 +482,12 @@ if (!isOwner && !profileUser.is_private) {
             <div class="album-notes prose" set:html={notesHtml} />
           </div>
         )}
-        {addedAt && (isOwner || !profileUser.hide_added_at) && (
-          <p class="added-at">{album.rating == null ? 'Queued on' : 'Logged on'} {addedAt}</p>
-        )}
+        <p class="added-at">
+          {addedAt && (isOwner || !profileUser.hide_added_at)
+            ? <>{album.rating == null ? 'Queued on' : 'Logged on'} {addedAt} · <a href={`/album/${slugParam}`} class="global-entry-link">Community entry</a></>
+            : <a href={`/album/${slugParam}`} class="global-entry-link">Community entry</a>
+          }
+        </p>
       </div>
 
     {albumTracks.length > 0 && (
@@ -532,7 +550,12 @@ if (!isOwner && !profileUser.is_private) {
                     : <div class="cover-thumb" />}
                   <div class="rel-info">
                     <span class="rel-title">{a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span>
-                    {a.year != null && <span class="rel-sub"><span class="year-chip">{a.year}</span></span>}
+                    {(a.year != null || a.release_type) && (
+                      <span class="rel-sub">
+                        {a.year != null && <span class="year-chip">{a.year}</span>}
+                        {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
+                      </span>
+                    )}
                   </div>
                   <div class="rel-right">
                     <span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span>
@@ -569,6 +592,7 @@ if (!isOwner && !profileUser.is_private) {
                     </span>
                     <span class="rel-sub">
                       {a.year != null && <span class="year-chip">{a.year}</span>}
+                      {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
                       <span class="rel-sub-text">{a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span>
                     </span>
                   </div>
@@ -612,6 +636,8 @@ if (!isOwner && !profileUser.is_private) {
           release_title: album.release_title,
           release_data:  album.release_data,
           descriptors,
+          artist_mbid:   album.artist_mbid,
+          release_type:  album.release_type,
         }}
         submitLabel="Save Changes"
         genreMap={genreMap}

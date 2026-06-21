@@ -745,6 +745,11 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   color: var(--text-muted);
   margin-top: 8px;
 }
+.global-entry-link {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.global-entry-link:hover { text-decoration: underline; }
 .release {
   font-size: 11px;
   color: var(--text-muted);
@@ -1171,9 +1176,80 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .form-group select:focus { outline: none; border-color: var(--accent); }
 .field-hint-inline { font-size: 11px; color: var(--text-muted); opacity: 0.7; font-weight: normal; }
 
+/* ── Type chip (release type badge) ── */
+.type-chip {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  /*border: 1px solid var(--border);
+  border-radius: 3px;*/
+  padding: 0 4px;
+  margin-right: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* ── Artist page ── */
 .artist-header { margin-bottom: 24px; }
 .mobile-section-title { display: none; }
+.artist-type-section + .artist-type-section { margin-top: 32px; }
+.artist-type-heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+/* ── Artist info panel ── */
+.artist-info-panel {
+  padding: 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.artist-info-loading { font-size: 12px; color: var(--text-muted); margin: 0; }
+.artist-info-top { display: flex; align-items: flex-start; gap: 16px; flex-direction: column; }
+.artist-info-logo {
+  max-width: 130px;
+  max-height: 64px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.artist-info-meta { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.artist-info-dates { font-size: 12px; color: var(--text-muted); margin: 0; }
+.artist-info-members-grid { display: flex; flex-wrap: wrap; gap: 16px 28px; }
+.artist-info-member-section h4 {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+.member-cols { display: flex; gap: 20px; width: fit-content; }
+.artist-info-member-section ul { list-style: none; margin: 0; padding: 0; }
+.artist-info-member-section li { font-size: 12px; color: var(--text); margin-bottom: 2px; }
+.member-instruments { font-size: 11px; color: var(--text-muted); }
+.member-dates { font-size: 10px; }
+.artist-info-blurb {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 50vw;
+}
+.artist-info-blurb p { margin: 0; }
+.artist-info-wiki-link { font-size: 11px; color: var(--accent); text-decoration: none; align-self: flex-start; }
+.artist-info-wiki-link:hover { text-decoration: underline; }
 
 /* ── Subgenre state chips (filter panel — global because JS-created elements skip Astro scoping) ── */
 .fp-sub-chips {
