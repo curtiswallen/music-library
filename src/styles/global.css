@@ -1214,7 +1214,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
 /* ── Artist info panel ── */
 .artist-info-panel {
-  padding: 16px 0;
   margin-bottom: 20px;
   display: flex;
   flex-direction: column;
