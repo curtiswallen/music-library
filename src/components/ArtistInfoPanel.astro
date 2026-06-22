@@ -15,7 +15,7 @@ const { artistRow, membersData, artistName, artistMbid, knownAliasMap, artistDat
 
 const memberSections = [
   { label: 'Original Members', list: [...membersData.original].sort((a, b) => (b.isActive ? 1 : 0) - (a.isActive ? 1 : 0)) },
-  { label: 'Current Members',  list: membersData.current          },
+  { label: 'Members',  list: membersData.current          },
   { label: 'Former Members',   list: membersData.former           },
   { label: 'Project of',       list: membersData.isPersonOf ?? [] },
 ].filter(s => s.list.length > 0).map(s => {
