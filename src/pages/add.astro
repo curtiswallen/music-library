@@ -66,20 +66,46 @@ if (Astro.request.method === 'POST') {
       albumId   = existing.id;
       albumSlug = existing.slug;
     } else {
-      albumSlug = await generateUniqueSlug(db, artist, album);
-      const r = await db.prepare(`
-        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text, artist_mbid, release_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        mbid, albumSlug, artist, album,
-        (data.get('country') as string) || '',
-        data.get('year') ? parseInt(data.get('year') as string) : null,
-        (data.get('cover_url') as string) || null,
-        canonicalTracks,
-        normalizeSearch(`${artist} ${album}`),
-        artistMbid, releaseType,
-      ).run();
-      albumId = r.meta.last_row_id as number;
+      // Check for a manually-added row with matching artist+title that hasn't been linked to MB yet
+      const manualMatch = await db.prepare(
+        'SELECT id, slug FROM albums WHERE mbid IS NULL AND LOWER(artist) = LOWER(?) AND LOWER(album) = LOWER(?)'
+      ).bind(artist, album).first<{ id: number; slug: string }>();
+
+      if (manualMatch) {
+        // Upgrade the existing row with MB data; preserve its slug so existing user URLs stay valid
+        await db.prepare(`
+          UPDATE albums SET
+            mbid = ?, artist = ?, album = ?, country = ?, year = ?,
+            cover_url = ?, tracks = ?, search_text = ?, artist_mbid = ?, release_type = ?
+          WHERE id = ?
+        `).bind(
+          mbid, artist, album,
+          (data.get('country') as string) || '',
+          data.get('year') ? parseInt(data.get('year') as string) : null,
+          (data.get('cover_url') as string) || null,
+          canonicalTracks,
+          normalizeSearch(`${artist} ${album}`),
+          artistMbid, releaseType,
+          manualMatch.id,
+        ).run();
+        albumId   = manualMatch.id;
+        albumSlug = manualMatch.slug;
+      } else {
+        albumSlug = await generateUniqueSlug(db, artist, album);
+        const r = await db.prepare(`
+          INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text, artist_mbid, release_type)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          mbid, albumSlug, artist, album,
+          (data.get('country') as string) || '',
+          data.get('year') ? parseInt(data.get('year') as string) : null,
+          (data.get('cover_url') as string) || null,
+          canonicalTracks,
+          normalizeSearch(`${artist} ${album}`),
+          artistMbid, releaseType,
+        ).run();
+        albumId = r.meta.last_row_id as number;
+      }
     }
   } else {
     const existing = await db.prepare(
@@ -266,6 +292,7 @@ function pick(r: MBResult) {
   set('f-db-album-id', r.dbId ? String(r.dbId) : '');
   set('f-artist-mbid', r.artistId ?? '');
   set('f-release-type', r.releaseType ?? '');
+  setReleaseTypeLocked(!!r.mbid);
   setArtists(r.artists?.length ? r.artists : r.artist.split(' / '));
   set('f-album',  r.title);
   set('f-year',   r.year);
@@ -380,8 +407,19 @@ function set(id: string, val: string) {
   const el = document.getElementById(id) as HTMLInputElement;
   if (!el) return;
   el.value = val ?? '';
+  if (id === 'f-release-type') {
+    const h = document.getElementById('f-release-type-val') as HTMLInputElement | null;
+    if (h) h.value = val ?? '';
+  }
   const hidden = el.closest?.('.combo')?.querySelector<HTMLInputElement>('.combo-hidden');
   if (hidden) hidden.value = val ?? '';
+}
+
+function setReleaseTypeLocked(locked: boolean) {
+  const sel  = document.getElementById('f-release-type')      as HTMLSelectElement | null;
+  const note = document.getElementById('f-release-type-note') as HTMLElement | null;
+  if (sel)  sel.disabled            = locked;
+  if (note) note.style.display      = locked ? '' : 'none';
 }
 function closeResults() { resultsEl.classList.remove('open'); resultsEl.innerHTML = ''; }
 
@@ -393,6 +431,7 @@ document.getElementById('clear-form-btn')?.addEventListener('click', () => {
   set('f-db-album-id', '');
   set('f-artist-mbid', '');
   set('f-release-type', '');
+  setReleaseTypeLocked(false);
   set('f-album', '');
   set('f-year', '');
   set('f-country', '');

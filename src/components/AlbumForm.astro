@@ -48,6 +48,7 @@ const {
 } = Astro.props;
 const genreNames = Object.keys(genreMap);
 
+const hasMbid            = !!values.mbid;
 const hasRating          = values.rating != null;
 const hasCover           = !!values.cover_url;
 const isRecommended      = values.recommended === 1 || values.recommended === true;
@@ -138,7 +139,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
 
         <div class="form-group">
           <label for="f-release-type">Type</label>
-          <select id="f-release-type" name="release_type">
+          <select id="f-release-type" disabled={hasMbid}>
             <option value="">—</option>
             <option value="lp"          selected={values.release_type === 'lp'}>LP</option>
             <option value="ep"          selected={values.release_type === 'ep'}>EP</option>
@@ -147,6 +148,8 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
             <option value="single"      selected={values.release_type === 'single'}>Single</option>
             <option value="other"       selected={values.release_type === 'other'}>Other</option>
           </select>
+          <input type="hidden" id="f-release-type-val" name="release_type" value={values.release_type ?? ''} />
+          <span class="field-hint-inline" id="f-release-type-note" style={hasMbid ? '' : 'display:none'}>from MusicBrainz</span>
         </div>
 
         <div class="form-group">
@@ -554,6 +557,12 @@ function refreshPreview(): void {
     }
   }
 }
+
+// Keep hidden release_type input in sync with the visual select
+document.getElementById('f-release-type')?.addEventListener('change', e => {
+  const h = document.getElementById('f-release-type-val') as HTMLInputElement | null;
+  if (h) h.value = (e.target as HTMLSelectElement).value;
+});
 
 // Listen to all form events (requestAnimationFrame ensures hidden inputs are updated first)
 const _refresh = () => requestAnimationFrame(refreshPreview);

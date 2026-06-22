@@ -39,11 +39,15 @@ if (Astro.request.method === 'POST') {
   const albumName = (data.get('album') as string) || '';
 
   const existing = await db.prepare(`
-    SELECT a.id, COALESCE(ua.track_seconds, 0) as old_track_seconds, ua.rating as old_rating
+    SELECT a.id, a.mbid as existing_mbid, a.release_type as existing_release_type,
+           COALESCE(ua.track_seconds, 0) as old_track_seconds, ua.rating as old_rating
     FROM albums a
     LEFT JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
     WHERE a.slug = ?
-  `).bind(profileUser.id, slugParam).first<{ id: number; old_track_seconds: number; old_rating: number | null }>();
+  `).bind(profileUser.id, slugParam).first<{
+    id: number; existing_mbid: string | null; existing_release_type: string | null;
+    old_track_seconds: number; old_rating: number | null;
+  }>();
   if (!existing) return Astro.redirect(`/${profileUser.profile_url}`);
 
   const subgenres = JSON.stringify(
@@ -77,6 +81,12 @@ if (Astro.request.method === 'POST') {
 
   const newSlug = await generateUniqueSlug(db, artist, albumName, existing.id);
 
+  const submittedMbid = (data.get('mbid') as string) || null;
+  // If the album already has an MBID and it hasn't changed, MB is canonical for release_type.
+  const releaseType = (existing.existing_mbid && existing.existing_mbid === submittedMbid)
+    ? existing.existing_release_type
+    : ((data.get('release_type') as string) || null);
+
   await db.prepare(`
     UPDATE albums SET
       artist = ?, album = ?, country = ?, year = ?,
@@ -89,11 +99,11 @@ if (Astro.request.method === 'POST') {
     data.get('year') ? parseInt(data.get('year') as string) : null,
     newSlug,
     (data.get('cover_url') as string) || null,
-    (data.get('mbid') as string) || null,
+    submittedMbid,
     canonicalTracks,
     normalizeSearch(`${artist} ${albumName}`),
     (data.get('artist_mbid') as string) || null,
-    (data.get('release_type') as string) || null,
+    releaseType,
     existing.id,
   ).run();
 

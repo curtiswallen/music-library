@@ -315,7 +315,7 @@ textarea { resize: vertical; min-height: 80px; }
 .search-input { min-width: 240px; }
 
 /* ── Table ── */
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; width: 100%; }
 
 table { width: 100%; border-collapse: collapse; }
 
