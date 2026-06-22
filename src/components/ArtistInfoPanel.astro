@@ -13,8 +13,8 @@ interface Props {
 const { artistRow, membersData, artistName, artistMbid, knownAliasMap, artistDateStr } = Astro.props;
 
 const memberSections = [
-  { label: 'Members',          list: membersData.current          },
   { label: 'Original Members', list: membersData.original         },
+  { label: 'Current Members',  list: membersData.current          },
   { label: 'Former Members',   list: membersData.former           },
   { label: 'Project of',       list: membersData.isPersonOf ?? [] },
 ].filter(s => s.list.length > 0).map(s => {
