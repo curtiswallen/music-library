@@ -1625,12 +1625,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .tip-link:hover::after { opacity: 1; }
 
 /* ── Artist edit panel (admin modal) ─────────────────────────────────────── */
-.aep-wrap { margin-top: 0.75rem; }
 .aep-toggle-btn {
-  font-size: 0.75rem; padding: 3px 10px; cursor: pointer;
-  background: transparent; border: 1px solid var(--border); border-radius: 3px; color: var(--text-muted);
+  font-size: 0.7rem; cursor: pointer; background: transparent; border: none; color: var(--border); text-decoration: underline;
 }
-.aep-toggle-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.aep-toggle-btn:hover { color: var(--border-hover); }
 .aep-overlay { display: none; }
 .aep-overlay:not([hidden]) {
   position: fixed; inset: 0; z-index: 1000;
