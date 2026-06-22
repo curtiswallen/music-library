@@ -2,7 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
 import { slugify, countryCode } from '../../../lib/utils';
-import { mdInline } from '../../../lib/markdown';
+import { mdInline, mdNoLinks } from '../../../lib/markdown';
 import type { ArtistRow, MembersData } from '../../../lib/artist-cache';
 import ArtistInfoPanel from '../../../components/ArtistInfoPanel.astro';
 
@@ -224,7 +224,10 @@ function sortedSubs(subs: string[]) {
                     ))}
                   </td>
                   <td><span class={`rating ${ratingClass(a.rating)}`}>{a.rating ?? '—'}</span></td>
-                  <td class="notes-cell"><span class="notes-text" set:html={a.notes ? mdInline(a.notes.split(/\r?\n/)[0]) : ''} /></td>
+                  <td class="notes-cell">
+                    <span class="notes-text" set:html={a.notes ? mdInline(a.notes.split(/\r?\n/)[0]) : ''} />
+                    {a.notes && <div class="notes-tip-body" set:html={mdNoLinks(a.notes)} />}
+                  </td>
                 </tr>
               );
             })}
@@ -241,5 +244,23 @@ document.querySelectorAll<HTMLTableRowElement>('tr[data-href]').forEach(tr => {
     if ((e.target as Element).closest('a')) return;
     window.location.href = tr.dataset.href!;
   });
+});
+
+document.querySelectorAll<HTMLElement>('.notes-cell').forEach(cell => {
+  const tip = cell.querySelector<HTMLElement>('.notes-tip-body');
+  if (!tip) return;
+  cell.addEventListener('mouseenter', () => {
+    const r = cell.getBoundingClientRect();
+    tip.style.left = r.left + 'px';
+    if (r.top > window.innerHeight / 2) {
+      tip.style.top = '';
+      tip.style.bottom = (window.innerHeight - r.top + 2) + 'px';
+    } else {
+      tip.style.top = (r.bottom + 2) + 'px';
+      tip.style.bottom = '';
+    }
+    tip.style.display = 'block';
+  });
+  cell.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
 });
 </script>

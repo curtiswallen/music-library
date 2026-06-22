@@ -1623,3 +1623,98 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   z-index: 99;
 }
 .tip-link:hover::after { opacity: 1; }
+
+/* ── Artist edit panel (admin modal) ─────────────────────────────────────── */
+.aep-wrap { margin-top: 0.75rem; }
+.aep-toggle-btn {
+  font-size: 0.75rem; padding: 3px 10px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border); border-radius: 3px; color: var(--text-muted);
+}
+.aep-toggle-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.aep-overlay { display: none; }
+.aep-overlay:not([hidden]) {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.aep {
+  width: 100%; max-width: 780px; max-height: 90vh; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-card); padding: 1.25rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.aep-header {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
+}
+.aep-header strong { color: var(--text); font-size: 0.85rem; }
+.aep-header small  { color: var(--text-muted); font-size: 0.72rem; flex: 1; }
+.aep-close {
+  background: transparent; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 1rem; padding: 0 4px; line-height: 1;
+}
+.aep-close:hover { color: var(--text-hi); }
+.aep-scalars {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+.aep-scalars label {
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.aep-scalars .aep-full { grid-column: 1 / -1; }
+.aep-scalars input, .aep-scalars textarea {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text); font-size: 0.83rem; padding: 4px 7px;
+  font-family: inherit; resize: vertical;
+}
+.aep-scalars input:focus, .aep-scalars textarea:focus { outline: none; border-color: var(--border-hover); }
+.aep-section { margin-bottom: 0.75rem; }
+.aep-section-head {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
+  font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+}
+.aep-add-btn {
+  background: transparent; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text-muted); font-size: 0.68rem; padding: 1px 7px; cursor: pointer;
+}
+.aep-add-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.aep-grid { display: grid; gap: 4px; align-items: center; }
+.aep-grid-alias  { grid-template-columns: 1fr 58px 58px 22px; }
+.aep-grid-member { grid-template-columns: 1.1fr 1.8fr 1.2fr 50px 50px 54px 22px; }
+.aep-col-head {
+  font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0 1px 3px; opacity: 0.6;
+}
+.aep-grid input[type="text"] {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text); font-size: 0.82rem; padding: 3px 6px; width: 100%; box-sizing: border-box;
+}
+.aep-grid input[type="text"]:focus { outline: none; border-color: var(--border-hover); }
+.aep-mbid { font-family: monospace !important; font-size: 0.72rem !important; }
+.aep-row-del {
+  background: transparent; border: none; color: var(--border-hover); cursor: pointer;
+  font-size: 1rem; padding: 0; line-height: 1; justify-self: center;
+}
+.aep-row-del:hover { color: var(--red); }
+.aep-active {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; cursor: pointer;
+}
+.aep-footer {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding-top: 0.75rem; border-top: 1px solid var(--border); margin-top: 0.75rem;
+}
+#aep-save {
+  background: var(--green); border: 1px solid var(--green); border-radius: 3px;
+  color: #fff; font-size: 0.82rem; padding: 4px 12px; cursor: pointer;
+}
+#aep-save:hover { opacity: 0.85; }
+#aep-save:disabled { opacity: 0.4; cursor: default; }
+#aep-cancel {
+  background: transparent; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--text-muted); font-size: 0.82rem; padding: 4px 10px; cursor: pointer;
+}
+#aep-cancel:hover { border-color: var(--border-hover); color: var(--text); }
+#aep-status { font-size: 0.78rem; color: var(--text-muted); flex: 1; }

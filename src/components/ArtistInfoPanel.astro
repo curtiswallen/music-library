@@ -120,7 +120,13 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
   {isAdmin && artistMbid && (
     <div class="aep-wrap">
       <button type="button" class="aep-toggle-btn" id="aep-toggle-btn">Edit artist</button>
-      <div class="aep" id="aep" hidden>
+    </div>
+  )}
+</div>
+
+{isAdmin && artistMbid && (
+  <div class="aep-overlay" id="aep-overlay" hidden>
+    <div class="aep" id="aep">
         <div class="aep-header">
           <strong>Artist Overrides</strong>
           <small>Blank fields revert to MusicBrainz data on next sync</small>
@@ -156,7 +162,7 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
             <span>Aliases</span>
             <button type="button" class="aep-add-btn" data-add="alias">+ Add</button>
           </div>
-          <div id="aep-alias-rows"></div>
+          <div id="aep-alias-rows" class="aep-grid aep-grid-alias"></div>
         </div>
 
         {(['original', 'current', 'former'] as const).map(sec => (
@@ -165,7 +171,7 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
               <span>{sec.charAt(0).toUpperCase() + sec.slice(1)} Members</span>
               <button type="button" class="aep-add-btn" data-add="member" data-section={sec}>+ Add</button>
             </div>
-            <div id={`aep-${sec}-rows`}></div>
+            <div id={`aep-${sec}-rows`} class="aep-grid aep-grid-member"></div>
           </div>
         ))}
 
@@ -175,105 +181,14 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
           <button type="button" id="aep-cancel">Cancel</button>
         </div>
       </div>
-    </div>
-  )}
-</div>
+  </div>
+)}
 
-<style>
-.aep-wrap { margin-top: 0.75rem; }
-.aep-toggle-btn {
-  font-size: 0.75rem; padding: 3px 10px; cursor: pointer;
-  background: transparent; border: 1px solid var(--border); border-radius: 3px; color: var(--text-muted);
-}
-.aep-toggle-btn:hover { border-color: var(--border-hover); color: var(--text); }
-.aep {
-  margin-top: 0.5rem; border: 1px solid var(--border); border-radius: 4px;
-  background: var(--bg-card); padding: 1rem;
-}
-.aep-header {
-  display: flex; align-items: center; gap: 0.75rem;
-  margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border);
-}
-.aep-header strong { color: var(--text); font-size: 0.85rem; }
-.aep-header small  { color: var(--text-muted); font-size: 0.72rem; flex: 1; }
-.aep-close {
-  background: transparent; border: none; color: var(--text-muted); cursor: pointer;
-  font-size: 1rem; padding: 0 4px; line-height: 1;
-}
-.aep-close:hover { color: var(--text-hi); }
-.aep-scalars {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem;
-  margin-bottom: 1rem;
-}
-.aep-scalars label {
-  display: flex; flex-direction: column; gap: 3px;
-  font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
-}
-.aep-scalars .aep-full { grid-column: 1 / -1; }
-.aep-scalars input, .aep-scalars textarea {
-  background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
-  color: var(--text); font-size: 0.83rem; padding: 4px 7px;
-  font-family: inherit; resize: vertical;
-}
-.aep-scalars input:focus, .aep-scalars textarea:focus { outline: none; border-color: var(--border-hover); }
-.aep-section { margin-bottom: 0.75rem; }
-.aep-section-head {
-  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
-  font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
-}
-.aep-add-btn {
-  background: transparent; border: 1px solid var(--border); border-radius: 3px;
-  color: var(--text-muted); font-size: 0.68rem; padding: 1px 7px; cursor: pointer;
-}
-.aep-add-btn:hover { border-color: var(--border-hover); color: var(--text); }
-.aep-col-heads {
-  display: grid; gap: 4px; margin-bottom: 3px;
-  font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
-  padding: 0 1px; opacity: 0.6;
-}
-.aep-col-heads.alias-cols  { grid-template-columns: 1fr 58px 58px 22px; }
-.aep-col-heads.member-cols { grid-template-columns: 1.1fr 1.8fr 1.2fr 50px 50px 54px 22px; }
-.aep-row {
-  display: grid; gap: 4px; align-items: center; margin-bottom: 4px;
-}
-.aep-row.alias-row  { grid-template-columns: 1fr 58px 58px 22px; }
-.aep-row.member-row { grid-template-columns: 1.1fr 1.8fr 1.2fr 50px 50px 54px 22px; }
-.aep-row input[type="text"] {
-  background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
-  color: var(--text); font-size: 0.82rem; padding: 3px 6px; width: 100%; box-sizing: border-box;
-}
-.aep-row input[type="text"]:focus { outline: none; border-color: var(--border-hover); }
-.aep-mbid { font-family: monospace !important; font-size: 0.72rem !important; }
-.aep-row-del {
-  background: transparent; border: none; color: var(--border-hover); cursor: pointer;
-  font-size: 1rem; padding: 0; line-height: 1; justify-self: center;
-}
-.aep-row-del:hover { color: var(--red); }
-.aep-active {
-  display: flex; align-items: center; gap: 3px;
-  font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; cursor: pointer;
-}
-.aep-footer {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding-top: 0.75rem; border-top: 1px solid var(--border); margin-top: 0.75rem;
-}
-#aep-save {
-  background: var(--green); border: 1px solid var(--green); border-radius: 3px;
-  color: #fff; font-size: 0.82rem; padding: 4px 12px; cursor: pointer;
-}
-#aep-save:hover { opacity: 0.85; }
-#aep-save:disabled { opacity: 0.4; cursor: default; }
-#aep-cancel {
-  background: transparent; border: 1px solid var(--border); border-radius: 3px;
-  color: var(--text-muted); font-size: 0.82rem; padding: 4px 10px; cursor: pointer;
-}
-#aep-cancel:hover { border-color: var(--border-hover); color: var(--text); }
-#aep-status { font-size: 0.78rem; color: var(--text-muted); flex: 1; }
-</style>
 
 {isAdmin && artistMbid && (
   <script is:inline define:vars={{ artistMbid, editInitAliases, editInitMembers }}>
   (() => {
+    const overlay   = document.getElementById('aep-overlay');
     const panel     = document.getElementById('aep');
     const toggleBtn = document.getElementById('aep-toggle-btn');
     const saveBtn   = document.getElementById('aep-save');
@@ -290,13 +205,13 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
         renderAll();
         initialized = true;
       }
-      panel.removeAttribute('hidden');
-      toggleBtn.style.display = 'none';
+      overlay.removeAttribute('hidden');
+      document.body.style.overflow = 'hidden';
     }
 
     function close() {
-      panel.setAttribute('hidden', '');
-      toggleBtn.style.display = '';
+      overlay.setAttribute('hidden', '');
+      document.body.style.overflow = '';
       statusEl.textContent = '';
     }
 
@@ -304,46 +219,41 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
     document.getElementById('aep-close').addEventListener('click', close);
     document.getElementById('aep-cancel').addEventListener('click', close);
 
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !overlay.hidden) close(); });
+
     function esc(s) {
       return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     }
 
-    function aliasRowHtml(i, a) {
-      return `<div class="aep-row alias-row">
-        <input type="text" class="aep-alias-name"  value="${esc(a.name)}"        placeholder="Alias name" />
-        <input type="text" class="aep-alias-begin" value="${esc(a.begin || '')}" placeholder="Begin" maxlength="4" />
-        <input type="text" class="aep-alias-end"   value="${esc(a.end   || '')}" placeholder="End"   maxlength="4" />
-        <button type="button" class="aep-row-del" data-del="alias" data-i="${i}">×</button>
-      </div>`;
-    }
-
-    function memberRowHtml(sec, i, m) {
-      return `<div class="aep-row member-row">
-        <input type="text" class="aep-m-name"        value="${esc(m.name)}"                              placeholder="Name" />
-        <input type="text" class="aep-m-mbid aep-mbid" value="${esc(m.mbid || '')}"                      placeholder="MBID" />
-        <input type="text" class="aep-m-instruments" value="${esc((m.instruments || []).join(', '))}"    placeholder="bass, guitars…" />
-        <input type="text" class="aep-m-begin"       value="${esc(m.beginYear || '')}"                   placeholder="Begin" maxlength="4" />
-        <input type="text" class="aep-m-end"         value="${esc(m.endYear   || '')}"                   placeholder="End"   maxlength="4" />
-        <label class="aep-active"><input type="checkbox" class="aep-m-active" ${m.isActive ? 'checked' : ''} /> Active</label>
-        <button type="button" class="aep-row-del" data-del="member" data-sec="${sec}" data-i="${i}">×</button>
-      </div>`;
-    }
-
     function renderAliases() {
       const el = document.getElementById('aep-alias-rows');
-      const header = aliases.length
-        ? `<div class="aep-col-heads alias-cols"><span>Name</span><span>Begin</span><span>End</span><span></span></div>`
-        : '';
-      el.innerHTML = header + aliases.map((a, i) => aliasRowHtml(i, a)).join('');
+      if (!aliases.length) { el.innerHTML = ''; return; }
+      let html = '<span class="aep-col-head">Name</span><span class="aep-col-head">Begin</span><span class="aep-col-head">End</span><span></span>';
+      aliases.forEach((a, i) => {
+        html += `<input type="text" class="aep-alias-name"  value="${esc(a.name)}"        placeholder="Alias name" />`;
+        html += `<input type="text" class="aep-alias-begin" value="${esc(a.begin || '')}" placeholder="Begin" maxlength="4" />`;
+        html += `<input type="text" class="aep-alias-end"   value="${esc(a.end   || '')}" placeholder="End"   maxlength="4" />`;
+        html += `<button type="button" class="aep-row-del" data-del="alias" data-i="${i}">×</button>`;
+      });
+      el.innerHTML = html;
     }
 
     function renderMembers(sec) {
       const list = members[sec] || [];
       const el   = document.getElementById(`aep-${sec}-rows`);
-      const header = list.length
-        ? `<div class="aep-col-heads member-cols"><span>Name</span><span>MBID</span><span>Instruments</span><span>Begin</span><span>End</span><span></span><span></span></div>`
-        : '';
-      el.innerHTML = header + list.map((m, i) => memberRowHtml(sec, i, m)).join('');
+      if (!list.length) { el.innerHTML = ''; return; }
+      let html = '<span class="aep-col-head">Name</span><span class="aep-col-head">MBID</span><span class="aep-col-head">Instruments</span><span class="aep-col-head">Begin</span><span class="aep-col-head">End</span><span></span><span></span>';
+      list.forEach((m, i) => {
+        html += `<input type="text" class="aep-m-name"          value="${esc(m.name)}"                           placeholder="Name" />`;
+        html += `<input type="text" class="aep-m-mbid aep-mbid" value="${esc(m.mbid || '')}"                     placeholder="MBID" />`;
+        html += `<input type="text" class="aep-m-instruments"   value="${esc((m.instruments || []).join(', '))}"  placeholder="bass, guitars…" />`;
+        html += `<input type="text" class="aep-m-begin"         value="${esc(m.beginYear || '')}"                 placeholder="Begin" maxlength="4" />`;
+        html += `<input type="text" class="aep-m-end"           value="${esc(m.endYear   || '')}"                 placeholder="End"   maxlength="4" />`;
+        html += `<label class="aep-active"><input type="checkbox" class="aep-m-active" ${m.isActive ? 'checked' : ''} /> Active</label>`;
+        html += `<button type="button" class="aep-row-del" data-del="member" data-sec="${sec}" data-i="${i}">×</button>`;
+      });
+      el.innerHTML = html;
     }
 
     function renderAll() {
@@ -353,7 +263,7 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
       renderMembers('former');
     }
 
-    panel.addEventListener('click', e => {
+    panel.addEventListener('click', e => { e.stopPropagation();
       const addBtn = e.target.closest('[data-add]');
       if (addBtn) {
         if (addBtn.dataset.add === 'alias') {
@@ -381,21 +291,32 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
     });
 
     function collectAliases() {
-      return [...document.querySelectorAll('#aep-alias-rows .alias-row')].map(row => ({
-        name:  row.querySelector('.aep-alias-name').value.trim(),
-        begin: row.querySelector('.aep-alias-begin').value.trim() || null,
-        end:   row.querySelector('.aep-alias-end').value.trim()   || null,
+      const el    = document.getElementById('aep-alias-rows');
+      const names = [...el.querySelectorAll('.aep-alias-name')];
+      const begs  = [...el.querySelectorAll('.aep-alias-begin')];
+      const ends  = [...el.querySelectorAll('.aep-alias-end')];
+      return names.map((n, i) => ({
+        name:  n.value.trim(),
+        begin: begs[i].value.trim() || null,
+        end:   ends[i].value.trim() || null,
       })).filter(a => a.name);
     }
 
     function collectMembers(sec) {
-      return [...document.querySelectorAll(`#aep-${sec}-rows .member-row`)].map(row => ({
-        name:         row.querySelector('.aep-m-name').value.trim(),
-        mbid:         row.querySelector('.aep-m-mbid').value.trim() || null,
-        instruments:  row.querySelector('.aep-m-instruments').value.split(',').map(s => s.trim()).filter(Boolean),
-        beginYear:    row.querySelector('.aep-m-begin').value.trim() || null,
-        endYear:      row.querySelector('.aep-m-end').value.trim()   || null,
-        isActive:     row.querySelector('.aep-m-active').checked,
+      const el    = document.getElementById(`aep-${sec}-rows`);
+      const names = [...el.querySelectorAll('.aep-m-name')];
+      const mbids = [...el.querySelectorAll('.aep-m-mbid')];
+      const insts = [...el.querySelectorAll('.aep-m-instruments')];
+      const begs  = [...el.querySelectorAll('.aep-m-begin')];
+      const ends  = [...el.querySelectorAll('.aep-m-end')];
+      const acts  = [...el.querySelectorAll('.aep-m-active')];
+      return names.map((n, i) => ({
+        name:         n.value.trim(),
+        mbid:         mbids[i].value.trim() || null,
+        instruments:  insts[i].value.split(',').map(s => s.trim()).filter(Boolean),
+        beginYear:    begs[i].value.trim() || null,
+        endYear:      ends[i].value.trim() || null,
+        isActive:     acts[i].checked,
         canonicalName: null,
       })).filter(m => m.name);
     }
