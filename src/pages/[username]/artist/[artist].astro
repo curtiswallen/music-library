@@ -91,6 +91,25 @@ if (artistMbid) {
   }
 }
 
+// For members shown under their canonical name, look up any alternative credited names
+// they've used in other bands we've already processed (one extra query, only if needed)
+const knownAliasMap = new Map<string, string[]>();
+const regularMemberMbids = [...new Set(
+  [...membersData.current, ...membersData.original, ...membersData.former]
+    .map(m => m.mbid).filter((id): id is string => !!id)
+)];
+if (regularMemberMbids.length > 0) {
+  const placeholders = regularMemberMbids.map(() => '?').join(', ');
+  const { results: aliasRows } = await db.prepare(
+    `SELECT DISTINCT person_mbid, person_name FROM artist_members WHERE person_mbid IN (${placeholders}) AND canonical_name IS NOT NULL`
+  ).bind(...regularMemberMbids).all<{ person_mbid: string; person_name: string }>();
+  for (const row of aliasRows) {
+    const existing = knownAliasMap.get(row.person_mbid) ?? [];
+    if (!existing.includes(row.person_name)) existing.push(row.person_name);
+    knownAliasMap.set(row.person_mbid, existing);
+  }
+}
+
 const memberSections = [
   { label: 'Members',          list: membersData.current          },
   { label: 'Original Members', list: membersData.original         },
@@ -178,8 +197,9 @@ function sortedSubs(subs: string[]) {
           <div class="artist-disambiguation-wrapper">
             {artistRow.disambiguation && <p class="artist-info-disambiguation">{artistRow.disambiguation}</p>}
             {showEntityAliases && <p class="artist-info-aliases">Also known as: {artistAliases.join(', ')}</p>}
+            {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
           </div>
-          {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
+          
           {memberSections.length > 0 && (
             <div class="artist-info-members-grid">
               {memberSections.map(s => {
@@ -193,7 +213,7 @@ function sortedSubs(subs: string[]) {
                     : (m.endYear ? `until ${m.endYear}` : null);
                   const akaNames = isPersonOfSection
                     ? (m.personAka && m.personAka !== artistName ? [m.personAka] : personSectionAliases)
-                    : (m.canonicalName ? [m.canonicalName] : []);
+                    : (m.canonicalName ? [m.canonicalName] : (m.mbid ? (knownAliasMap.get(m.mbid) ?? []) : []));
                   return (
                     <li>
                       {m.name}
