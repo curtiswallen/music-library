@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import AlbumForm from '../components/AlbumForm.astro';
 import { env } from 'cloudflare:workers';
 import { generateUniqueSlug, normalizeSearch } from '../lib/utils';
-import { syncArtistData } from '../lib/artist-cache';
+import { syncArtistData, syncAllArtistsForAlbum } from '../lib/artist-cache';
 import { getGenreCache } from '../lib/genre-cache';
 import { invalidateLibraryOverview } from '../lib/library-cache';
 
@@ -154,7 +154,9 @@ if (Astro.request.method === 'POST') {
 
   await invalidateLibraryOverview(kv, user.id);
 
-  if (artistMbid) {
+  if (artist.includes(' / ') && mbid) {
+    Astro.locals.cfContext.waitUntil(syncAllArtistsForAlbum(db, mbid));
+  } else if (artistMbid) {
     const primaryArtist = artist.split(' / ')[0].trim();
     Astro.locals.cfContext.waitUntil(syncArtistData(db, artistMbid, primaryArtist));
   }

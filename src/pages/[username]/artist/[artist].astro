@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import { slugify, countryCode } from '../../../lib/utils';
 import { mdInline } from '../../../lib/markdown';
 import type { ArtistRow, MembersData } from '../../../lib/artist-cache';
+import ArtistInfoPanel from '../../../components/ArtistInfoPanel.astro';
 
 const { username, artist: artistSlug } = Astro.params;
 if (!username || !artistSlug) return new Response(null, { status: 404 });
@@ -34,7 +35,6 @@ const { results: allArtists } = await db.prepare(`
   ${hiddenFilter}
 `).bind(profileUser.id).all<{ artist: string }>();
 
-// Resolve slug → individual artist name (handles single artists and split parts)
 let artistName: string | undefined;
 for (const row of allArtists) {
   const parts = row.artist.split(' / ').map((s: string) => s.trim());
@@ -61,7 +61,7 @@ const { results: albums } = await db.prepare(`
   genre: string; subgenres: string; descriptors: string; rating: number | null; notes: string; recommended: number;
 }>();
 
-const artistMbid = albums.find(a => a.artist_mbid)?.artist_mbid ?? null;
+const albumMbid = albums.find(a => a.artist_mbid)?.artist_mbid ?? null;
 
 const TYPE_ORDER: { type: string | null; label: string }[] = [
   { type: 'lp',          label: 'LP'          },
@@ -83,16 +83,18 @@ const multipleTypes = albumsByType.length > 1;
 
 let artistRow: ArtistRow | null = null;
 let membersData: MembersData = { current: [], original: [], former: [], isPersonOf: [] };
-if (artistMbid) {
+// Name-first lookup prevents MBID cross-contamination on split albums
+artistRow = await db.prepare('SELECT * FROM artists WHERE name = ?')
+  .bind(artistName).first<ArtistRow>();
+if (!artistRow && albumMbid) {
   artistRow = await db.prepare('SELECT * FROM artists WHERE mbid = ?')
-    .bind(artistMbid).first<ArtistRow>();
-  if (artistRow) {
-    try { membersData = JSON.parse(artistRow.members_data) as MembersData; } catch {}
-  }
+    .bind(albumMbid).first<ArtistRow>();
+}
+const artistMbid = artistRow?.mbid ?? albumMbid;
+if (artistRow) {
+  try { membersData = JSON.parse(artistRow.members_data) as MembersData; } catch {}
 }
 
-// For members shown under their canonical name, look up any alternative credited names
-// they've used in other bands we've already processed (one extra query, only if needed)
 const knownAliasMap = new Map<string, string[]>();
 const regularMemberMbids = [...new Set(
   [...membersData.current, ...membersData.original, ...membersData.former]
@@ -109,17 +111,6 @@ if (regularMemberMbids.length > 0) {
     knownAliasMap.set(row.person_mbid, existing);
   }
 }
-
-const memberSections = [
-  { label: 'Members',          list: membersData.current          },
-  { label: 'Original Members', list: membersData.original         },
-  { label: 'Former Members',   list: membersData.former           },
-  { label: 'Project of',       list: membersData.isPersonOf ?? [] },
-].filter(s => s.list.length > 0).map(s => {
-  const split = s.list.length >= 5;
-  const half = split ? Math.ceil(s.list.length / 2) : s.list.length;
-  return { ...s, col1: s.list.slice(0, half), col2: split ? s.list.slice(half) : [] };
-});
 
 const artistCountry = albums[0]?.country ?? null;
 const locationStr = (() => {
@@ -146,20 +137,6 @@ if (!isOwner && !profileUser.is_private) {
 }
 
 const libBase = `/${profileUser.profile_url}`;
-
-const artistAliases: string[] = (() => {
-  try { return JSON.parse(artistRow?.aliases || '[]') as string[]; } catch { return []; }
-})();
-const showEntityAliases = artistAliases.length > 0 && (membersData.isPersonOf?.length ?? 0) === 0;
-
-// Aggregate all "performs as" projects from isPersonOf persons, excluding the current artist
-const performsAsList = (membersData.isPersonOf ?? [])
-  .flatMap(m => m.performsAs ?? [])
-  .filter(p => p.mbid !== artistMbid)
-  .reduce<Array<{ name: string; mbid: string }>>((acc, p) => {
-    if (!acc.some(x => x.mbid === p.mbid)) acc.push(p);
-    return acc;
-  }, []);
 
 function ratingClass(r: number | null) {
   if (r == null) return '';
@@ -188,77 +165,18 @@ function sortedSubs(subs: string[]) {
   <h2 class="mobile-section-title">{artistName}</h2>
 
   {artistRow && (
-    <div class="artist-info-panel">
-      <div class="artist-info-top">
-        {artistRow.logo_url && (
-          <img src={artistRow.logo_url} class="artist-info-logo" alt="" onerror="this.remove()" />
-        )}
-        <div class="artist-info-meta">
-          <div class="artist-disambiguation-wrapper">
-            {artistRow.disambiguation && <p class="artist-info-disambiguation">{artistRow.disambiguation}</p>}
-            {showEntityAliases && <p class="artist-info-aliases">Also known as: {artistAliases.join(', ')}</p>}
-            {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
-          </div>
-          
-          {memberSections.length > 0 && (
-            <div class="artist-info-members-grid">
-              {memberSections.map(s => {
-                const isPersonOfSection = s.label === 'Project of';
-                // Fallback: project entity's own aliases (for solo projects with no fetched personAka)
-                const personSectionAliases = (isPersonOfSection && s.list.length === 1)
-                  ? artistAliases.filter(a => a !== artistName) : [];
-                const renderItem = (m: typeof s.list[0]) => {
-                  const dateStr = m.beginYear
-                    ? (m.isActive ? `${m.beginYear}–present` : m.endYear ? `${m.beginYear}–${m.endYear}` : m.beginYear)
-                    : (m.endYear ? `until ${m.endYear}` : null);
-                  const akaNames = isPersonOfSection
-                    ? (m.personAka && m.personAka !== artistName ? [m.personAka] : personSectionAliases)
-                    : (m.canonicalName ? [m.canonicalName] : (m.mbid ? (knownAliasMap.get(m.mbid) ?? []) : []));
-                  return (
-                    <li>
-                      {m.name}
-                      {akaNames.length > 0 && <span class="member-aka"> (aka {akaNames.join(', ')})</span>}
-                      {m.instruments.length > 0 && (
-                        <span class="member-instruments"> — {m.instruments.join(', ')}</span>
-                      )}
-                      {dateStr && <span class="member-dates"> ({dateStr})</span>}
-                    </li>
-                  );
-                };
-                return (
-                  <div class="artist-info-member-section">
-                    <h4>{s.label}</h4>
-                    <div class="member-cols">
-                      <ul>{s.col1.map(renderItem)}</ul>
-                      {s.col2.length > 0 && <ul>{s.col2.map(renderItem)}</ul>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {performsAsList.length > 0 && (
-            <div class="artist-info-member-section">
-              <h4>Also performs as</h4>
-              <p class="artist-performs-as-list">{performsAsList.map(p => p.name).join(', ')}</p>
-            </div>
-          )}
-        </div>
-      </div>
-      {artistRow.wiki_blurb && (
-        <div class="artist-info-blurb">
-          <p>{artistRow.wiki_blurb}</p>
-          {artistRow.wiki_url && (
-            <a href={artistRow.wiki_url} target="_blank" rel="noopener noreferrer" class="artist-info-wiki-link">Wikipedia ↗</a>
-          )}
-        </div>
-      )}
-    </div>
+    <ArtistInfoPanel
+      artistRow={artistRow}
+      membersData={membersData}
+      artistName={artistName}
+      artistMbid={artistMbid}
+      knownAliasMap={knownAliasMap}
+      artistDateStr={artistDateStr}
+    />
   )}
 
   {albumsByType.map(({ label, albums: group }) => (
     <div class="artist-type-section">
-      {multipleTypes && <h3 class="artist-type-heading">{label}</h3>}
       <div class="table-wrap artist-tbl user-artist-tbl">
         <table>
           <thead>
@@ -288,7 +206,10 @@ function sortedSubs(subs: string[]) {
                       )}
                     </div>
                   </td>
-                  <td><a href={`${libBase}/album/${a.slug}`}>{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}<span class="col-album-text">{a.album}</span>{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
+                  <td><a href={`${libBase}/album/${a.slug}`}>{a.year != null && <span class="year-chip col-album-year">{a.year}</span>}
+                  {a.release_type && <span class="type-chip">{label}</span>}
+                  <span class="col-album-text">{a.album}</span>
+                  {a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</a></td>
                   <td>{a.year ?? ''}</td>
                   <td>{a.genre && <span class="genre">{a.genre}</span>}</td>
                   <td>

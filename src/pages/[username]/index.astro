@@ -20,6 +20,10 @@ const profileUser = await db.prepare(`
 if (!profileUser) return new Response(null, { status: 404 });
 
 const loggedInUser = Astro.locals.user;
+
+const cfDevice = Astro.request.headers.get('CF-Device-Type') ?? '';
+const ua       = Astro.request.headers.get('User-Agent') ?? '';
+const isMobile = cfDevice === 'mobile' || (!cfDevice && /Mobi|Android|iPhone/i.test(ua));
 const isOwner      = loggedInUser?.id === profileUser.id;
 const displayName  = profileUser.display_name || profileUser.username;
 const userBase     = `/${username}`;
@@ -96,7 +100,7 @@ if (isOwner || !profileUser.is_private) {
              (SELECT total_seconds FROM users WHERE id = ?) as total_seconds
       FROM user_albums WHERE user_id = ?${hiddenWhere}
     `).bind(profileUser.id, profileUser.id).first<StatsRow>(),
-    showRecentlyAdded
+    showRecentlyAdded && !isMobile
       ? db.prepare(`
           SELECT DATE(added_at, '${tzMod}') as day,
                  COUNT(*) as count,
@@ -114,7 +118,7 @@ if (isOwner || !profileUser.is_private) {
   stats        = statsRes ?? stats;
 
   // ── Build heatmap ────────────────────────────────────────────────────────────
-  if (showRecentlyAdded) {
+  if (showRecentlyAdded && !isMobile) {
     const heatmapMap = new Map<string, HeatmapRow>();
     for (const r of (heatmapRes as { results: HeatmapRow[] }).results) {
       heatmapMap.set(r.day, r);
@@ -272,7 +276,7 @@ if (!isOwner && !profileUser.is_private) {
 
         <div id="hm-tip" aria-hidden="true"></div>
 
-        {showRecentlyAdded && monthBlocks.length > 0 && (
+        {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
           <div class="dash-title dash-section-header hm-header">Monthly Heatmap</div>
           <div class="hm-grid">
             {monthBlocks.map(block => (

@@ -5,7 +5,7 @@ import { env } from 'cloudflare:workers';
 import type { Album, UserAlbum, Track } from '../../../types';
 import { slugify, generateUniqueSlug, countryCode, normalizeSearch } from '../../../lib/utils';
 import { md } from '../../../lib/markdown';
-import { syncArtistData } from '../../../lib/artist-cache';
+import { syncArtistData, syncAllArtistsForAlbum } from '../../../lib/artist-cache';
 import { getGenreCache } from '../../../lib/genre-cache';
 import { invalidateLibraryOverview } from '../../../lib/library-cache';
 
@@ -145,8 +145,11 @@ if (Astro.request.method === 'POST') {
 
   await invalidateLibraryOverview(env.GENRE_CACHE, profileUser.id);
 
+  const editedRgMbid     = (data.get('mbid') as string) || null;
   const editedArtistMbid = (data.get('artist_mbid') as string) || null;
-  if (editedArtistMbid) {
+  if (artist.includes(' / ') && editedRgMbid) {
+    Astro.locals.cfContext.waitUntil(syncAllArtistsForAlbum(db, editedRgMbid));
+  } else if (editedArtistMbid) {
     const primaryArtist = artist.split(' / ')[0].trim();
     Astro.locals.cfContext.waitUntil(syncArtistData(db, editedArtistMbid, primaryArtist));
   }

@@ -10,9 +10,14 @@
  *   → fetch full artist data from MB + Wikidata + Wikipedia
  *   → write SQL INSERT OR REPLACE statements
  *
+ * Phase 3: split albums (artist contains ' / ')
+ *   → fetch release-group artist credits from MB to get exact artist MBIDs
+ *   → sync any artist MBID not already in the artists table
+ *
  * Usage:
  *   node scripts/backfill-artist-data.mjs          (local D1 — default)
  *   node scripts/backfill-artist-data.mjs --remote  (remote D1)
+ *   node scripts/backfill-artist-data.mjs --refresh-artists  (re-sync all, not just missing)
  */
 
 import { execSync } from 'child_process';
@@ -164,23 +169,10 @@ for (const row of albumsToUpdate) {
 
 console.log(`\nPhase 1 complete. Updated ${phase1Updated} albums.\n`);
 
-// ─── Phase 2: populate artists table ────────────────────────────────────────
+// ─── shared artist sync ───────────────────────────────────────────────────────
 
-console.log('=== Phase 2: populate artists table ===\n');
-
-const artistMbids = queryD1(REFRESH_ARTISTS
-  ? `SELECT DISTINCT artist_mbid, artist FROM albums WHERE artist_mbid IS NOT NULL ORDER BY artist_mbid`
-  : `SELECT DISTINCT a.artist_mbid, a.artist FROM albums a WHERE a.artist_mbid IS NOT NULL AND a.artist_mbid NOT IN (SELECT mbid FROM artists)`
-);
-
-console.log(`Found ${artistMbids.length} artists to fetch.\n`);
-
-let phase2Added = 0;
-
-for (const { artist_mbid: mbid, artist } of artistMbids) {
-  const fallbackName = artist.split(' / ')[0].trim();
+async function syncArtistFromMb(mbid, fallbackName) {
   console.log(`  Fetching artist ${mbid} (${fallbackName}) …`);
-
   try {
     await sleep(1100);
 
@@ -190,37 +182,43 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
     );
     if (!mbRes.ok) {
       console.log(`    → HTTP ${mbRes.status}, skipping`);
-      continue;
+      return false;
     }
     const mbData = await mbRes.json();
     const officialName = mbData.name ?? fallbackName;
 
-    // --- Dates and location from MB (primary source) ---
+    // --- Dates and location from MB ---
     const mbInception   = mbData['life-span']?.begin?.slice(0, 4) ?? null;
     const mbDissolution = mbData['life-span']?.ended
       ? (mbData['life-span']?.end?.slice(0, 4) ?? null)
       : null;
     const mbDisambiguation = mbData.disambiguation?.trim() || null;
 
-    // --- Aliases from MB (Artist name type only, excluding the canonical name) ---
+    // --- Aliases: Artist name type only, with begin/end dates, sorted chronologically ---
     const mbAliases = (mbData.aliases ?? [])
-      .filter(a => a.type === 'Artist name')
-      .map(a => a.name?.trim())
-      .filter((n, i, arr) => n && n !== officialName && arr.indexOf(n) === i);
+      .filter(a => a.type === 'Artist name' && a.name?.trim() && a.name.trim() !== officialName)
+      .map(a => ({ name: a.name.trim(), begin: a.begin?.slice(0, 4) ?? null, end: a.end?.slice(0, 4) ?? null }))
+      .filter((a, i, arr) => arr.findIndex(x => x.name === a.name) === i)
+      .sort((a, b) => {
+        if (!a.begin && !b.begin) return 0;
+        if (!a.begin) return 1;
+        if (!b.begin) return -1;
+        return a.begin.localeCompare(b.begin);
+      });
 
     // --- Relations ---
     const currentMembers  = [];
     const originalMembers = [];
     const formerMembers   = [];
-    const isPersonList    = []; // "is person" = solo project/persona
+    const isPersonList    = [];
     let wikidataId = null;
     let wikiUrl    = null;
 
     for (const rel of (mbData.relations ?? [])) {
       if (rel['target-type'] === 'artist') {
-        const personMbid = rel.artist?.id ?? null;
+        const personMbid    = rel.artist?.id ?? null;
         const canonicalName = rel.artist?.name;
-        const personName = rel['target-credit']?.trim() || canonicalName;
+        const personName    = rel['target-credit']?.trim() || canonicalName;
         if (!personName) continue;
 
         if (rel.type === 'member of band' && rel.direction === 'backward') {
@@ -242,15 +240,14 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
           else                              formerMembers.push(member);
         }
 
-        // "is person": this artist is a solo project / persona of a real person
         if (rel.type === 'is person' && rel.direction === 'backward') {
           isPersonList.push({
-            name:      personName,
-            mbid:      personMbid,
+            name:        personName,
+            mbid:        personMbid,
             instruments: [],
-            beginYear: mbInception,
-            endYear:   mbDissolution,
-            isActive:  !mbData['life-span']?.ended,
+            beginYear:   mbInception,
+            endYear:     mbDissolution,
+            isActive:    !mbData['life-span']?.ended,
           });
         }
       }
@@ -295,15 +292,15 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
         }
 
         const performsAsNames = performsAs.map(p => p.name.toLowerCase());
-        personEntry.personAka = pAliases.find(a => performsAsNames.includes(a.toLowerCase())) || undefined;
+        personEntry.personAka  = pAliases.find(a => performsAsNames.includes(a.toLowerCase())) || undefined;
         personEntry.performsAs = performsAs;
         console.log(`      → person ${personEntry.name}: aka=${personEntry.personAka ?? 'n/a'}, performs_as=${performsAs.length}`);
-      } catch(e) {
+      } catch (e) {
         console.log(`      → failed to fetch person data for ${personEntry.mbid}: ${e.message}`);
       }
     }
 
-    // --- Start with MB values; Wikidata fills gaps and provides logo + wiki link ---
+    // --- MB values first; Wikidata fills gaps and provides logo + wiki link ---
     let inception         = mbInception;
     let dissolution       = mbDissolution;
     let formationLocation = buildMbLocation(mbData['begin-area'], mbData['area']);
@@ -398,7 +395,7 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
         updated_at         = datetime('now');
     `);
 
-    // Populate artist_members junction table (for future musician/person pages)
+    // Populate artist_members junction table
     const allMemberRows = [
       ...dedupedOriginal.map(m => ({ ...m, role: 'original' })),
       ...dedupedCurrent.map(m => ({ ...m, role: 'current' })),
@@ -419,11 +416,76 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
 
     const totalMembers = dedupedOriginal.length + dedupedCurrent.length + dedupedFormer.length + isPersonList.length;
     console.log(`    → inserted/updated: ${officialName} (inception=${inception ?? 'n/a'}, members=${totalMembers}, aliases=${mbAliases.length})`);
-    phase2Added++;
+    return true;
   } catch (err) {
     console.error(`    → error for ${mbid}: ${err.message}`);
+    return false;
   }
 }
 
+// ─── Phase 2: populate artists table ────────────────────────────────────────
+
+console.log('=== Phase 2: populate artists table ===\n');
+
+const artistMbids = queryD1(REFRESH_ARTISTS
+  ? `SELECT DISTINCT artist_mbid, artist FROM albums WHERE artist_mbid IS NOT NULL ORDER BY artist_mbid`
+  : `SELECT DISTINCT a.artist_mbid, a.artist FROM albums a WHERE a.artist_mbid IS NOT NULL AND a.artist_mbid NOT IN (SELECT mbid FROM artists)`
+);
+
+console.log(`Found ${artistMbids.length} artists to fetch.\n`);
+
+let phase2Added = 0;
+
+for (const { artist_mbid: mbid, artist } of artistMbids) {
+  const fallbackName = artist.split(' / ')[0].trim();
+  const synced = await syncArtistFromMb(mbid, fallbackName);
+  if (synced) phase2Added++;
+}
+
 console.log(`\nPhase 2 complete. Inserted/updated ${phase2Added} artists.\n`);
+
+// ─── Phase 3: sync split album artists ───────────────────────────────────────
+
+console.log('=== Phase 3: sync split album artists ===\n');
+
+const splitAlbums = queryD1(
+  `SELECT DISTINCT mbid, artist FROM albums WHERE artist LIKE '% / %' AND mbid IS NOT NULL ORDER BY artist`
+);
+
+console.log(`Found ${splitAlbums.length} split albums to process.\n`);
+
+let phase3Added = 0;
+
+for (const { mbid: rgMbid, artist } of splitAlbums) {
+  try {
+    console.log(`  Fetching credits for: ${artist} …`);
+    await sleep(1100);
+    const res = await fetch(
+      `${MB}/release-group/${encodeURIComponent(rgMbid)}?inc=artist-credits&fmt=json`,
+      { headers: HDR }
+    );
+    if (!res.ok) {
+      console.log(`    → HTTP ${res.status}, skipping`);
+      continue;
+    }
+    const rg = await res.json();
+    const credits = (rg['artist-credit'] ?? []).filter(c => c.artist?.id);
+
+    for (const credit of credits) {
+      const creditMbid = credit.artist.id;
+      const creditName = credit.artist.name;
+      const existing = queryD1(`SELECT 1 FROM artists WHERE mbid = ${esc(creditMbid)}`);
+      if (existing.length > 0 && !REFRESH_ARTISTS) {
+        console.log(`    → ${creditName} already synced, skipping`);
+        continue;
+      }
+      const synced = await syncArtistFromMb(creditMbid, creditName);
+      if (synced) phase3Added++;
+    }
+  } catch (err) {
+    console.error(`    → error processing "${artist}": ${err.message}`);
+  }
+}
+
+console.log(`\nPhase 3 complete. Inserted/updated ${phase3Added} artists.\n`);
 console.log('Backfill done.');

@@ -1,0 +1,111 @@
+---
+import type { ArtistRow, MembersData, AliasEntry } from '../lib/artist-cache';
+
+interface Props {
+  artistRow:     ArtistRow;
+  membersData:   MembersData;
+  artistName:    string;
+  artistMbid:    string | null;
+  knownAliasMap: Map<string, string[]>;
+  artistDateStr: string;
+}
+
+const { artistRow, membersData, artistName, artistMbid, knownAliasMap, artistDateStr } = Astro.props;
+
+const memberSections = [
+  { label: 'Members',          list: membersData.current          },
+  { label: 'Original Members', list: membersData.original         },
+  { label: 'Former Members',   list: membersData.former           },
+  { label: 'Project of',       list: membersData.isPersonOf ?? [] },
+].filter(s => s.list.length > 0).map(s => {
+  const split = s.list.length >= 5;
+  const half  = split ? Math.ceil(s.list.length / 2) : s.list.length;
+  return { ...s, col1: s.list.slice(0, half), col2: split ? s.list.slice(half) : [] };
+});
+
+const rawAliases = (() => { try { return JSON.parse(artistRow.aliases || '[]'); } catch { return []; } })();
+const artistAliases: AliasEntry[] = (rawAliases as Array<string | AliasEntry>).map(a =>
+  typeof a === 'string' ? { name: a, begin: null, end: null } : a
+);
+const showEntityAliases = artistAliases.length > 0 && (membersData.isPersonOf?.length ?? 0) === 0;
+
+const performsAsList = (membersData.isPersonOf ?? [])
+  .flatMap(m => m.performsAs ?? [])
+  .filter(p => p.mbid !== artistMbid)
+  .reduce<Array<{ name: string; mbid: string }>>((acc, p) => {
+    if (!acc.some(x => x.mbid === p.mbid)) acc.push(p);
+    return acc;
+  }, []);
+
+function formatAlias(a: AliasEntry): string {
+  if (a.begin && a.end) return `${a.name} (${a.begin}–${a.end})`;
+  if (a.begin) return `${a.name} (${a.begin}–)`;
+  if (a.end) return `${a.name} (–${a.end})`;
+  return a.name;
+}
+---
+
+<div class="artist-info-panel">
+  <div class="artist-info-top">
+    {artistRow.logo_url && (
+      <img src={artistRow.logo_url} class="artist-info-logo" alt="" onerror="this.remove()" />
+    )}
+    <div class="artist-info-meta">
+      <div class="artist-disambiguation-wrapper">
+        {artistRow.disambiguation && <p class="artist-info-disambiguation">{artistRow.disambiguation}</p>}
+        {showEntityAliases && <p class="artist-info-aliases">Also known as: {artistAliases.map(formatAlias).join(', ')}</p>}
+        {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
+      </div>
+      {memberSections.length > 0 && (
+        <div class="artist-info-members-grid">
+          {memberSections.map(s => {
+            const isPersonOfSection = s.label === 'Project of';
+            const personSectionAliases = (isPersonOfSection && s.list.length === 1)
+              ? artistAliases.filter(a => a.name !== artistName).map(a => a.name) : [];
+            const renderItem = (m: typeof s.list[0]) => {
+              const dateStr = m.beginYear
+                ? (m.isActive ? `${m.beginYear}–present` : m.endYear ? `${m.beginYear}–${m.endYear}` : String(m.beginYear))
+                : (m.endYear ? `until ${m.endYear}` : null);
+              const akaNames = isPersonOfSection
+                ? (m.personAka && m.personAka !== artistName ? [m.personAka] : personSectionAliases)
+                : (m.canonicalName ? [m.canonicalName] : (m.mbid ? (knownAliasMap.get(m.mbid) ?? []) : []));
+              return (
+                <li>
+                  {m.name}
+                  {akaNames.length > 0 && <span class="member-aka"> (aka {akaNames.join(', ')})</span>}
+                  {m.instruments.length > 0 && (
+                    <span class="member-instruments"> — {m.instruments.join(', ')}</span>
+                  )}
+                  {dateStr && <span class="member-dates"> ({dateStr})</span>}
+                </li>
+              );
+            };
+            return (
+              <div class="artist-info-member-section">
+                <h4>{s.label}</h4>
+                <div class="member-cols">
+                  <ul>{s.col1.map(renderItem)}</ul>
+                  {s.col2.length > 0 && <ul>{s.col2.map(renderItem)}</ul>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {performsAsList.length > 0 && (
+        <div class="artist-info-member-section">
+          <h4>Also performs as</h4>
+          <p class="artist-performs-as-list">{performsAsList.map(p => p.name).join(', ')}</p>
+        </div>
+      )}
+    </div>
+  </div>
+  {artistRow.wiki_blurb && (
+    <div class="artist-info-blurb">
+      <p>{artistRow.wiki_blurb}</p>
+      {artistRow.wiki_url && (
+        <a href={artistRow.wiki_url} target="_blank" rel="noopener noreferrer" class="artist-info-wiki-link">Wikipedia ↗</a>
+      )}
+    </div>
+  )}
+</div>

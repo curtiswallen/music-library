@@ -22,6 +22,12 @@ export interface MembersData {
   isPersonOf: Member[];
 }
 
+export interface AliasEntry {
+  name:  string;
+  begin: string | null;
+  end:   string | null;
+}
+
 export interface ArtistRow {
   id:                 number;
   mbid:               string;
@@ -36,6 +42,7 @@ export interface ArtistRow {
   wiki_url:           string | null;
   members_data:       string;
   aliases:            string;
+  overrides:          string;
   updated_at:         string;
   created_at:         string;
 }
@@ -82,8 +89,8 @@ function wdTime(claims: WdClaims, prop: string): string | null {
 export async function syncArtistData(db: D1Database, mbid: string, fallbackName: string): Promise<void> {
   try {
     const existing = await db.prepare(
-      'SELECT updated_at FROM artists WHERE mbid = ?'
-    ).bind(mbid).first<{ updated_at: string }>();
+      'SELECT updated_at, overrides FROM artists WHERE mbid = ?'
+    ).bind(mbid).first<{ updated_at: string; overrides: string }>();
 
     if (existing) {
       const daysSince = (Date.now() - new Date(existing.updated_at + 'Z').getTime()) / 86_400_000;
@@ -103,11 +110,17 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
     const mbDissolution = mbData['life-span']?.ended
       ? (mbData['life-span']?.end?.slice(0, 4) ?? null)
       : null;
-    const mbDisambiguation = mbData.disambiguation?.trim() || null;
-    const mbAliases = (mbData.aliases ?? [])
-      .filter(a => a.type === 'Artist name')
-      .map(a => a.name?.trim())
-      .filter((n, i, arr): n is string => !!n && n !== officialName && arr.indexOf(n) === i);
+    let mbDisambiguation = mbData.disambiguation?.trim() || null;
+    let mbAliases: AliasEntry[] = (mbData.aliases ?? [])
+      .filter((a): a is typeof a & { name: string } => a.type === 'Artist name' && !!a.name && a.name.trim() !== officialName)
+      .map(a => ({ name: a.name.trim(), begin: a.begin?.slice(0, 4) ?? null, end: a.end?.slice(0, 4) ?? null }))
+      .filter((a, i, arr) => arr.findIndex(x => x.name === a.name) === i)
+      .sort((a, b) => {
+        if (!a.begin && !b.begin) return 0;
+        if (!a.begin) return 1;
+        if (!b.begin) return -1;
+        return a.begin.localeCompare(b.begin);
+      });
 
     // --- Relations ---
     const currentMembers:  Member[] = [];
@@ -253,6 +266,20 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
       } catch {}
     }
 
+    // Apply any manually set overrides — overridden fields won't be stomped by future MB syncs
+    let savedOverrides: Record<string, unknown> = {};
+    try { savedOverrides = JSON.parse(existing?.overrides || '{}') as Record<string, unknown>; } catch {}
+    const ov = <T>(key: string, computed: T): T => key in savedOverrides ? (savedOverrides[key] as T) : computed;
+
+    mbDisambiguation = ov('disambiguation', mbDisambiguation);
+    inception        = ov('inception',        inception);
+    dissolution      = ov('dissolution',      dissolution);
+    formationLocation = ov('formation_location', formationLocation);
+    logoUrl          = ov('logo_url',         logoUrl);
+    wikiBlurb        = ov('wiki_blurb',       wikiBlurb);
+    wikiUrl          = ov('wiki_url',         wikiUrl);
+    mbAliases        = ov('aliases',          mbAliases);
+
     const dedupedOriginal = deduplicateMembers(originalMembers);
     const dedupedCurrent  = deduplicateMembers(currentMembers);
     const dedupedFormer   = deduplicateMembers(formerMembers);
@@ -320,6 +347,24 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
   }
 }
 
+export async function syncAllArtistsForAlbum(db: D1Database, rgMbid: string): Promise<void> {
+  try {
+    const res = await fetch(
+      `${MB}/release-group/${encodeURIComponent(rgMbid)}?inc=artist-credits&fmt=json`,
+      { headers: HDR }
+    );
+    if (!res.ok) return;
+    const rg = await res.json() as { 'artist-credit'?: Array<{ artist?: { id?: string; name?: string } }> };
+    for (const credit of (rg['artist-credit'] ?? [])) {
+      if (credit.artist?.id && credit.artist?.name) {
+        await syncArtistData(db, credit.artist.id, credit.artist.name);
+      }
+    }
+  } catch {
+    // Never throw — background task must not crash the request
+  }
+}
+
 type WdClaims = Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>;
 
 interface MBArtistResponse {
@@ -329,7 +374,7 @@ interface MBArtistResponse {
   'life-span'?:   { begin?: string | null; end?: string | null; ended?: boolean };
   'begin-area'?:  { name?: string } | null;
   area?:          { name?: string } | null;
-  aliases?:       Array<{ name?: string; type?: string | null; locale?: string | null }>;
+  aliases?:       Array<{ name?: string; type?: string | null; locale?: string | null; begin?: string | null; end?: string | null }>;
   relations?:     Array<{
     type:           string;
     'target-type':  string;

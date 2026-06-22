@@ -11,6 +11,10 @@ const db           = env.DB;
 const kv           = env.GENRE_CACHE;
 const loggedInUser = Astro.locals.user;
 
+// ── Mobile detection (skip spotlight + filter panel queries on mobile) ────────
+const cfDevice = Astro.request.headers.get('CF-Device-Type') ?? '';
+const ua       = Astro.request.headers.get('User-Agent') ?? '';
+
 // ── Active filters ────────────────────────────────────────────────────────────
 const genre       = Astro.url.searchParams.get('genre')        ?? '';
 const country     = Astro.url.searchParams.get('country')      ?? '';
@@ -21,9 +25,11 @@ const yearFrom    = Astro.url.searchParams.get('year_from')    ?? '';
 const yearTo      = Astro.url.searchParams.get('year_to')      ?? '';
 const ratingMin   = Astro.url.searchParams.get('rating_min')   ?? '';
 const hasFilter   = !!(genre || country || releaseType || subgenres.length || descriptors.length || yearFrom || yearTo || ratingMin);
+// Never skip on filtered views — user navigated here with intent
+const isMobile    = !hasFilter && (cfDevice === 'mobile' || (!cfDevice && /Mobi|Android|iPhone/i.test(ua)));
 
 // ── Filter options ────────────────────────────────────────────────────────────
-const { groupedGenres } = await getGenreCache(kv, db);
+const { groupedGenres } = isMobile ? { groupedGenres: [] } : await getGenreCache(kv, db);
 
 // ── SQL clause builders ───────────────────────────────────────────────────────
 const releaseTypeClause = releaseType === 'other'
