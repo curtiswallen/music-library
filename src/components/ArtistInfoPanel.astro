@@ -8,9 +8,10 @@ interface Props {
   artistMbid:    string | null;
   knownAliasMap: Map<string, string[]>;
   artistDateStr: string;
+  isAdmin?:      boolean;
 }
 
-const { artistRow, membersData, artistName, artistMbid, knownAliasMap, artistDateStr } = Astro.props;
+const { artistRow, membersData, artistName, artistMbid, knownAliasMap, artistDateStr, isAdmin } = Astro.props;
 
 const memberSections = [
   { label: 'Original Members', list: membersData.original         },
@@ -43,6 +44,13 @@ function formatAlias(a: AliasEntry): string {
   if (a.end) return `${a.name} (–${a.end})`;
   return a.name;
 }
+
+// Edit panel — admin only
+const editOverrides = isAdmin && artistMbid
+  ? (() => { try { return JSON.parse(artistRow.overrides || '{}') as Record<string, unknown>; } catch { return {}; } })()
+  : null;
+const editInitAliases = isAdmin ? JSON.stringify(artistAliases) : '[]';
+const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
 ---
 
 <div class="artist-info-panel">
@@ -108,4 +116,334 @@ function formatAlias(a: AliasEntry): string {
       )}
     </div>
   )}
+
+  {isAdmin && artistMbid && (
+    <div class="aep-wrap">
+      <button type="button" class="aep-toggle-btn" id="aep-toggle-btn">Edit artist</button>
+      <div class="aep" id="aep" hidden>
+        <div class="aep-header">
+          <strong>Artist Overrides</strong>
+          <small>Blank fields revert to MusicBrainz data on next sync</small>
+          <button type="button" class="aep-close" id="aep-close">✕</button>
+        </div>
+
+        <div class="aep-scalars">
+          <label>Disambiguation
+            <input type="text" id="aep-disambiguation" value={String(editOverrides?.disambiguation ?? '')} placeholder="from MusicBrainz" />
+          </label>
+          <label>Inception
+            <input type="text" id="aep-inception" value={String(editOverrides?.inception ?? '')} placeholder="YYYY" maxlength="4" />
+          </label>
+          <label>Dissolution
+            <input type="text" id="aep-dissolution" value={String(editOverrides?.dissolution ?? '')} placeholder="YYYY" maxlength="4" />
+          </label>
+          <label>Formation location
+            <input type="text" id="aep-formation_location" value={String(editOverrides?.formation_location ?? '')} placeholder="from MB / Wikidata" />
+          </label>
+          <label class="aep-full">Logo URL
+            <input type="text" id="aep-logo_url" value={String(editOverrides?.logo_url ?? '')} placeholder="https://…" />
+          </label>
+          <label class="aep-full">Wiki URL
+            <input type="text" id="aep-wiki_url" value={String(editOverrides?.wiki_url ?? '')} placeholder="https://en.wikipedia.org/wiki/…" />
+          </label>
+          <label class="aep-full">Wiki blurb
+            <textarea id="aep-wiki_blurb" rows="3">{String(editOverrides?.wiki_blurb ?? '')}</textarea>
+          </label>
+        </div>
+
+        <div class="aep-section">
+          <div class="aep-section-head">
+            <span>Aliases</span>
+            <button type="button" class="aep-add-btn" data-add="alias">+ Add</button>
+          </div>
+          <div id="aep-alias-rows"></div>
+        </div>
+
+        {(['original', 'current', 'former'] as const).map(sec => (
+          <div class="aep-section">
+            <div class="aep-section-head">
+              <span>{sec.charAt(0).toUpperCase() + sec.slice(1)} Members</span>
+              <button type="button" class="aep-add-btn" data-add="member" data-section={sec}>+ Add</button>
+            </div>
+            <div id={`aep-${sec}-rows`}></div>
+          </div>
+        ))}
+
+        <div class="aep-footer">
+          <button type="button" id="aep-save">Save overrides</button>
+          <span id="aep-status"></span>
+          <button type="button" id="aep-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  )}
 </div>
+
+<style>
+.aep-wrap { margin-top: 0.75rem; }
+.aep-toggle-btn {
+  font-size: 0.75rem; padding: 3px 10px; cursor: pointer;
+  background: transparent; border: 1px solid #555; border-radius: 3px; color: #888;
+}
+.aep-toggle-btn:hover { border-color: #aaa; color: #ddd; }
+.aep {
+  margin-top: 0.5rem; border: 1px solid #383838; border-radius: 4px;
+  background: #161616; padding: 1rem;
+}
+.aep-header {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid #2a2a2a;
+}
+.aep-header strong { color: #bbb; font-size: 0.85rem; }
+.aep-header small  { color: #555; font-size: 0.72rem; flex: 1; }
+.aep-close {
+  background: transparent; border: none; color: #555; cursor: pointer;
+  font-size: 1rem; padding: 0 4px; line-height: 1;
+}
+.aep-close:hover { color: #ddd; }
+.aep-scalars {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+.aep-scalars label {
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 0.68rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.aep-scalars .aep-full { grid-column: 1 / -1; }
+.aep-scalars input, .aep-scalars textarea {
+  background: #0e0e0e; border: 1px solid #2e2e2e; border-radius: 3px;
+  color: #ccc; font-size: 0.83rem; padding: 4px 7px;
+  font-family: inherit; resize: vertical;
+}
+.aep-scalars input:focus, .aep-scalars textarea:focus { outline: none; border-color: #555; }
+.aep-section { margin-bottom: 0.75rem; }
+.aep-section-head {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;
+  font-size: 0.72rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.aep-add-btn {
+  background: transparent; border: 1px solid #333; border-radius: 3px;
+  color: #666; font-size: 0.68rem; padding: 1px 7px; cursor: pointer;
+}
+.aep-add-btn:hover { border-color: #777; color: #ccc; }
+.aep-col-heads {
+  display: grid; gap: 4px; margin-bottom: 3px;
+  font-size: 0.62rem; color: #444; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0 1px;
+}
+.aep-col-heads.alias-cols  { grid-template-columns: 1fr 58px 58px 22px; }
+.aep-col-heads.member-cols { grid-template-columns: 1.1fr 1.8fr 1.2fr 50px 50px 54px 22px; }
+.aep-row {
+  display: grid; gap: 4px; align-items: center; margin-bottom: 4px;
+}
+.aep-row.alias-row  { grid-template-columns: 1fr 58px 58px 22px; }
+.aep-row.member-row { grid-template-columns: 1.1fr 1.8fr 1.2fr 50px 50px 54px 22px; }
+.aep-row input[type="text"] {
+  background: #0e0e0e; border: 1px solid #2e2e2e; border-radius: 3px;
+  color: #ccc; font-size: 0.82rem; padding: 3px 6px; width: 100%; box-sizing: border-box;
+}
+.aep-row input[type="text"]:focus { outline: none; border-color: #555; }
+.aep-mbid { font-family: monospace !important; font-size: 0.72rem !important; }
+.aep-row-del {
+  background: transparent; border: none; color: #444; cursor: pointer;
+  font-size: 1rem; padding: 0; line-height: 1; justify-self: center;
+}
+.aep-row-del:hover { color: #e44; }
+.aep-active {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 0.72rem; color: #666; white-space: nowrap; cursor: pointer;
+}
+.aep-footer {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding-top: 0.75rem; border-top: 1px solid #2a2a2a; margin-top: 0.75rem;
+}
+#aep-save {
+  background: #1a5c2a; border: 1px solid #2a7a3a; border-radius: 3px;
+  color: #9ed; font-size: 0.82rem; padding: 4px 12px; cursor: pointer;
+}
+#aep-save:hover { background: #226634; }
+#aep-save:disabled { opacity: 0.5; cursor: default; }
+#aep-cancel {
+  background: transparent; border: 1px solid #333; border-radius: 3px;
+  color: #777; font-size: 0.82rem; padding: 4px 10px; cursor: pointer;
+}
+#aep-cancel:hover { border-color: #666; color: #bbb; }
+#aep-status { font-size: 0.78rem; color: #666; flex: 1; }
+</style>
+
+{isAdmin && artistMbid && (
+  <script is:inline define:vars={{ artistMbid, editInitAliases, editInitMembers }}>
+  (() => {
+    const panel     = document.getElementById('aep');
+    const toggleBtn = document.getElementById('aep-toggle-btn');
+    const saveBtn   = document.getElementById('aep-save');
+    const statusEl  = document.getElementById('aep-status');
+
+    let aliases = [];
+    let members = { original: [], current: [], former: [], isPersonOf: [] };
+    let initialized = false;
+
+    function open() {
+      if (!initialized) {
+        try { aliases = JSON.parse(editInitAliases); } catch { aliases = []; }
+        try { members = JSON.parse(editInitMembers); } catch { members = { original: [], current: [], former: [], isPersonOf: [] }; }
+        renderAll();
+        initialized = true;
+      }
+      panel.removeAttribute('hidden');
+      toggleBtn.style.display = 'none';
+    }
+
+    function close() {
+      panel.setAttribute('hidden', '');
+      toggleBtn.style.display = '';
+      statusEl.textContent = '';
+    }
+
+    toggleBtn.addEventListener('click', open);
+    document.getElementById('aep-close').addEventListener('click', close);
+    document.getElementById('aep-cancel').addEventListener('click', close);
+
+    function esc(s) {
+      return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    function aliasRowHtml(i, a) {
+      return `<div class="aep-row alias-row">
+        <input type="text" class="aep-alias-name"  value="${esc(a.name)}"        placeholder="Alias name" />
+        <input type="text" class="aep-alias-begin" value="${esc(a.begin || '')}" placeholder="Begin" maxlength="4" />
+        <input type="text" class="aep-alias-end"   value="${esc(a.end   || '')}" placeholder="End"   maxlength="4" />
+        <button type="button" class="aep-row-del" data-del="alias" data-i="${i}">×</button>
+      </div>`;
+    }
+
+    function memberRowHtml(sec, i, m) {
+      return `<div class="aep-row member-row">
+        <input type="text" class="aep-m-name"        value="${esc(m.name)}"                              placeholder="Name" />
+        <input type="text" class="aep-m-mbid aep-mbid" value="${esc(m.mbid || '')}"                      placeholder="MBID" />
+        <input type="text" class="aep-m-instruments" value="${esc((m.instruments || []).join(', '))}"    placeholder="bass, guitars…" />
+        <input type="text" class="aep-m-begin"       value="${esc(m.beginYear || '')}"                   placeholder="Begin" maxlength="4" />
+        <input type="text" class="aep-m-end"         value="${esc(m.endYear   || '')}"                   placeholder="End"   maxlength="4" />
+        <label class="aep-active"><input type="checkbox" class="aep-m-active" ${m.isActive ? 'checked' : ''} /> Active</label>
+        <button type="button" class="aep-row-del" data-del="member" data-sec="${sec}" data-i="${i}">×</button>
+      </div>`;
+    }
+
+    function renderAliases() {
+      const el = document.getElementById('aep-alias-rows');
+      const header = aliases.length
+        ? `<div class="aep-col-heads alias-cols"><span>Name</span><span>Begin</span><span>End</span><span></span></div>`
+        : '';
+      el.innerHTML = header + aliases.map((a, i) => aliasRowHtml(i, a)).join('');
+    }
+
+    function renderMembers(sec) {
+      const list = members[sec] || [];
+      const el   = document.getElementById(`aep-${sec}-rows`);
+      const header = list.length
+        ? `<div class="aep-col-heads member-cols"><span>Name</span><span>MBID</span><span>Instruments</span><span>Begin</span><span>End</span><span></span><span></span></div>`
+        : '';
+      el.innerHTML = header + list.map((m, i) => memberRowHtml(sec, i, m)).join('');
+    }
+
+    function renderAll() {
+      renderAliases();
+      renderMembers('original');
+      renderMembers('current');
+      renderMembers('former');
+    }
+
+    panel.addEventListener('click', e => {
+      const addBtn = e.target.closest('[data-add]');
+      if (addBtn) {
+        if (addBtn.dataset.add === 'alias') {
+          aliases.push({ name: '', begin: null, end: null });
+          renderAliases();
+        } else if (addBtn.dataset.add === 'member') {
+          const sec = addBtn.dataset.section;
+          members[sec] = members[sec] || [];
+          members[sec].push({ name: '', mbid: null, instruments: [], beginYear: null, endYear: null, isActive: true });
+          renderMembers(sec);
+        }
+        return;
+      }
+      const delBtn = e.target.closest('[data-del]');
+      if (delBtn) {
+        const i = parseInt(delBtn.dataset.i);
+        if (delBtn.dataset.del === 'alias') {
+          aliases.splice(i, 1);
+          renderAliases();
+        } else if (delBtn.dataset.del === 'member') {
+          members[delBtn.dataset.sec].splice(i, 1);
+          renderMembers(delBtn.dataset.sec);
+        }
+      }
+    });
+
+    function collectAliases() {
+      return [...document.querySelectorAll('#aep-alias-rows .alias-row')].map(row => ({
+        name:  row.querySelector('.aep-alias-name').value.trim(),
+        begin: row.querySelector('.aep-alias-begin').value.trim() || null,
+        end:   row.querySelector('.aep-alias-end').value.trim()   || null,
+      })).filter(a => a.name);
+    }
+
+    function collectMembers(sec) {
+      return [...document.querySelectorAll(`#aep-${sec}-rows .member-row`)].map(row => ({
+        name:         row.querySelector('.aep-m-name').value.trim(),
+        mbid:         row.querySelector('.aep-m-mbid').value.trim() || null,
+        instruments:  row.querySelector('.aep-m-instruments').value.split(',').map(s => s.trim()).filter(Boolean),
+        beginYear:    row.querySelector('.aep-m-begin').value.trim() || null,
+        endYear:      row.querySelector('.aep-m-end').value.trim()   || null,
+        isActive:     row.querySelector('.aep-m-active').checked,
+        canonicalName: null,
+      })).filter(m => m.name);
+    }
+
+    saveBtn.addEventListener('click', async () => {
+      const overrides = {};
+
+      for (const f of ['disambiguation', 'inception', 'dissolution', 'formation_location', 'logo_url', 'wiki_url', 'wiki_blurb']) {
+        const val = document.getElementById(`aep-${f}`)?.value.trim();
+        if (val) overrides[f] = val;
+      }
+
+      const aliasData = collectAliases();
+      if (aliasData.length) overrides.aliases = aliasData;
+
+      const orig = collectMembers('original');
+      const curr = collectMembers('current');
+      const fmr  = collectMembers('former');
+      if (orig.length || curr.length || fmr.length) {
+        overrides.members_data = {
+          original:   orig,
+          current:    curr,
+          former:     fmr,
+          isPersonOf: members.isPersonOf ?? [],
+        };
+      }
+
+      statusEl.textContent = 'Saving…';
+      saveBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/artist-overrides', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mbid: artistMbid, overrides }),
+        });
+        if (res.ok) {
+          statusEl.textContent = 'Saved — reload to see changes.';
+          initialized = false;
+        } else {
+          statusEl.textContent = `Error ${res.status}`;
+        }
+      } catch (err) {
+        statusEl.textContent = `Error: ${err.message}`;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  })();
+  </script>
+)}

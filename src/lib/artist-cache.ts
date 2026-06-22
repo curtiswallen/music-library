@@ -284,19 +284,19 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
     const dedupedCurrent  = deduplicateMembers(currentMembers);
     const dedupedFormer   = deduplicateMembers(formerMembers);
 
-    const membersData: MembersData = {
+    const membersData: MembersData = ov('members_data', {
       current:    dedupedCurrent,
       original:   dedupedOriginal,
       former:     dedupedFormer,
       isPersonOf: isPersonList,
-    };
+    });
 
     // Build artist_members rows (only where we have person mbid)
     const allMemberRows = [
-      ...dedupedOriginal.map(m => ({ ...m, role: 'original' })),
-      ...dedupedCurrent.map(m => ({ ...m, role: 'current' })),
-      ...dedupedFormer.map(m => ({ ...m, role: 'former' })),
-      ...isPersonList.map(m => ({ ...m, role: 'is_person' })),
+      ...membersData.original.map(m => ({ ...m, role: 'original' })),
+      ...membersData.current.map(m => ({ ...m, role: 'current' })),
+      ...membersData.former.map(m => ({ ...m, role: 'former' })),
+      ...(membersData.isPersonOf ?? []).map(m => ({ ...m, role: 'is_person' })),
     ].filter(m => m.mbid);
 
     const stmts: D1PreparedStatement[] = [
