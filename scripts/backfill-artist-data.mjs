@@ -38,10 +38,12 @@ function cleanInstrument(s) {
   return s.replace(/\s*\(.*?\)\s*$/, '').trim();
 }
 
+// Merge multiple MB relations for the same person (one row per instrument in MB)
 function deduplicateMembers(members) {
   const map = new Map();
   for (const m of members) {
-    const existing = map.get(m.name);
+    const key = m.mbid || m.name; // mbid is more reliable; fall back to name
+    const existing = map.get(key);
     if (existing) {
       for (const inst of m.instruments) {
         if (!existing.instruments.includes(inst)) existing.instruments.push(inst);
@@ -51,10 +53,19 @@ function deduplicateMembers(members) {
       if (m.endYear && (!existing.endYear || m.endYear > existing.endYear))
         existing.endYear = m.endYear;
     } else {
-      map.set(m.name, { ...m, instruments: [...m.instruments] });
+      map.set(key, { ...m, instruments: [...m.instruments] });
     }
   }
   return [...map.values()];
+}
+
+function buildMbLocation(beginArea, area) {
+  const begin = beginArea?.name;
+  const current = area?.name;
+  if (!begin && !current) return null;
+  if (!begin) return current ?? null;
+  if (!current || begin === current) return begin;
+  return `${begin}, ${current}`;
 }
 
 function runD1(sql) {
@@ -62,7 +73,7 @@ function runD1(sql) {
   writeFileSync(tmpFile, sql, 'utf8');
   try {
     execSync(
-      `npx wrangler d1 execute ${DB_NAME} ${REMOTE_FLAG} --file="${tmpFile}"`,
+      `npx wrangler d1 execute ${DB_NAME} ${REMOTE_FLAG} --file="${tmpFile}" --yes`,
       { cwd: root, stdio: 'inherit' }
     );
   } finally {
@@ -71,18 +82,16 @@ function runD1(sql) {
 }
 
 function queryD1(sql) {
-  const tmpFile = join(root, '.backfill-query-tmp.sql');
-  writeFileSync(tmpFile, sql, 'utf8');
-  try {
-    const out = execSync(
-      `npx wrangler d1 execute ${DB_NAME} ${REMOTE_FLAG} --file="${tmpFile}" --json`,
-      { cwd: root }
-    ).toString();
-    const parsed = JSON.parse(out);
-    return parsed[0]?.results ?? [];
-  } finally {
-    try { execSync(`del "${tmpFile}"`, { cwd: root, stdio: 'ignore', shell: true }); } catch {}
-  }
+  // Use --command (not --file) so remote mode returns actual row data instead of stats
+  const singleLine = sql.replace(/\s+/g, ' ').trim();
+  const raw = execSync(
+    `npx wrangler d1 execute ${DB_NAME} ${REMOTE_FLAG} --command "${singleLine}" --json`,
+    { cwd: root }
+  ).toString();
+  const jsonStart = raw.search(/^\[/m);
+  const out = jsonStart >= 0 ? raw.slice(jsonStart) : raw;
+  const parsed = JSON.parse(out);
+  return parsed[0]?.results ?? [];
 }
 
 function esc(v) {
@@ -176,7 +185,7 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
     await sleep(1100);
 
     const mbRes = await fetch(
-      `${MB}/artist/${encodeURIComponent(mbid)}?inc=artist-rels+url-rels&fmt=json`,
+      `${MB}/artist/${encodeURIComponent(mbid)}?inc=artist-rels+url-rels+aliases&fmt=json`,
       { headers: HDR }
     );
     if (!mbRes.ok) {
@@ -186,77 +195,126 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
     const mbData = await mbRes.json();
     const officialName = mbData.name ?? fallbackName;
 
+    // --- Dates and location from MB (primary source) ---
+    const mbInception   = mbData['life-span']?.begin?.slice(0, 4) ?? null;
+    const mbDissolution = mbData['life-span']?.ended
+      ? (mbData['life-span']?.end?.slice(0, 4) ?? null)
+      : null;
+    const mbDisambiguation = mbData.disambiguation?.trim() || null;
+
+    // --- Aliases from MB (Artist name type only, excluding the canonical name) ---
+    const mbAliases = (mbData.aliases ?? [])
+      .filter(a => a.type === 'Artist name')
+      .map(a => a.name?.trim())
+      .filter((n, i, arr) => n && n !== officialName && arr.indexOf(n) === i);
+
+    // --- Relations ---
     const currentMembers  = [];
     const originalMembers = [];
     const formerMembers   = [];
+    const isPersonList    = []; // "is person" = solo project/persona
     let wikidataId = null;
     let wikiUrl    = null;
 
     for (const rel of (mbData.relations ?? [])) {
-      if (rel['target-type'] === 'artist' && rel.type === 'member of band' && rel.direction === 'backward') {
-        const attrs = rel.attributes ?? [];
-        const instruments = attrs
-          .filter(a => !['original','additional','founder','guest','live'].includes(a))
-          .map(cleanInstrument);
-        const member = {
-          name:      rel['target-credit']?.trim() || rel.artist.name,
-          instruments,
-          beginYear: rel.begin?.slice(0, 4) ?? undefined,
-          endYear:   rel.end?.slice(0, 4)   ?? undefined,
-          isActive:  !rel.ended,
-        };
-        if (attrs.includes('original'))   originalMembers.push(member);
-        else if (!rel.ended)              currentMembers.push(member);
-        else                              formerMembers.push(member);
+      if (rel['target-type'] === 'artist') {
+        const personMbid = rel.artist?.id ?? null;
+        const personName = rel['target-credit']?.trim() || rel.artist?.name;
+        if (!personName) continue;
+
+        if (rel.type === 'member of band' && rel.direction === 'backward') {
+          const attrs = rel.attributes ?? [];
+          const instruments = attrs
+            .filter(a => !['original','additional','founder','guest','live'].includes(a))
+            .map(cleanInstrument);
+          const member = {
+            name:      personName,
+            mbid:      personMbid,
+            instruments,
+            beginYear: rel.begin?.slice(0, 4) ?? null,
+            endYear:   rel.end?.slice(0, 4)   ?? null,
+            isActive:  !rel.ended,
+          };
+          if (attrs.includes('original'))   originalMembers.push(member);
+          else if (!rel.ended)              currentMembers.push(member);
+          else                              formerMembers.push(member);
+        }
+
+        // "is person": this artist is a solo project / persona of a real person
+        if (rel.type === 'is person' && rel.direction === 'backward') {
+          isPersonList.push({
+            name:      personName,
+            mbid:      personMbid,
+            instruments: [],
+            beginYear: mbInception,
+            endYear:   mbDissolution,
+            isActive:  !mbData['life-span']?.ended,
+          });
+        }
       }
+
       if (rel['target-type'] === 'url') {
         const u = rel.url?.resource ?? '';
         if (!wikidataId) {
-          const m = u.match(/wikidata\.org(?:\/wiki|\/entity)\/(Q\d+)/);
-          if (m) wikidataId = m[1];
+          const wdm = u.match(/wikidata\.org(?:\/wiki|\/entity)\/(Q\d+)/);
+          if (wdm) wikidataId = wdm[1];
         }
         if (!wikiUrl && /en\.wikipedia\.org\/wiki\//.test(u)) wikiUrl = u;
       }
     }
 
-    let inception           = null;
-    let dissolution         = null;
-    let logoUrl             = null;
-    let formationLocationId = null;
-    let wikiBlurb           = null;
-
-    const parallel = [];
+    // --- Start with MB values; Wikidata fills gaps and provides logo + wiki link ---
+    let inception         = mbInception;
+    let dissolution       = mbDissolution;
+    let formationLocation = buildMbLocation(mbData['begin-area'], mbData['area']);
+    let logoUrl           = null;
+    let wikiBlurb         = null;
 
     if (wikidataId) {
       await sleep(300);
-      parallel.push(
-        fetch(`https://www.wikidata.org/wiki/Special:EntityData/${wikidataId}.json`, { headers: { 'User-Agent': UA } })
-          .then(r => r.json())
-          .then(wdData => {
-            const entity = wdData.entities?.[wikidataId];
-            const claims = entity?.claims;
-            if (claims) {
-              const p571 = claims.P571?.[0]?.mainsnak?.datavalue?.value;
-              if (p571?.time) inception = p571.time.slice(1, 5);
-              const p576 = claims.P576?.[0]?.mainsnak?.datavalue?.value;
-              if (p576?.time) dissolution = p576.time.slice(1, 5);
-              const p154 = claims.P154?.[0]?.mainsnak?.datavalue?.value;
-              if (typeof p154 === 'string' && p154)
-                logoUrl = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(p154.replace(/ /g, '_'))}`;
-              const p740 = claims.P740?.[0]?.mainsnak?.datavalue?.value;
-              if (p740?.id) formationLocationId = p740.id;
-            }
-            // Fall back to Wikidata sitelinks for Wikipedia URL if MB didn't provide one
-            if (!wikiUrl) {
-              const enwikiTitle = entity?.sitelinks?.enwiki?.title;
-              if (enwikiTitle) wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(enwikiTitle.replace(/ /g, '_'))}`;
-            }
-          })
-          .catch(() => {})
-      );
-    }
+      try {
+        const wdRes = await fetch(
+          `https://www.wikidata.org/wiki/Special:EntityData/${wikidataId}.json`,
+          { headers: { 'User-Agent': UA } }
+        );
+        const wdData = await wdRes.json();
+        const entity = wdData.entities?.[wikidataId];
+        const claims = entity?.claims ?? {};
 
-    await Promise.all(parallel);
+        if (!inception) {
+          const wdTime = (prop) => claims[prop]?.[0]?.mainsnak?.datavalue?.value?.time;
+          const t = wdTime('P571') || wdTime('P2031');
+          if (t) inception = t.slice(1, 5);
+        }
+        if (!dissolution) {
+          const wdTime = (prop) => claims[prop]?.[0]?.mainsnak?.datavalue?.value?.time;
+          const t = wdTime('P576') || wdTime('P2032');
+          if (t) dissolution = t.slice(1, 5);
+        }
+        const p154 = claims.P154?.[0]?.mainsnak?.datavalue?.value;
+        if (typeof p154 === 'string' && p154)
+          logoUrl = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(p154.replace(/ /g, '_'))}`;
+
+        if (!formationLocation) {
+          const p740 = claims.P740?.[0]?.mainsnak?.datavalue?.value;
+          if (p740?.id) {
+            await sleep(300);
+            try {
+              const locRes = await fetch(
+                `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${p740.id}&props=labels&languages=en&format=json`,
+                { headers: { 'User-Agent': UA } }
+              );
+              const locData = await locRes.json();
+              formationLocation = locData.entities[p740.id]?.labels?.en?.value ?? null;
+            } catch {}
+          }
+        }
+        if (!wikiUrl) {
+          const enwikiTitle = entity?.sitelinks?.enwiki?.title;
+          if (enwikiTitle) wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(enwikiTitle.replace(/ /g, '_'))}`;
+        }
+      } catch {}
+    }
 
     if (wikiUrl) {
       try {
@@ -270,30 +328,23 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
       } catch {}
     }
 
-    let formationLocation = null;
-    if (formationLocationId) {
-      try {
-        await sleep(300);
-        const locRes = await fetch(
-          `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${formationLocationId}&props=labels&languages=en&format=json`,
-          { headers: { 'User-Agent': UA } }
-        );
-        const locData = await locRes.json();
-        formationLocation = locData.entities[formationLocationId]?.labels?.en?.value ?? null;
-      } catch {}
-    }
+    const dedupedOriginal = deduplicateMembers(originalMembers);
+    const dedupedCurrent  = deduplicateMembers(currentMembers);
+    const dedupedFormer   = deduplicateMembers(formerMembers);
 
     const membersData = JSON.stringify({
-      current:  deduplicateMembers(currentMembers),
-      original: deduplicateMembers(originalMembers),
-      former:   deduplicateMembers(formerMembers),
+      current:    dedupedCurrent,
+      original:   dedupedOriginal,
+      former:     dedupedFormer,
+      isPersonOf: isPersonList,
     });
 
     runD1(`
-      INSERT INTO artists (mbid, name, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data)
-      VALUES (${esc(mbid)}, ${esc(officialName)}, ${esc(inception)}, ${esc(dissolution)}, ${esc(formationLocation)}, ${esc(logoUrl)}, ${esc(wikiBlurb)}, ${esc(wikiUrl)}, ${esc(membersData)})
+      INSERT INTO artists (mbid, name, disambiguation, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data, aliases)
+      VALUES (${esc(mbid)}, ${esc(officialName)}, ${esc(mbDisambiguation)}, ${esc(inception)}, ${esc(dissolution)}, ${esc(formationLocation)}, ${esc(logoUrl)}, ${esc(wikiBlurb)}, ${esc(wikiUrl)}, ${esc(membersData)}, ${esc(JSON.stringify(mbAliases))})
       ON CONFLICT(mbid) DO UPDATE SET
         name               = excluded.name,
+        disambiguation     = excluded.disambiguation,
         inception          = excluded.inception,
         dissolution        = excluded.dissolution,
         formation_location = excluded.formation_location,
@@ -301,10 +352,31 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
         wiki_blurb         = excluded.wiki_blurb,
         wiki_url           = excluded.wiki_url,
         members_data       = excluded.members_data,
+        aliases            = excluded.aliases,
         updated_at         = datetime('now');
     `);
 
-    console.log(`    → inserted/updated: ${officialName} (inception=${inception ?? 'n/a'}, members=${currentMembers.length + originalMembers.length + formerMembers.length})`);
+    // Populate artist_members junction table (for future musician/person pages)
+    const allMemberRows = [
+      ...dedupedOriginal.map(m => ({ ...m, role: 'original' })),
+      ...dedupedCurrent.map(m => ({ ...m, role: 'current' })),
+      ...dedupedFormer.map(m => ({ ...m, role: 'former' })),
+      ...isPersonList.map(m => ({ ...m, role: 'is_person' })),
+    ].filter(m => m.mbid);
+
+    if (allMemberRows.length > 0) {
+      const insertRows = allMemberRows.map(m =>
+        `(${esc(mbid)}, ${esc(m.mbid)}, ${esc(m.name)}, ${esc(m.role)}, ${esc(JSON.stringify(m.instruments))}, ${esc(m.beginYear ?? null)}, ${esc(m.endYear ?? null)}, ${m.isActive ? 1 : 0})`
+      ).join(',\n        ');
+      runD1(`
+        DELETE FROM artist_members WHERE artist_mbid = ${esc(mbid)};
+        INSERT OR IGNORE INTO artist_members (artist_mbid, person_mbid, person_name, role, instruments, begin_year, end_year, is_active)
+        VALUES ${insertRows};
+      `);
+    }
+
+    const totalMembers = dedupedOriginal.length + dedupedCurrent.length + dedupedFormer.length + isPersonList.length;
+    console.log(`    → inserted/updated: ${officialName} (inception=${inception ?? 'n/a'}, members=${totalMembers}, aliases=${mbAliases.length})`);
     phase2Added++;
   } catch (err) {
     console.error(`    → error for ${mbid}: ${err.message}`);

@@ -5,20 +5,47 @@ const STALE_DAYS = 7;
 
 export interface Member {
   name:        string;
+  mbid?:       string;
   instruments: string[];
-  beginYear?:  string;
-  endYear?:    string;
+  beginYear?:  string | null;
+  endYear?:    string | null;
   isActive?:   boolean;
+}
+
+export interface MembersData {
+  current:    Member[];
+  original:   Member[];
+  former:     Member[];
+  isPersonOf: Member[];
+}
+
+export interface ArtistRow {
+  id:                 number;
+  mbid:               string;
+  name:               string;
+  disambiguation:     string | null;
+  inception:          string | null;
+  dissolution:        string | null;
+  formation_location: string | null;
+  logo_url:           string | null;
+  wiki_blurb:         string | null;
+  wiki_url:           string | null;
+  members_data:       string;
+  aliases:            string;
+  updated_at:         string;
+  created_at:         string;
 }
 
 function cleanInstrument(s: string): string {
   return s.replace(/\s*\(.*?\)\s*$/, '').trim();
 }
 
+// Merge multiple MB relations for the same person (one row per instrument in MB)
 function deduplicateMembers(members: Member[]): Member[] {
   const map = new Map<string, Member>();
   for (const m of members) {
-    const existing = map.get(m.name);
+    const key = m.mbid || m.name;
+    const existing = map.get(key);
     if (existing) {
       for (const inst of m.instruments) {
         if (!existing.instruments.includes(inst)) existing.instruments.push(inst);
@@ -28,31 +55,24 @@ function deduplicateMembers(members: Member[]): Member[] {
       if (m.endYear && (!existing.endYear || m.endYear > existing.endYear))
         existing.endYear = m.endYear;
     } else {
-      map.set(m.name, { ...m, instruments: [...m.instruments] });
+      map.set(key, { ...m, instruments: [...m.instruments] });
     }
   }
   return [...map.values()];
 }
 
-export interface MembersData {
-  current:  Member[];
-  original: Member[];
-  former:   Member[];
+function buildMbLocation(beginArea?: { name?: string } | null, area?: { name?: string } | null): string | null {
+  const begin = beginArea?.name;
+  const current = area?.name;
+  if (!begin && !current) return null;
+  if (!begin) return current ?? null;
+  if (!current || begin === current) return begin;
+  return `${begin}, ${current}`;
 }
 
-export interface ArtistRow {
-  id:                 number;
-  mbid:               string;
-  name:               string;
-  inception:          string | null;
-  dissolution:        string | null;
-  formation_location: string | null;
-  logo_url:           string | null;
-  wiki_blurb:         string | null;
-  wiki_url:           string | null;
-  members_data:       string;  // JSON MembersData
-  updated_at:         string;
-  created_at:         string;
+function wdTime(claims: WdClaims, prop: string): string | null {
+  const t = claims[prop]?.[0]?.mainsnak?.datavalue?.value as { time?: string } | undefined;
+  return t?.time?.slice(1, 5) ?? null;
 }
 
 export async function syncArtistData(db: D1Database, mbid: string, fallbackName: string): Promise<void> {
@@ -67,36 +87,68 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
     }
 
     const mbRes = await fetch(
-      `${MB}/artist/${encodeURIComponent(mbid)}?inc=artist-rels+url-rels&fmt=json`,
+      `${MB}/artist/${encodeURIComponent(mbid)}?inc=artist-rels+url-rels+aliases&fmt=json`,
       { headers: HDR }
     );
     if (!mbRes.ok) return;
     const mbData = await mbRes.json() as MBArtistResponse;
     const officialName = mbData.name ?? fallbackName;
 
+    // --- Dates and location from MB (primary source) ---
+    const mbInception   = mbData['life-span']?.begin?.slice(0, 4) ?? null;
+    const mbDissolution = mbData['life-span']?.ended
+      ? (mbData['life-span']?.end?.slice(0, 4) ?? null)
+      : null;
+    const mbDisambiguation = mbData.disambiguation?.trim() || null;
+    const mbAliases = (mbData.aliases ?? [])
+      .filter(a => a.type === 'Artist name')
+      .map(a => a.name?.trim())
+      .filter((n, i, arr): n is string => !!n && n !== officialName && arr.indexOf(n) === i);
+
+    // --- Relations ---
     const currentMembers:  Member[] = [];
     const originalMembers: Member[] = [];
     const formerMembers:   Member[] = [];
+    const isPersonList:    Member[] = [];
     let wikidataId: string | null = null;
     let wikiUrl:    string | null = null;
 
     for (const rel of (mbData.relations ?? [])) {
-      if (rel['target-type'] === 'artist' && rel.type === 'member of band' && rel.direction === 'backward') {
-        const attrs = rel.attributes ?? [];
-        const instruments = attrs
-          .filter(a => !['original','additional','founder','guest','live'].includes(a))
-          .map(cleanInstrument);
-        const member: Member = {
-          name:      (rel['target-credit'] as string | undefined)?.trim() || rel.artist!.name,
-          instruments,
-          beginYear: rel.begin?.slice(0, 4) ?? undefined,
-          endYear:   rel.end?.slice(0, 4)   ?? undefined,
-          isActive:  !rel.ended,
-        };
-        if (attrs.includes('original'))   originalMembers.push(member);
-        else if (!rel.ended)              currentMembers.push(member);
-        else                              formerMembers.push(member);
+      if (rel['target-type'] === 'artist') {
+        const personMbid = rel.artist?.id ?? undefined;
+        const personName = rel['target-credit']?.trim() || rel.artist?.name;
+        if (!personName) continue;
+
+        if (rel.type === 'member of band' && rel.direction === 'backward') {
+          const attrs = rel.attributes ?? [];
+          const instruments = attrs
+            .filter(a => !['original','additional','founder','guest','live'].includes(a))
+            .map(cleanInstrument);
+          const member: Member = {
+            name:      personName,
+            mbid:      personMbid,
+            instruments,
+            beginYear: rel.begin?.slice(0, 4) ?? null,
+            endYear:   rel.end?.slice(0, 4)   ?? null,
+            isActive:  !rel.ended,
+          };
+          if (attrs.includes('original'))   originalMembers.push(member);
+          else if (!rel.ended)              currentMembers.push(member);
+          else                              formerMembers.push(member);
+        }
+
+        if (rel.type === 'is person' && rel.direction === 'backward') {
+          isPersonList.push({
+            name:      personName,
+            mbid:      personMbid,
+            instruments: [],
+            beginYear: mbInception,
+            endYear:   mbDissolution,
+            isActive:  !mbData['life-span']?.ended,
+          });
+        }
       }
+
       if (rel['target-type'] === 'url') {
         const u = rel.url?.resource ?? '';
         if (!wikidataId) {
@@ -107,46 +159,50 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
       }
     }
 
-    let inception:           string | null = null;
-    let dissolution:         string | null = null;
-    let logoUrl:             string | null = null;
-    let formationLocationId: string | null = null;
-    let wikiBlurb:           string | null = null;
-
-    const parallel: Promise<void>[] = [];
+    // --- Start with MB values; Wikidata fills gaps and provides logo + wiki link ---
+    let inception         = mbInception;
+    let dissolution       = mbDissolution;
+    let formationLocation = buildMbLocation(mbData['begin-area'], mbData['area']);
+    let logoUrl:    string | null = null;
+    let wikiBlurb:  string | null = null;
 
     if (wikidataId) {
-      parallel.push(
-        fetch(`https://www.wikidata.org/wiki/Special:EntityData/${wikidataId}.json`, { headers: { 'User-Agent': UA } })
-          .then(r => r.json() as Promise<WikidataResponse>)
-          .then(wdData => {
-            const entity = wdData.entities?.[wikidataId!];
-            const claims = entity?.claims;
-            if (claims) {
-              const p571 = claims.P571?.[0]?.mainsnak?.datavalue?.value as { time?: string } | undefined;
-              if (p571?.time) inception = p571.time.slice(1, 5);
+      try {
+        const wdRes = await fetch(
+          `https://www.wikidata.org/wiki/Special:EntityData/${wikidataId}.json`,
+          { headers: { 'User-Agent': UA } }
+        );
+        const wdData = await wdRes.json() as WikidataResponse;
+        const entity = wdData.entities?.[wikidataId];
+        const claims: WdClaims = (entity?.claims ?? {}) as WdClaims;
 
-              const p576 = claims.P576?.[0]?.mainsnak?.datavalue?.value as { time?: string } | undefined;
-              if (p576?.time) dissolution = p576.time.slice(1, 5);
+        if (!inception)   inception   = wdTime(claims, 'P571') || wdTime(claims, 'P2031');
+        if (!dissolution) dissolution = wdTime(claims, 'P576') || wdTime(claims, 'P2032');
 
-              const p154 = claims.P154?.[0]?.mainsnak?.datavalue?.value as string | undefined;
-              if (typeof p154 === 'string' && p154)
-                logoUrl = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(p154.replace(/ /g, '_'))}`;
+        const p154 = claims.P154?.[0]?.mainsnak?.datavalue?.value as string | undefined;
+        if (typeof p154 === 'string' && p154)
+          logoUrl = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(p154.replace(/ /g, '_'))}`;
 
-              const p740 = claims.P740?.[0]?.mainsnak?.datavalue?.value as { id?: string } | undefined;
-              if (p740?.id) formationLocationId = p740.id;
-            }
-            // Fall back to Wikidata sitelinks for Wikipedia URL if MB didn't provide one
-            if (!wikiUrl) {
-              const enwikiTitle = (entity as WikidataEntity | undefined)?.sitelinks?.enwiki?.title;
-              if (enwikiTitle) wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(enwikiTitle.replace(/ /g, '_'))}`;
-            }
-          })
-          .catch(() => {})
-      );
+        if (!formationLocation) {
+          const p740 = claims.P740?.[0]?.mainsnak?.datavalue?.value as { id?: string } | undefined;
+          if (p740?.id) {
+            try {
+              const locRes = await fetch(
+                `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${p740.id}&props=labels&languages=en&format=json`,
+                { headers: { 'User-Agent': UA } }
+              );
+              const locData = await locRes.json() as { entities: Record<string, { labels?: Record<string, { value: string }> }> };
+              formationLocation = locData.entities[p740.id]?.labels?.en?.value ?? null;
+            } catch {}
+          }
+        }
+
+        if (!wikiUrl) {
+          const enwikiTitle = entity?.sitelinks?.enwiki?.title;
+          if (enwikiTitle) wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(enwikiTitle.replace(/ /g, '_'))}`;
+        }
+      } catch {}
     }
-
-    await Promise.all(parallel);
 
     if (wikiUrl) {
       try {
@@ -160,65 +216,97 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
       } catch {}
     }
 
-    let formationLocation: string | null = null;
-    if (formationLocationId) {
-      try {
-        const locRes = await fetch(
-          `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${formationLocationId}&props=labels&languages=en&format=json`,
-          { headers: { 'User-Agent': UA } }
-        );
-        const locData = await locRes.json() as { entities: Record<string, { labels?: Record<string, { value: string }> }> };
-        formationLocation = locData.entities[formationLocationId]?.labels?.en?.value ?? null;
-      } catch {}
-    }
+    const dedupedOriginal = deduplicateMembers(originalMembers);
+    const dedupedCurrent  = deduplicateMembers(currentMembers);
+    const dedupedFormer   = deduplicateMembers(formerMembers);
 
     const membersData: MembersData = {
-      current:  deduplicateMembers(currentMembers),
-      original: deduplicateMembers(originalMembers),
-      former:   deduplicateMembers(formerMembers),
+      current:    dedupedCurrent,
+      original:   dedupedOriginal,
+      former:     dedupedFormer,
+      isPersonOf: isPersonList,
     };
 
-    await db.prepare(`
-      INSERT INTO artists (mbid, name, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(mbid) DO UPDATE SET
-        name               = excluded.name,
-        inception          = excluded.inception,
-        dissolution        = excluded.dissolution,
-        formation_location = excluded.formation_location,
-        logo_url           = excluded.logo_url,
-        wiki_blurb         = excluded.wiki_blurb,
-        wiki_url           = excluded.wiki_url,
-        members_data       = excluded.members_data,
-        updated_at         = datetime('now')
-    `).bind(
-      mbid, officialName,
-      inception, dissolution, formationLocation,
-      logoUrl, wikiBlurb, wikiUrl,
-      JSON.stringify(membersData),
-    ).run();
+    // Build artist_members rows (only where we have person mbid)
+    const allMemberRows = [
+      ...dedupedOriginal.map(m => ({ ...m, role: 'original' })),
+      ...dedupedCurrent.map(m => ({ ...m, role: 'current' })),
+      ...dedupedFormer.map(m => ({ ...m, role: 'former' })),
+      ...isPersonList.map(m => ({ ...m, role: 'is_person' })),
+    ].filter(m => m.mbid);
+
+    const stmts: D1PreparedStatement[] = [
+      db.prepare(`
+        INSERT INTO artists (mbid, name, disambiguation, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data, aliases)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(mbid) DO UPDATE SET
+          name               = excluded.name,
+          disambiguation     = excluded.disambiguation,
+          inception          = excluded.inception,
+          dissolution        = excluded.dissolution,
+          formation_location = excluded.formation_location,
+          logo_url           = excluded.logo_url,
+          wiki_blurb         = excluded.wiki_blurb,
+          wiki_url           = excluded.wiki_url,
+          members_data       = excluded.members_data,
+          aliases            = excluded.aliases,
+          updated_at         = datetime('now')
+      `).bind(
+        mbid, officialName, mbDisambiguation,
+        inception, dissolution, formationLocation,
+        logoUrl, wikiBlurb, wikiUrl,
+        JSON.stringify(membersData),
+        JSON.stringify(mbAliases),
+      ),
+    ];
+
+    if (allMemberRows.length > 0) {
+      stmts.push(db.prepare('DELETE FROM artist_members WHERE artist_mbid = ?').bind(mbid));
+      for (const m of allMemberRows) {
+        stmts.push(db.prepare(`
+          INSERT OR IGNORE INTO artist_members (artist_mbid, person_mbid, person_name, role, instruments, begin_year, end_year, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          mbid, m.mbid!, m.name, m.role,
+          JSON.stringify(m.instruments),
+          m.beginYear ?? null, m.endYear ?? null,
+          m.isActive ? 1 : 0,
+        ));
+      }
+    }
+
+    await db.batch(stmts);
   } catch {
     // Never throw — background task must not crash the request
   }
 }
 
+type WdClaims = Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>;
+
 interface MBArtistResponse {
-  name: string;
-  relations?: Array<{
-    type:          string;
-    'target-type': string;
-    direction:     string;
-    ended?:        boolean;
-    begin?:        string | null;
-    end?:          string | null;
-    attributes?:   string[];
-    artist?:       { id: string; name: string };
-    url?:          { resource: string };
+  name:           string;
+  disambiguation?: string;
+  type?:          string;
+  'life-span'?:   { begin?: string | null; end?: string | null; ended?: boolean };
+  'begin-area'?:  { name?: string } | null;
+  area?:          { name?: string } | null;
+  aliases?:       Array<{ name?: string; type?: string | null; locale?: string | null }>;
+  relations?:     Array<{
+    type:           string;
+    'target-type':  string;
+    direction:      string;
+    ended?:         boolean;
+    begin?:         string | null;
+    end?:           string | null;
+    attributes?:    string[];
+    'target-credit'?: string | null;
+    artist?:        { id: string; name: string };
+    url?:           { resource: string };
   }>;
 }
 
 interface WikidataEntity {
-  claims?: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>;
+  claims?:    Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>;
   sitelinks?: Record<string, { title: string }>;
 }
 

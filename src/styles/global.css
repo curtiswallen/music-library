@@ -64,6 +64,18 @@ body {
   line-height: 1.5;
 }
 
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  background: var(--bg);
+  z-index: 201;
+  pointer-events: none;
+}
+
 a { color: var(--text); text-decoration: none; }
 a:hover { color: var(--text-hi); }
 
@@ -75,6 +87,7 @@ nav {
   display: flex;
   align-items: center;
   padding: 28px;
+  padding-top: calc(28px + env(safe-area-inset-top));
   background: none;
   position: sticky;
   top: 0;
@@ -92,6 +105,10 @@ nav {
 
 .user-chip {
   padding-right: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
 .profile-avatar { 
@@ -274,6 +291,7 @@ textarea { resize: vertical; min-height: 80px; }
   align-items: center;
   justify-content: space-between;
   padding: 28px 0;
+  padding-top: calc(28px + env(safe-area-inset-top));
   gap: 16px;
   min-height: 36px;
   position: sticky;
@@ -1203,6 +1221,21 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .mobile-section-title { display: none; }
 .artist-type-section:last-child { padding-bottom: 200px; }
 .artist-type-section + .artist-type-section { margin-top: 32px; }
+
+/* Fixed column widths so all release-type tables align identically */
+.user-artist-tbl, .global-artist-tbl { overflow-x: hidden; }
+.user-artist-tbl table, .global-artist-tbl table { table-layout: fixed; width: 100%; }
+.user-artist-tbl td, .global-artist-tbl td { overflow: hidden; }
+.user-artist-tbl th:nth-child(1), .global-artist-tbl th:nth-child(1) { width: 60px; }
+.user-artist-tbl th:nth-child(3), .global-artist-tbl th:nth-child(3) { width: 48px; }
+.user-artist-tbl th:nth-child(4), .global-artist-tbl th:nth-child(4) { width: 110px; }
+.user-artist-tbl th:nth-child(5), .global-artist-tbl th:nth-child(5) { width: 200px; max-width: 200px; }
+.user-artist-tbl th:nth-child(6) { width: 140px; } /* descriptors */
+.user-artist-tbl th:nth-child(7) { width: 52px; }  /* rating */
+.user-artist-tbl th:nth-child(8) { width: 130px; } /* notes */
+.global-artist-tbl th:nth-child(6) { width: 100px; }  /* avg rating */
+.global-artist-tbl th:nth-child(7) { width: 100px; }  /* # ratings */
+/* col 2 (album) gets the remaining width automatically */
 .artist-type-heading {
   font-size: 11px;
   font-weight: 600;
@@ -1214,7 +1247,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
 /* ── Artist info panel ── */
 .artist-info-panel {
-  margin-bottom: 20px;
+  margin-bottom: 40px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1228,7 +1261,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   flex-shrink: 0;
 }
 .artist-info-meta { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.artist-info-disambiguation { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 0; }
 .artist-info-dates { font-size: 12px; color: var(--text-muted); margin: 0; }
+.artist-info-aliases { font-size: 12px; color: var(--text-muted); font-style: italic; margin: 0; }
 .artist-info-members-grid { display: flex; flex-wrap: wrap; gap: 16px 28px; }
 .artist-info-member-section h4 {
   font-size: 10px;
@@ -1247,7 +1282,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.6;
-  padding-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1480,8 +1514,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
 @media (max-width: 640px) {
   main { padding: 0 16px 16px 16px; }
-  nav { padding: 16px; }
-  .page-header { padding: 16px 0; }
+  nav { padding: 16px; padding-top: calc(16px + env(safe-area-inset-top)); }
+  .page-header { padding: 16px 0; padding-top: calc(16px + env(safe-area-inset-top)); }
   .form-grid { grid-template-columns: 1fr; }
 
   /* Album detail: cover stays on left, album-header to its right */
@@ -1558,6 +1592,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .artist-tbl tbody td:nth-child(6) { grid-column: 3; grid-row: 1; text-align: right; }
   .artist-tbl tbody td:nth-child(7), 
   .artist-tbl tbody td:nth-child(8) { display: none; }
+
+  .user-artist-tbl tbody td:nth-child(6) {display: none;}
+  .user-artist-tbl tbody td:nth-child(7) { display: inline-block; grid-column: 3; grid-row: 1; text-align: right; }
 
 }
 

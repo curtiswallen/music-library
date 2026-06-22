@@ -82,7 +82,7 @@ const albumsByType = TYPE_ORDER.map(({ type, label }) => ({
 const multipleTypes = albumsByType.length > 1;
 
 let artistRow: ArtistRow | null = null;
-let membersData: MembersData = { current: [], original: [], former: [] };
+let membersData: MembersData = { current: [], original: [], former: [], isPersonOf: [] };
 if (artistMbid) {
   artistRow = await db.prepare('SELECT * FROM artists WHERE mbid = ?')
     .bind(artistMbid).first<ArtistRow>();
@@ -92,12 +92,14 @@ if (artistMbid) {
 }
 
 const memberSections = [
-  { label: 'Members',          list: membersData.current  },
-  { label: 'Original Members', list: membersData.original },
-  { label: 'Former Members',   list: membersData.former   },
+  { label: 'Members',          list: membersData.current          },
+  { label: 'Original Members', list: membersData.original         },
+  { label: 'Former Members',   list: membersData.former           },
+  { label: 'Project of',       list: membersData.isPersonOf ?? [] },
 ].filter(s => s.list.length > 0).map(s => {
-  const half = Math.ceil(s.list.length / 2);
-  return { ...s, col1: s.list.slice(0, half), col2: s.list.slice(half) };
+  const split = s.list.length >= 5;
+  const half = split ? Math.ceil(s.list.length / 2) : s.list.length;
+  return { ...s, col1: s.list.slice(0, half), col2: split ? s.list.slice(half) : [] };
 });
 
 const artistCountry = albums[0]?.country ?? null;
@@ -159,7 +161,9 @@ function sortedSubs(subs: string[]) {
           <img src={artistRow.logo_url} class="artist-info-logo" alt="" onerror="this.remove()" />
         )}
         <div class="artist-info-meta">
+          {artistRow.disambiguation && <p class="artist-info-disambiguation">{artistRow.disambiguation}</p>}
           {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
+          {(() => { try { const a = JSON.parse(artistRow.aliases || '[]') as string[]; return a.length > 0 ? <p class="artist-info-aliases">Also known as: {a.join(', ')}</p> : null; } catch { return null; } })()}
           {memberSections.length > 0 && (
             <div class="artist-info-members-grid">
               {memberSections.map(s => {
@@ -205,7 +209,7 @@ function sortedSubs(subs: string[]) {
   {albumsByType.map(({ label, albums: group }) => (
     <div class="artist-type-section">
       {multipleTypes && <h3 class="artist-type-heading">{label}</h3>}
-      <div class="table-wrap artist-tbl">
+      <div class="table-wrap artist-tbl user-artist-tbl">
         <table>
           <thead>
             <tr>
