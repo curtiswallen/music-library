@@ -14,7 +14,7 @@ interface Props {
 const { artistRow, membersData, artistName, artistMbid, knownAliasMap, artistDateStr, isAdmin } = Astro.props;
 
 const memberSections = [
-  { label: 'Original Members', list: membersData.original         },
+  { label: 'Original Members', list: [...membersData.original].sort((a, b) => (b.isActive ? 1 : 0) - (a.isActive ? 1 : 0)) },
   { label: 'Current Members',  list: membersData.current          },
   { label: 'Former Members',   list: membersData.former           },
   { label: 'Project of',       list: membersData.isPersonOf ?? [] },
@@ -68,6 +68,9 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
         <div class="artist-info-members-grid">
           {memberSections.map(s => {
             const isPersonOfSection = s.label === 'Project of';
+            const isOriginalSection = s.label === 'Original Members';
+            const isFormerSection   = s.label === 'Former Members';
+            const dissolutionYear   = artistRow.dissolution ?? null;
             const personSectionAliases = (isPersonOfSection && s.list.length === 1)
               ? artistAliases.filter(a => a.name !== artistName).map(a => a.name) : [];
             const renderItem = (m: typeof s.list[0]) => {
@@ -77,9 +80,12 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
               const akaNames = isPersonOfSection
                 ? (m.personAka && m.personAka !== artistName ? [m.personAka] : personSectionAliases)
                 : (m.canonicalName ? [m.canonicalName] : (m.mbid ? (knownAliasMap.get(m.mbid) ?? []) : []));
+              const wouldDim = (isOriginalSection && !m.isActive) || isFormerSection;
+              const finalLineup = wouldDim && !!dissolutionYear && m.endYear === dissolutionYear;
+              const dimmed = wouldDim && !finalLineup;
               return (
-                <li>
-                  {m.name}
+                <li class={dimmed ? 'member-inactive' : undefined}>
+                  <span class={dimmed ? 'member-inactive-name' : undefined}>{m.name}</span>
                   {akaNames.length > 0 && <span class="member-aka"> (aka {akaNames.join(', ')})</span>}
                   {m.instruments.length > 0 && (
                     <span class="member-instruments"> — {m.instruments.join(', ')}</span>

@@ -1277,9 +1277,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .member-cols { display: flex; gap: 20px; width: fit-content; }
 .artist-info-member-section ul { list-style: none; margin: 0; padding: 0; }
 .artist-info-member-section li { font-size: 12px; color: var(--text); margin-bottom: 2px; }
-.member-instruments { font-size: 11px; color: var(--text-muted); }
+.member-instruments { font-size: 11px; color: var(--text-muted); text-decoration: none !important; }
 .member-aka { font-size: 11px; color: var(--text-muted); }
 .member-dates { font-size: 10px; }
+.member-inactive { opacity: 0.3; }
 .artist-performs-as-list { font-size: 12px; color: var(--text-muted); margin: 0; }
 .artist-info-blurb {
   font-size: 12px;
