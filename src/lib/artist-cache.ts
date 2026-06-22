@@ -4,12 +4,15 @@ const HDR = { 'User-Agent': UA, Accept: 'application/json' };
 const STALE_DAYS = 7;
 
 export interface Member {
-  name:        string;
-  mbid?:       string;
-  instruments: string[];
-  beginYear?:  string | null;
-  endYear?:    string | null;
-  isActive?:   boolean;
+  name:           string;
+  mbid?:          string;
+  canonicalName?: string;
+  personAka?:     string;
+  performsAs?:    Array<{ name: string; mbid: string }>;
+  instruments:    string[];
+  beginYear?:     string | null;
+  endYear?:       string | null;
+  isActive?:      boolean;
 }
 
 export interface MembersData {
@@ -23,6 +26,7 @@ export interface ArtistRow {
   id:                 number;
   mbid:               string;
   name:               string;
+  artist_type:        string | null;
   disambiguation:     string | null;
   inception:          string | null;
   dissolution:        string | null;
@@ -116,7 +120,8 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
     for (const rel of (mbData.relations ?? [])) {
       if (rel['target-type'] === 'artist') {
         const personMbid = rel.artist?.id ?? undefined;
-        const personName = rel['target-credit']?.trim() || rel.artist?.name;
+        const canonicalName = rel.artist?.name;
+        const personName = rel['target-credit']?.trim() || canonicalName;
         if (!personName) continue;
 
         if (rel.type === 'member of band' && rel.direction === 'backward') {
@@ -125,8 +130,9 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
             .filter(a => !['original','additional','founder','guest','live'].includes(a))
             .map(cleanInstrument);
           const member: Member = {
-            name:      personName,
-            mbid:      personMbid,
+            name:          personName,
+            mbid:          personMbid,
+            canonicalName: (canonicalName && canonicalName !== personName) ? canonicalName : undefined,
             instruments,
             beginYear: rel.begin?.slice(0, 4) ?? null,
             endYear:   rel.end?.slice(0, 4)   ?? null,
@@ -157,6 +163,37 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
         }
         if (!wikiUrl && /en\.wikipedia\.org\/wiki\//.test(u)) wikiUrl = u;
       }
+    }
+
+    // Fetch person entity data for isPersonOf entries (to get their stage name aka and other projects)
+    for (const personEntry of isPersonList) {
+      if (!personEntry.mbid) continue;
+      try {
+        const pRes = await fetch(
+          `${MB}/artist/${encodeURIComponent(personEntry.mbid)}?inc=artist-rels+aliases&fmt=json`,
+          { headers: HDR }
+        );
+        if (!pRes.ok) continue;
+        const pData = await pRes.json() as MBArtistResponse;
+
+        const pAliases = (pData.aliases ?? [])
+          .filter(a => a.type !== 'Legal name')
+          .map(a => a.name?.trim())
+          .filter((n): n is string => !!n && n !== pData.name);
+
+        const performsAs: Array<{ name: string; mbid: string }> = [];
+        for (const pRel of (pData.relations ?? [])) {
+          if (pRel['target-type'] === 'artist' && pRel.type === 'is person' && pRel.direction === 'forward') {
+            if (pRel.artist?.id && pRel.artist.name) {
+              performsAs.push({ name: pRel.artist.name, mbid: pRel.artist.id });
+            }
+          }
+        }
+
+        const performsAsNames = performsAs.map(p => p.name.toLowerCase());
+        personEntry.personAka = pAliases.find(a => performsAsNames.includes(a.toLowerCase()));
+        personEntry.performsAs = performsAs;
+      } catch {}
     }
 
     // --- Start with MB values; Wikidata fills gaps and provides logo + wiki link ---
@@ -237,10 +274,11 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
 
     const stmts: D1PreparedStatement[] = [
       db.prepare(`
-        INSERT INTO artists (mbid, name, disambiguation, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data, aliases)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO artists (mbid, name, artist_type, disambiguation, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data, aliases)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(mbid) DO UPDATE SET
           name               = excluded.name,
+          artist_type        = excluded.artist_type,
           disambiguation     = excluded.disambiguation,
           inception          = excluded.inception,
           dissolution        = excluded.dissolution,
@@ -252,7 +290,7 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
           aliases            = excluded.aliases,
           updated_at         = datetime('now')
       `).bind(
-        mbid, officialName, mbDisambiguation,
+        mbid, officialName, mbData.type ?? null, mbDisambiguation,
         inception, dissolution, formationLocation,
         logoUrl, wikiBlurb, wikiUrl,
         JSON.stringify(membersData),
@@ -264,13 +302,14 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
       stmts.push(db.prepare('DELETE FROM artist_members WHERE artist_mbid = ?').bind(mbid));
       for (const m of allMemberRows) {
         stmts.push(db.prepare(`
-          INSERT OR IGNORE INTO artist_members (artist_mbid, person_mbid, person_name, role, instruments, begin_year, end_year, is_active)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT OR IGNORE INTO artist_members (artist_mbid, person_mbid, person_name, role, instruments, begin_year, end_year, is_active, canonical_name)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           mbid, m.mbid!, m.name, m.role,
           JSON.stringify(m.instruments),
           m.beginYear ?? null, m.endYear ?? null,
           m.isActive ? 1 : 0,
+          m.canonicalName ?? null,
         ));
       }
     }

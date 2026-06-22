@@ -128,6 +128,20 @@ if (!isOwner && !profileUser.is_private) {
 
 const libBase = `/${profileUser.profile_url}`;
 
+const artistAliases: string[] = (() => {
+  try { return JSON.parse(artistRow?.aliases || '[]') as string[]; } catch { return []; }
+})();
+const showEntityAliases = artistAliases.length > 0 && (membersData.isPersonOf?.length ?? 0) === 0;
+
+// Aggregate all "performs as" projects from isPersonOf persons, excluding the current artist
+const performsAsList = (membersData.isPersonOf ?? [])
+  .flatMap(m => m.performsAs ?? [])
+  .filter(p => p.mbid !== artistMbid)
+  .reduce<Array<{ name: string; mbid: string }>>((acc, p) => {
+    if (!acc.some(x => x.mbid === p.mbid)) acc.push(p);
+    return acc;
+  }, []);
+
 function ratingClass(r: number | null) {
   if (r == null) return '';
   if (r >= 70) return 'rating-hi';
@@ -161,19 +175,29 @@ function sortedSubs(subs: string[]) {
           <img src={artistRow.logo_url} class="artist-info-logo" alt="" onerror="this.remove()" />
         )}
         <div class="artist-info-meta">
-          {artistRow.disambiguation && <p class="artist-info-disambiguation">{artistRow.disambiguation}</p>}
+          <div class="artist-disambiguation-wrapper">
+            {artistRow.disambiguation && <p class="artist-info-disambiguation">{artistRow.disambiguation}</p>}
+            {showEntityAliases && <p class="artist-info-aliases">Also known as: {artistAliases.join(', ')}</p>}
+          </div>
           {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
-          {(() => { try { const a = JSON.parse(artistRow.aliases || '[]') as string[]; return a.length > 0 ? <p class="artist-info-aliases">Also known as: {a.join(', ')}</p> : null; } catch { return null; } })()}
           {memberSections.length > 0 && (
             <div class="artist-info-members-grid">
               {memberSections.map(s => {
+                const isPersonOfSection = s.label === 'Project of';
+                // Fallback: project entity's own aliases (for solo projects with no fetched personAka)
+                const personSectionAliases = (isPersonOfSection && s.list.length === 1)
+                  ? artistAliases.filter(a => a !== artistName) : [];
                 const renderItem = (m: typeof s.list[0]) => {
                   const dateStr = m.beginYear
                     ? (m.isActive ? `${m.beginYear}–present` : m.endYear ? `${m.beginYear}–${m.endYear}` : m.beginYear)
                     : (m.endYear ? `until ${m.endYear}` : null);
+                  const akaNames = isPersonOfSection
+                    ? (m.personAka && m.personAka !== artistName ? [m.personAka] : personSectionAliases)
+                    : (m.canonicalName ? [m.canonicalName] : []);
                   return (
                     <li>
                       {m.name}
+                      {akaNames.length > 0 && <span class="member-aka"> (aka {akaNames.join(', ')})</span>}
                       {m.instruments.length > 0 && (
                         <span class="member-instruments"> — {m.instruments.join(', ')}</span>
                       )}
@@ -191,6 +215,12 @@ function sortedSubs(subs: string[]) {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {performsAsList.length > 0 && (
+            <div class="artist-info-member-section">
+              <h4>Also performs as</h4>
+              <p class="artist-performs-as-list">{performsAsList.map(p => p.name).join(', ')}</p>
             </div>
           )}
         </div>
@@ -219,18 +249,7 @@ function sortedSubs(subs: string[]) {
               <th>Genre</th>
               <th>Subgenres</th>
               <th>Descriptors</th>
-              <th>Rating <span class="rating-tip">?<span class="rating-tip-body">
-                <div class="rating-tip-row"><strong>100</strong><span>Masterpiece / Perfect</span></div>
-                <div class="rating-tip-row"><strong>90</strong><span>Amazing / Fantastic</span></div>
-                <div class="rating-tip-row"><strong>80</strong><span>Great / Excellent</span></div>
-                <div class="rating-tip-row"><strong>70</strong><span>Very Good / Solid</span></div>
-                <div class="rating-tip-row"><strong>60</strong><span>Good / Serviceable</span></div>
-                <div class="rating-tip-row"><strong>50</strong><span>Decent / Mixed Opinion</span></div>
-                <div class="rating-tip-row"><strong>40</strong><span>Acceptable / Unremarkable</span></div>
-                <div class="rating-tip-row"><strong>30</strong><span>Mediocre / Poor</span></div>
-                <div class="rating-tip-row"><strong>20</strong><span>Bad / Terrible</span></div>
-                <div class="rating-tip-row"><strong>10</strong><span>Abysmal / Worthless</span></div>
-              </span></span></th>
+              <th>Rating</th>
               <th>Notes</th>
             </tr>
           </thead>

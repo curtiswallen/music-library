@@ -219,7 +219,8 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
     for (const rel of (mbData.relations ?? [])) {
       if (rel['target-type'] === 'artist') {
         const personMbid = rel.artist?.id ?? null;
-        const personName = rel['target-credit']?.trim() || rel.artist?.name;
+        const canonicalName = rel.artist?.name;
+        const personName = rel['target-credit']?.trim() || canonicalName;
         if (!personName) continue;
 
         if (rel.type === 'member of band' && rel.direction === 'backward') {
@@ -228,8 +229,9 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
             .filter(a => !['original','additional','founder','guest','live'].includes(a))
             .map(cleanInstrument);
           const member = {
-            name:      personName,
-            mbid:      personMbid,
+            name:          personName,
+            mbid:          personMbid,
+            canonicalName: (canonicalName && canonicalName !== personName) ? canonicalName : null,
             instruments,
             beginYear: rel.begin?.slice(0, 4) ?? null,
             endYear:   rel.end?.slice(0, 4)   ?? null,
@@ -260,6 +262,44 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
           if (wdm) wikidataId = wdm[1];
         }
         if (!wikiUrl && /en\.wikipedia\.org\/wiki\//.test(u)) wikiUrl = u;
+      }
+    }
+
+    // Fetch person entity data for isPersonOf entries (stage name aka + other projects)
+    for (const personEntry of isPersonList) {
+      if (!personEntry.mbid) continue;
+      await sleep(1100);
+      try {
+        const pRes = await fetch(
+          `${MB}/artist/${encodeURIComponent(personEntry.mbid)}?inc=artist-rels+aliases&fmt=json`,
+          { headers: HDR }
+        );
+        if (!pRes.ok) {
+          console.log(`      → person entity HTTP ${pRes.status} for ${personEntry.mbid}`);
+          continue;
+        }
+        const pData = await pRes.json();
+
+        const pAliases = (pData.aliases ?? [])
+          .filter(a => a.type !== 'Legal name')
+          .map(a => a.name?.trim())
+          .filter(n => n && n !== pData.name);
+
+        const performsAs = [];
+        for (const pRel of (pData.relations ?? [])) {
+          if (pRel['target-type'] === 'artist' && pRel.type === 'is person' && pRel.direction === 'forward') {
+            if (pRel.artist?.id && pRel.artist?.name) {
+              performsAs.push({ name: pRel.artist.name, mbid: pRel.artist.id });
+            }
+          }
+        }
+
+        const performsAsNames = performsAs.map(p => p.name.toLowerCase());
+        personEntry.personAka = pAliases.find(a => performsAsNames.includes(a.toLowerCase())) || undefined;
+        personEntry.performsAs = performsAs;
+        console.log(`      → person ${personEntry.name}: aka=${personEntry.personAka ?? 'n/a'}, performs_as=${performsAs.length}`);
+      } catch(e) {
+        console.log(`      → failed to fetch person data for ${personEntry.mbid}: ${e.message}`);
       }
     }
 
@@ -339,11 +379,13 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
       isPersonOf: isPersonList,
     });
 
+    const artistType = mbData.type ?? null;
     runD1(`
-      INSERT INTO artists (mbid, name, disambiguation, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data, aliases)
-      VALUES (${esc(mbid)}, ${esc(officialName)}, ${esc(mbDisambiguation)}, ${esc(inception)}, ${esc(dissolution)}, ${esc(formationLocation)}, ${esc(logoUrl)}, ${esc(wikiBlurb)}, ${esc(wikiUrl)}, ${esc(membersData)}, ${esc(JSON.stringify(mbAliases))})
+      INSERT INTO artists (mbid, name, artist_type, disambiguation, inception, dissolution, formation_location, logo_url, wiki_blurb, wiki_url, members_data, aliases)
+      VALUES (${esc(mbid)}, ${esc(officialName)}, ${esc(artistType)}, ${esc(mbDisambiguation)}, ${esc(inception)}, ${esc(dissolution)}, ${esc(formationLocation)}, ${esc(logoUrl)}, ${esc(wikiBlurb)}, ${esc(wikiUrl)}, ${esc(membersData)}, ${esc(JSON.stringify(mbAliases))})
       ON CONFLICT(mbid) DO UPDATE SET
         name               = excluded.name,
+        artist_type        = excluded.artist_type,
         disambiguation     = excluded.disambiguation,
         inception          = excluded.inception,
         dissolution        = excluded.dissolution,
@@ -366,11 +408,11 @@ for (const { artist_mbid: mbid, artist } of artistMbids) {
 
     if (allMemberRows.length > 0) {
       const insertRows = allMemberRows.map(m =>
-        `(${esc(mbid)}, ${esc(m.mbid)}, ${esc(m.name)}, ${esc(m.role)}, ${esc(JSON.stringify(m.instruments))}, ${esc(m.beginYear ?? null)}, ${esc(m.endYear ?? null)}, ${m.isActive ? 1 : 0})`
+        `(${esc(mbid)}, ${esc(m.mbid)}, ${esc(m.name)}, ${esc(m.role)}, ${esc(JSON.stringify(m.instruments))}, ${esc(m.beginYear ?? null)}, ${esc(m.endYear ?? null)}, ${m.isActive ? 1 : 0}, ${esc(m.canonicalName ?? null)})`
       ).join(',\n        ');
       runD1(`
         DELETE FROM artist_members WHERE artist_mbid = ${esc(mbid)};
-        INSERT OR IGNORE INTO artist_members (artist_mbid, person_mbid, person_name, role, instruments, begin_year, end_year, is_active)
+        INSERT OR IGNORE INTO artist_members (artist_mbid, person_mbid, person_name, role, instruments, begin_year, end_year, is_active, canonical_name)
         VALUES ${insertRows};
       `);
     }

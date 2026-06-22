@@ -1227,12 +1227,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .user-artist-tbl table, .global-artist-tbl table { table-layout: fixed; width: 100%; }
 .user-artist-tbl td, .global-artist-tbl td { overflow: hidden; }
 .user-artist-tbl th:nth-child(1), .global-artist-tbl th:nth-child(1) { width: 60px; }
+.user-artist-tbl th:nth-child(2), .global-artist-tbl th:nth-child(2) { width: 300px; }
 .user-artist-tbl th:nth-child(3), .global-artist-tbl th:nth-child(3) { width: 48px; }
 .user-artist-tbl th:nth-child(4), .global-artist-tbl th:nth-child(4) { width: 110px; }
 .user-artist-tbl th:nth-child(5), .global-artist-tbl th:nth-child(5) { width: 200px; max-width: 200px; }
-.user-artist-tbl th:nth-child(6) { width: 140px; } /* descriptors */
+.user-artist-tbl th:nth-child(6) { width: 200px; } /* descriptors */
 .user-artist-tbl th:nth-child(7) { width: 52px; }  /* rating */
-.user-artist-tbl th:nth-child(8) { width: 130px; } /* notes */
+.user-artist-tbl th:nth-child(8) { width: 300px; } /* notes */
 .global-artist-tbl th:nth-child(6) { width: 100px; }  /* avg rating */
 .global-artist-tbl th:nth-child(7) { width: 100px; }  /* # ratings */
 /* col 2 (album) gets the remaining width automatically */
@@ -1277,7 +1278,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .artist-info-member-section ul { list-style: none; margin: 0; padding: 0; }
 .artist-info-member-section li { font-size: 12px; color: var(--text); margin-bottom: 2px; }
 .member-instruments { font-size: 11px; color: var(--text-muted); }
+.member-aka { font-size: 11px; color: var(--text-muted); }
 .member-dates { font-size: 10px; }
+.artist-performs-as-list { font-size: 12px; color: var(--text-muted); margin: 0; }
 .artist-info-blurb {
   font-size: 12px;
   color: var(--text-muted);
