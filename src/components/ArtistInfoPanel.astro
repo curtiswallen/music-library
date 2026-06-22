@@ -273,11 +273,12 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
       const addBtn = e.target.closest('[data-add]');
       if (addBtn) {
         if (addBtn.dataset.add === 'alias') {
+          aliases = collectAliases();
           aliases.push({ name: '', begin: null, end: null });
           renderAliases();
         } else if (addBtn.dataset.add === 'member') {
           const sec = addBtn.dataset.section;
-          members[sec] = members[sec] || [];
+          members[sec] = collectMembers(sec);
           members[sec].push({ name: '', mbid: null, instruments: [], beginYear: null, endYear: null, isActive: true });
           renderMembers(sec);
         }
@@ -287,11 +288,14 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
       if (delBtn) {
         const i = parseInt(delBtn.dataset.i);
         if (delBtn.dataset.del === 'alias') {
+          aliases = collectAliases();
           aliases.splice(i, 1);
           renderAliases();
         } else if (delBtn.dataset.del === 'member') {
-          members[delBtn.dataset.sec].splice(i, 1);
-          renderMembers(delBtn.dataset.sec);
+          const sec = delBtn.dataset.sec;
+          members[sec] = collectMembers(sec);
+          members[sec].splice(i, 1);
+          renderMembers(sec);
         }
       }
     });
