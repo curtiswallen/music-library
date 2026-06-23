@@ -110,23 +110,6 @@ if (isOwner || !profileUser.is_private) {
   for (const g of overview.genres) libraryGenreSet.add(g);
 }
 
-let queuedAlbums: Array<{
-  id: number; slug: string; artist: string; album: string;
-  year: number | null; cover_url: string | null; release_type: string | null;
-}> = [];
-if (isOwner) {
-  const { results: qr } = await db.prepare(`
-    SELECT a.id, a.slug, a.artist, a.album, a.year, a.cover_url, a.release_type
-    FROM albums a
-    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-    WHERE ua.is_queued = 1
-    ORDER BY ua.added_at DESC
-  `).bind(profileUser.id).all<{
-    id: number; slug: string; artist: string; album: string;
-    year: number | null; cover_url: string | null; release_type: string | null;
-  }>();
-  queuedAlbums = qr;
-}
 
 const { groupedGenres: allGroupedGenres } = await getGenreCache(kv, db);
 const groupedFilterGenres = allGroupedGenres
@@ -389,39 +372,7 @@ if (!isOwner && !profileUser.is_private) {
         </div>
       </form>
 
-      {isOwner && (
-        <div class="queue-section" id="queue-section" data-base={base}>
-          <div class="queue-section-header">
-            <span class="queue-section-title">
-              Queue <span id="queue-count" class="queue-count">({queuedAlbums.length})</span>
-            </span>
-            <button id="queue-add-btn" class="btn" type="button" title="Add to queue">+</button>
-          </div>
-          <div class="queue-grid" id="queue-grid" style={queuedAlbums.length === 0 ? 'display:none' : ''}>
-            {queuedAlbums.map(a => (
-              <div class="queue-card" data-album-id={String(a.id)}>
-                <a href={`${base}/album/${a.slug}?edit=1`} class="queue-card-link">
-                  <div class="queue-cover">
-                    {a.cover_url && <img src={a.cover_url} alt="" loading="lazy" />}
-                  </div>
-                  <div class="queue-info">
-                    <span class="queue-artist">{a.artist}</span>
-                    <span class="queue-title">
-                      {a.year != null && <span class="year-chip">{a.year}</span>}
-                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type] ?? a.release_type}</span>}
-                      {a.album}
-                    </span>
-                  </div>
-                </a>
-                <button class="queue-remove" data-album-id={String(a.id)} title="Remove from library">×</button>
-              </div>
-            ))}
-          </div>
-          <p id="queue-empty-msg" class="queue-empty-msg" style={queuedAlbums.length > 0 ? 'display:none' : ''}>Queue empty.</p>
-        </div>
-      )}
-
-      {albums.length === 0 ? (
+{albums.length === 0 ? (
         <div class="empty-state">
           {isOwner
             ? <p>No albums found. <a href="/add">Add your first album →</a></p>
@@ -490,42 +441,6 @@ if (!isOwner && !profileUser.is_private) {
 .album-hidden { opacity: 0.5; }
 .hidden-badge { font-size: 11px; opacity: 0.6; cursor: default; }
 
-.queue-section { margin-bottom: 24px; }
-.queue-section-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
-}
-.queue-section-title {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--text-muted);
-}
-.queue-count { font-weight: 400; }
-.queue-empty-msg { font-size: 12px; color: var(--text-muted); padding: 8px 0; margin: 0; }
-.queue-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
-.queue-card {
-  display: flex; align-items: center;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
-  max-width: 300px; overflow: hidden; transition: border-color 0.15s;
-}
-.queue-card:hover { border-color: var(--text-muted); }
-.queue-card-link {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; text-decoration: none; color: inherit; flex: 1; min-width: 0;
-}
-.queue-cover {
-  width: 36px; height: 36px; flex-shrink: 0;
-  background: var(--bg-hover); border-radius: 3px; overflow: hidden;
-}
-.queue-cover img { width: 100%; height: 100%; object-fit: cover; }
-.queue-info { display: flex; flex-direction: column; gap: 1px; overflow: hidden; min-width: 0; }
-.queue-artist { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.queue-title { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
-.queue-remove {
-  background: none; border: none; cursor: pointer; flex-shrink: 0;
-  color: var(--text-muted); font-size: 16px; padding: 0 10px; align-self: stretch;
-  display: flex; align-items: center; border-left: 1px solid var(--border);
-}
-.queue-remove:hover { color: var(--text); background: var(--bg-hover); }
 
 </style>
 
@@ -657,81 +572,4 @@ if (descWrap) {
 const PARAMS_KEY = 'lib:' + location.pathname.split('/')[1] + ':params';
 if (location.search) sessionStorage.setItem(PARAMS_KEY, location.search);
 
-// ── Queue: add button ─────────────────────────────────────────────────────
-const queueSection = document.getElementById('queue-section') as HTMLElement | null;
-const queueAddBtn  = document.getElementById('queue-add-btn') as HTMLButtonElement | null;
-if (queueAddBtn && queueSection) {
-  const sectionBase = queueSection.dataset.base ?? '';
-  queueAddBtn.addEventListener('click', () => {
-    window.showQueueAdd((album) => {
-      // Add new card to grid live
-      const grid     = document.getElementById('queue-grid') as HTMLElement | null;
-      const emptyMsg = document.getElementById('queue-empty-msg') as HTMLElement | null;
-      const countEl  = document.getElementById('queue-count') as HTMLElement | null;
-      if (!grid) return;
-
-      const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
-      const typeChip  = album.releaseType ? `<span class="type-chip">${TYPE_LABELS[album.releaseType] ?? album.releaseType}</span>` : '';
-      const yearChip  = album.year        ? `<span class="year-chip">${album.year}</span>` : '';
-      const cover     = album.coverUrl    ? `<img src="${album.coverUrl}" alt="" loading="lazy" />` : '';
-
-      const albumId = String(album.albumId ?? '');
-      const card = document.createElement('div');
-      card.className = 'queue-card';
-      card.dataset.albumId = albumId;
-      card.innerHTML = `
-        <a href="${sectionBase}/album/${album.slug}?edit=1" class="queue-card-link">
-          <div class="queue-cover">${cover}</div>
-          <div class="queue-info">
-            <span class="queue-artist">${album.artist}</span>
-            <span class="queue-title">${yearChip}${typeChip}${album.title}</span>
-          </div>
-        </a>
-        <button class="queue-remove" data-album-id="${albumId}" title="Remove from library">×</button>
-      `;
-      grid.appendChild(card);
-      grid.style.display = '';
-      if (emptyMsg) emptyMsg.style.display = 'none';
-
-      // update count
-      const currentCount = grid.querySelectorAll('.queue-card').length;
-      if (countEl) countEl.textContent = `(${currentCount})`;
-
-      // wire remove button for the new card
-      const removeBtn = card.querySelector<HTMLButtonElement>('.queue-remove')!;
-      attachRemove(removeBtn);
-    });
-  });
-}
-
-function attachRemove(btn: HTMLButtonElement) {
-  btn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const albumId = btn.dataset.albumId || btn.closest<HTMLElement>('.queue-card')?.dataset.albumId;
-    if (!albumId) return;
-    const ok = await window.showConfirm('Remove this album from your library?', 'Remove');
-    if (!ok) return;
-    btn.disabled = true;
-    const res = await fetch(`/api/album/${albumId}`, { method: 'DELETE' });
-    if (res.ok) {
-      const card = btn.closest('.queue-card') as HTMLElement | null;
-      card?.remove();
-      const grid     = document.getElementById('queue-grid') as HTMLElement | null;
-      const emptyMsg = document.getElementById('queue-empty-msg') as HTMLElement | null;
-      const countEl  = document.getElementById('queue-count') as HTMLElement | null;
-      if (grid && !grid.querySelector('.queue-card')) {
-        grid.style.display = 'none';
-        if (emptyMsg) emptyMsg.style.display = '';
-      }
-      if (grid && countEl) {
-        countEl.textContent = `(${grid.querySelectorAll('.queue-card').length})`;
-      }
-    } else {
-      btn.disabled = false;
-    }
-  });
-}
-
-// ── Queue remove buttons ──────────────────────────────────────────────────
-document.querySelectorAll<HTMLButtonElement>('.queue-remove').forEach(attachRemove);
 </script>

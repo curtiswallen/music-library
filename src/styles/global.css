@@ -146,11 +146,12 @@ nav {
 .btn-active { border-color: var(--yellow); color: var(--yellow); }
 .btn-active:hover { border-color: var(--yellow); background: rgba(212,175,55,0.12); color: var(--yellow); }
 
-.icon-btn { position: relative; padding: 7px 10px; justify-content: center; width: 35px; }
-.icon-btn::after {
+/* ── Universal data-tip tooltip ── */
+[data-tip] { position: relative; }
+[data-tip]::after {
   content: attr(data-tip);
   position: absolute;
-  bottom: calc(100% + 5px);
+  top: calc(100% + 5px);
   left: 50%;
   transform: translateX(-50%);
   background: var(--bg-card);
@@ -163,9 +164,11 @@ nav {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.1s;
-  z-index: 50;
+  z-index: 200;
 }
-.icon-btn:hover::after { opacity: 1; }
+[data-tip]:hover::after { opacity: 1; }
+
+.icon-btn { padding: 7px 10px; justify-content: center; width: 35px; }
 
 /* ── Hamburger nav ── */
 .nav-hamburger { display: none; position: relative; }
@@ -1600,27 +1603,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 
 /* ── Flag link (country filter chip with tooltip) ── */
-.tip-link { text-decoration: none; display: inline-flex; align-items: center; border-radius: 3px; transition: opacity 0.15s; position: relative; }
+.tip-link { text-decoration: none; display: inline-flex; align-items: center; border-radius: 3px; transition: opacity 0.15s; }
 .tip-link:hover { opacity: 1; }
-.tip-link::after {
-  content: attr(data-tip);
-  position: absolute;
-  bottom: calc(100% + 5px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 3px 8px;
-  font-size: 11px;
-  white-space: nowrap;
-  color: var(--text);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.1s;
-  z-index: 99;
-}
-.tip-link:hover::after { opacity: 1; }
 
 /* ── Artist edit panel (admin modal) ─────────────────────────────────────── */
 .aep-toggle-btn {
@@ -1728,8 +1712,94 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   max-width: 380px; width: 90%;
   box-shadow: 0 12px 40px rgba(0,0,0,0.35);
 }
-.confirm-msg { font-size: 13px; color: var(--text); margin-bottom: 20px; line-height: 1.55; }
+.confirm-body { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.confirm-cover { width: 52px; height: 52px; object-fit: cover; border-radius: 3px; border: 1px solid var(--border); flex-shrink: 0; }
+.confirm-msg { font-size: 13px; color: var(--text); line-height: 1.55; }
+.confirm-album-name { color: var(--text-hi); font-weight: 600; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Queue cards (used in library + dynamically injected) ── */
+.queue-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.queue-card {
+  display: flex; align-items: center;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+  max-width: 300px; overflow: hidden; transition: border-color 0.15s;
+}
+.queue-card:hover { border-color: var(--text-muted); }
+.queue-card-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; text-decoration: none; color: inherit; flex: 1; min-width: 0;
+}
+.queue-cover {
+  width: 36px; height: 36px; flex-shrink: 0;
+  background: var(--bg-hover); border-radius: 3px; overflow: hidden;
+}
+.queue-cover img { width: 100%; height: 100%; object-fit: cover; }
+.queue-info { display: flex; flex-direction: column; gap: 1px; overflow: hidden; min-width: 0; }
+.queue-album { font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.queue-title { font-size: 10px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
+.queue-title .year-chip { padding: 0; }
+.queue-remove {
+  background: none; border: none; cursor: pointer; flex-shrink: 0;
+  color: var(--text-muted); font-size: 16px; padding: 0 10px; align-self: stretch;
+  display: flex; align-items: center; border-left: 1px solid var(--border);
+}
+.queue-remove:hover { color: var(--text); background: var(--bg-hover); }
+
+/* ── Dashboard rows (used in index + dynamically injected) ── */
+.dash-list { display: flex; flex-direction: column; }
+.dash-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px; border-bottom: 1px solid var(--border);
+  transition: background 0.1s; min-width: 0; text-decoration: none;
+}
+.dash-row:last-child { border-bottom: none; }
+.dash-row:hover { background: var(--bg-hover); }
+.dash-cover {
+  width: 36px; height: 36px; flex-shrink: 0;
+  object-fit: cover; border-radius: 2px; border: 1px solid var(--border);
+}
+.dash-cover-empty { background: var(--bg-hover); }
+.dash-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 5px; }
+.dash-album-wrap { display: flex; flex-direction: row; gap: 6px; align-items: center; }
+.dash-album {
+  font-size: 12px; font-weight: 600; color: var(--text);
+  overflow: hidden; display: flex; min-width: 0;
+}
+.dash-artist-name {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden;
+}
+.dash-artist-text, .dash-album-text {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.dash-rating-wrap { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; gap: 5px; }
+.dash-rating { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash-rating-none { color: var(--text-muted); font-weight: 400; }
+.dash-logged-date { font-size: 9px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dash-queue-row { padding: 0; }
+.dash-queue-row-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px; flex: 1; min-width: 0;
+  text-decoration: none; color: inherit;
+}
+.dash-queue-remove-wrap {
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: center;
+  flex-shrink: 0; align-self: stretch;
+  gap: 8px; padding: 6px 10px; min-width: 44px;
+}
+.dash-queue-remove {
+  background: var(--bg-card); border: 1px solid var(--border); cursor: pointer;
+  color: var(--text-muted); font-size: 9px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2px 4px; border-radius: 3px;
+}
+.dash-queue-remove:hover { color: var(--text); background: var(--bg-hover); }
+.tip-left[data-tip]::after {
+  top: 50%; bottom: auto; left: auto;
+  right: calc(100% + 5px);
+  transform: translateY(-50%);
+}
 
 /* ── Queue-add modal ── */
 .qa-box {

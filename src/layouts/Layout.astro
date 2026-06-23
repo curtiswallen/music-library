@@ -121,7 +121,10 @@ const user = Astro.locals.user;
     <!-- Confirm modal -->
     <div id="confirm-modal" class="confirm-overlay" style="display:none">
       <div class="confirm-box">
-        <p id="confirm-modal-msg" class="confirm-msg"></p>
+        <div class="confirm-body">
+          <img id="confirm-modal-cover" class="confirm-cover" src="" alt="" hidden />
+          <p id="confirm-modal-msg" class="confirm-msg"></p>
+        </div>
         <div class="confirm-actions">
           <button id="confirm-modal-cancel" class="btn">Cancel</button>
           <button id="confirm-modal-ok" class="btn btn-danger">Confirm</button>
@@ -131,24 +134,39 @@ const user = Astro.locals.user;
 
     <script is:inline>
     (function () {
-      var overlay  = document.getElementById('confirm-modal');
-      var msgEl    = document.getElementById('confirm-modal-msg');
-      var okBtn    = document.getElementById('confirm-modal-ok');
+      var overlay   = document.getElementById('confirm-modal');
+      var msgEl     = document.getElementById('confirm-modal-msg');
+      var coverImg  = document.getElementById('confirm-modal-cover');
+      var okBtn     = document.getElementById('confirm-modal-ok');
       var cancelBtn = document.getElementById('confirm-modal-cancel');
-      var _resolve = null;
+      var _resolve  = null;
       function close(result) {
         overlay.style.display = 'none';
         if (_resolve) { _resolve(result); _resolve = null; }
+      }
+      function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       }
       cancelBtn.addEventListener('click', function () { close(false); });
       okBtn.addEventListener('click', function () { close(true); });
       overlay.addEventListener('click', function (e) { if (e.target === overlay) close(false); });
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay.style.display !== 'none') close(false); });
-      window.showConfirm = function (message, okLabel) {
+      window.showConfirm = function (message, okLabel, opts) {
         return new Promise(function (resolve) {
           _resolve = resolve;
-          msgEl.textContent = message;
+          if (opts && opts.albumName) {
+            msgEl.innerHTML = 'Remove <span class="confirm-album-name">' + escHtml(opts.albumName) + '</span> from your queue?';
+          } else {
+            msgEl.textContent = message;
+          }
           okBtn.textContent = okLabel || 'Confirm';
+          if (opts && opts.coverUrl) {
+            coverImg.src = opts.coverUrl;
+            coverImg.hidden = false;
+          } else {
+            coverImg.src = '';
+            coverImg.hidden = true;
+          }
           overlay.style.display = 'flex';
           okBtn.focus();
         });
