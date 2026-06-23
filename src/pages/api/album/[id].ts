@@ -14,8 +14,13 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     WHERE id = ?
   `).bind(id, userId, userId).run();
 
-  await env.DB.prepare('DELETE FROM user_albums WHERE album_id = ? AND user_id = ?')
-    .bind(id, userId).run();
+  // Atomically remove all per-user data for this album
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM track_ratings WHERE album_id = ? AND user_id = ?').bind(id, userId),
+    env.DB.prepare('DELETE FROM user_album_subgenres WHERE album_id = ? AND user_id = ?').bind(id, userId),
+    env.DB.prepare('DELETE FROM user_album_descriptors WHERE album_id = ? AND user_id = ?').bind(id, userId),
+    env.DB.prepare('DELETE FROM user_albums WHERE album_id = ? AND user_id = ?').bind(id, userId),
+  ]);
 
   // Clean up orphaned canonical album, or update logged_by_user_ids
   const remaining = await env.DB.prepare('SELECT COUNT(*) as c FROM user_albums WHERE album_id = ?')
@@ -26,11 +31,11 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     await env.DB.prepare(`
       UPDATE albums SET
         logged_by_user_ids = (SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?),
-        all_subgenres      = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
-        all_descriptors    = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]'),
+        all_subgenres      = COALESCE((SELECT json_group_array(subgenre)    FROM (SELECT DISTINCT subgenre    FROM user_album_subgenres  WHERE album_id = ?)), '[]'),
+        all_descriptors    = COALESCE((SELECT json_group_array(descriptor)  FROM (SELECT DISTINCT descriptor  FROM user_album_descriptors WHERE album_id = ?)), '[]'),
         genre_counts       = COALESCE((SELECT json_group_object(genre, cnt) FROM (SELECT genre, COUNT(*) as cnt FROM user_albums WHERE album_id = ? AND genre != '' GROUP BY genre)), '{}'),
-        subgenre_counts    = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
-        descriptor_counts  = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
+        subgenre_counts    = COALESCE((SELECT json_group_object(subgenre, cnt)    FROM (SELECT subgenre,    COUNT(*) as cnt FROM user_album_subgenres  WHERE album_id = ? GROUP BY subgenre)),    '{}'),
+        descriptor_counts  = COALESCE((SELECT json_group_object(descriptor, cnt) FROM (SELECT descriptor,  COUNT(*) as cnt FROM user_album_descriptors WHERE album_id = ? GROUP BY descriptor)),  '{}'),
         avg_rating         = (SELECT AVG(rating)   FROM user_albums WHERE album_id = ? AND rating IS NOT NULL),
         rating_count       = (SELECT COUNT(rating) FROM user_albums WHERE album_id = ? AND rating IS NOT NULL)
       WHERE id = ?

@@ -138,14 +138,14 @@ if (topGenre && currentSubs.length > 0) {
            ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.all_subgenres, a.all_descriptors
     FROM albums a
     WHERE a.artist != ? AND a.id != ?
-    AND a.genre_counts LIKE ?
-    AND a.id IN (
-      SELECT DISTINCT ua.album_id FROM user_albums ua
-      JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-      WHERE ua.is_hidden = 0
+    AND EXISTS (
+      SELECT 1 FROM user_albums ua2
+      JOIN users u2 ON u2.id = ua2.user_id AND u2.is_private = 0
+      WHERE ua2.album_id = a.id AND ua2.genre = ? AND ua2.is_hidden = 0
+      LIMIT 1
     )
     LIMIT 300
-  `).bind(album.artist, album.id, `%"${topGenre}"%`).all<{
+  `).bind(album.artist, album.id, topGenre).all<{
     slug: string; artist: string; album: string; country: string;
     year: number | null; cover_url: string | null; release_type: string | null;
     avg_rating: number | null; rating_count: number; all_subgenres: string; all_descriptors: string;
@@ -453,13 +453,13 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
                     : <div class="cover-thumb" />}
                   <div class="rel-info">
                     <span class="rel-title">
-                      {a.artist}
-                      {cc && <span class="added-cell tip-link" data-tip={a.country}> {cc.toUpperCase()}</span>}
-                    </span>
-                    <span class="rel-sub">
-                      {a.year != null && <span class="year-chip">{a.year}</span>}
                       {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
                       <span class="rel-sub-text">{a.album}</span>
+                      {a.year != null && <span class="year-chip">{a.year}</span>}
+                    </span>
+                    <span class="rel-sub">
+                      <span class="rel-artist">{a.artist}</span>
+                      {cc && <span class="added-cell tip-link" data-tip={a.country}> {cc.toUpperCase()}</span>}
                     </span>
                   </div>
                   <div class="rel-right">

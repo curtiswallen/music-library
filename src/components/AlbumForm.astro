@@ -569,6 +569,14 @@ const _refresh = () => requestAnimationFrame(refreshPreview);
 document.getElementById('album-form')?.addEventListener('input',  _refresh);
 document.getElementById('album-form')?.addEventListener('change', _refresh);
 
+// Prevent double-submit: disable submit controls as soon as the form is submitted
+document.getElementById('album-form')?.addEventListener('submit', () => {
+  const btn = document.querySelector<HTMLButtonElement>('#album-form button[type="submit"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  const hdrBtn = document.getElementById('header-save-btn') as HTMLButtonElement | null;
+  if (hdrBtn) hdrBtn.disabled = true;
+});
+
 // Subgenre chip active-class mutations
 const subChipsEl = document.getElementById('subgenre-chips');
 if (subChipsEl) {

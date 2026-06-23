@@ -50,9 +50,8 @@ if (Astro.request.method === 'POST') {
   }>();
   if (!existing) return Astro.redirect(`/${profileUser.profile_url}`);
 
-  const subgenres = JSON.stringify(
-    ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean)
-  );
+  const subgenresList = ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  const subgenres = JSON.stringify(subgenresList);
 
   let descriptorsList: string[] = [];
   try { descriptorsList = JSON.parse((data.get('descriptors') as string) || '[]'); } catch {}
@@ -152,13 +151,24 @@ if (Astro.request.method === 'POST') {
     ...trackRatingInserts,
   ]);
 
+  await db.batch([
+    db.prepare('DELETE FROM user_album_subgenres WHERE album_id = ? AND user_id = ?').bind(existing.id, profileUser.id),
+    db.prepare('DELETE FROM user_album_descriptors WHERE album_id = ? AND user_id = ?').bind(existing.id, profileUser.id),
+    ...subgenresList.map(s =>
+      db.prepare('INSERT OR IGNORE INTO user_album_subgenres (album_id, user_id, subgenre) VALUES (?, ?, ?)').bind(existing.id, profileUser.id, s)
+    ),
+    ...newDescriptors.map(d =>
+      db.prepare('INSERT OR IGNORE INTO user_album_descriptors (album_id, user_id, descriptor) VALUES (?, ?, ?)').bind(existing.id, profileUser.id, d)
+    ),
+  ]);
+
   await db.prepare(`
     UPDATE albums SET
-      all_subgenres     = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
-      all_descriptors   = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ?)), '[]'),
+      all_subgenres     = COALESCE((SELECT json_group_array(subgenre)    FROM (SELECT DISTINCT subgenre    FROM user_album_subgenres  WHERE album_id = ?)), '[]'),
+      all_descriptors   = COALESCE((SELECT json_group_array(descriptor)  FROM (SELECT DISTINCT descriptor  FROM user_album_descriptors WHERE album_id = ?)), '[]'),
       genre_counts      = COALESCE((SELECT json_group_object(genre, cnt) FROM (SELECT genre, COUNT(*) as cnt FROM user_albums WHERE album_id = ? AND genre != '' GROUP BY genre)), '{}'),
-      subgenre_counts   = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
-      descriptor_counts = COALESCE((SELECT json_group_object(value, cnt) FROM (SELECT value, COUNT(*) as cnt FROM user_albums, json_each(user_albums.descriptors) WHERE user_albums.album_id = ? GROUP BY value)), '{}'),
+      subgenre_counts   = COALESCE((SELECT json_group_object(subgenre, cnt)    FROM (SELECT subgenre,    COUNT(*) as cnt FROM user_album_subgenres  WHERE album_id = ? GROUP BY subgenre)),    '{}'),
+      descriptor_counts = COALESCE((SELECT json_group_object(descriptor, cnt) FROM (SELECT descriptor,  COUNT(*) as cnt FROM user_album_descriptors WHERE album_id = ? GROUP BY descriptor)),  '{}'),
       avg_rating        = (SELECT AVG(rating)   FROM user_albums WHERE album_id = ? AND rating IS NOT NULL),
       rating_count      = (SELECT COUNT(rating) FROM user_albums WHERE album_id = ? AND rating IS NOT NULL)
     WHERE id = ?
@@ -609,7 +619,7 @@ if (!isOwner && !profileUser.is_private) {
                       {a.year != null && <span class="year-chip">{a.year}</span>}
                     </span>
                     <span class="rel-sub">
-                      {a.artist}
+                      <span class="rel-artist">{a.artist}</span>
                       {cc && <span class="added-cell tip-link dash-cc" data-tip={a.country}> {cc.toUpperCase()}</span>}
                     </span>
                   </div>
