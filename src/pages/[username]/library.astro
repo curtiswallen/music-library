@@ -119,8 +119,8 @@ if (isOwner) {
     SELECT a.id, a.slug, a.artist, a.album, a.year, a.cover_url, a.release_type
     FROM albums a
     JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-    WHERE ua.rating IS NULL
-    ORDER BY ua.is_queued DESC, ua.added_at DESC
+    WHERE ua.is_queued = 1
+    ORDER BY ua.added_at DESC
   `).bind(profileUser.id).all<{
     id: number; slug: string; artist: string; album: string;
     year: number | null; cover_url: string | null; release_type: string | null;
@@ -390,12 +390,14 @@ if (!isOwner && !profileUser.is_private) {
       </form>
 
       {isOwner && queuedAlbums.length > 0 && (
-        <section class="queue-section" id="queue-section">
-          <p class="queue-heading">Unrated ({queuedAlbums.length})</p>
+        <details class="queue-details" id="queue-details" open>
+          <summary class="queue-summary">
+            Queue <span class="queue-count">({queuedAlbums.length})</span>
+          </summary>
           <div class="queue-grid" id="queue-grid">
             {queuedAlbums.map(a => (
               <div class="queue-card" data-album-id={String(a.id)}>
-                <a href={`${base}/album/${a.slug}`} class="queue-card-link">
+                <a href={`${base}/album/${a.slug}?edit=1`} class="queue-card-link">
                   <div class="queue-cover">
                     {a.cover_url && <img src={a.cover_url} alt="" loading="lazy" />}
                   </div>
@@ -412,7 +414,7 @@ if (!isOwner && !profileUser.is_private) {
               </div>
             ))}
           </div>
-        </section>
+        </details>
       )}
 
       {albums.length === 0 ? (
@@ -484,12 +486,18 @@ if (!isOwner && !profileUser.is_private) {
 .album-hidden { opacity: 0.5; }
 .hidden-badge { font-size: 11px; opacity: 0.6; cursor: default; }
 
-.queue-section { margin-bottom: 24px; }
-.queue-heading {
+.queue-details { margin-bottom: 24px; }
+.queue-summary {
+  list-style: none; display: flex; align-items: center; gap: 6px; cursor: pointer;
   font-size: 11px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px;
+  user-select: none;
 }
-.queue-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.queue-summary::-webkit-details-marker { display: none; }
+.queue-summary::before { content: '▶'; font-size: 9px; transition: transform 0.15s; }
+details[open] > .queue-summary::before { transform: rotate(90deg); }
+.queue-count { font-weight: 400; }
+.queue-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .queue-card {
   display: flex; align-items: center;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
@@ -645,13 +653,23 @@ if (descWrap) {
 const PARAMS_KEY = 'lib:' + location.pathname.split('/')[1] + ':params';
 if (location.search) sessionStorage.setItem(PARAMS_KEY, location.search);
 
+// ── Queue: collapse state ─────────────────────────────────────────────────
+const queueDetails = document.getElementById('queue-details') as HTMLDetailsElement | null;
+if (queueDetails) {
+  if (localStorage.getItem('queue-open') === '0') queueDetails.open = false;
+  queueDetails.addEventListener('toggle', () => {
+    localStorage.setItem('queue-open', queueDetails.open ? '1' : '0');
+  });
+}
+
 // ── Queue remove buttons ──────────────────────────────────────────────────
 document.querySelectorAll<HTMLButtonElement>('.queue-remove').forEach(btn => {
   btn.addEventListener('click', async (e) => {
     e.preventDefault();
     const albumId = btn.dataset.albumId;
     if (!albumId) return;
-    if (!confirm('Remove this album from your library?')) return;
+    const ok = await window.showConfirm('Remove this album from your library?', 'Remove');
+    if (!ok) return;
     btn.disabled = true;
     const res = await fetch(`/api/album/${albumId}`, { method: 'DELETE' });
     if (res.ok) {
@@ -659,7 +677,7 @@ document.querySelectorAll<HTMLButtonElement>('.queue-remove').forEach(btn => {
       card?.remove();
       const grid = document.getElementById('queue-grid');
       if (grid && !grid.querySelector('.queue-card')) {
-        document.getElementById('queue-section')?.remove();
+        document.getElementById('queue-details')?.remove();
       }
     } else {
       btn.disabled = false;

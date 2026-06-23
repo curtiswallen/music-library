@@ -1,6 +1,10 @@
 /// <reference types="astro/client" />
 /// <reference types="@cloudflare/workers-types" />
 
+interface Window {
+  showConfirm(message: string, okLabel?: string): Promise<boolean>;
+}
+
 declare namespace Cloudflare {
   interface Env {
     DB: D1Database;

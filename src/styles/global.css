@@ -1714,3 +1714,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 #aep-cancel:hover { border-color: var(--border-hover); color: var(--text); }
 #aep-status { font-size: 0.78rem; color: var(--text-muted); flex: 1; }
+
+
+/* ── Confirm modal ── */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+  align-items: center; justify-content: center;
+}
+.confirm-box {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px 24px 20px;
+  max-width: 380px; width: 90%;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.confirm-msg { font-size: 13px; color: var(--text); margin-bottom: 20px; line-height: 1.55; }
+.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }

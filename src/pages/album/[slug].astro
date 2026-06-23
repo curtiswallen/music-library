@@ -546,25 +546,34 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
 <script>
   const btn = document.getElementById('queue-btn') as HTMLButtonElement | null;
   if (btn) {
+    const albumId = Number(btn.dataset.albumId);
+    let queued = false;
+
+    btn.addEventListener('mouseenter', () => { if (queued) btn.textContent = '× Remove'; });
+    btn.addEventListener('mouseleave', () => { if (queued) btn.textContent = '✓ Queued'; });
+
     btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
       btn.disabled = true;
       btn.textContent = '…';
       try {
-        const res = await fetch('/api/queue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ albumId: Number(btn.dataset.albumId) }),
-        });
-        if (res.ok || res.status === 409) {
-          btn.textContent = 'In Queue →';
+        if (queued) {
+          const res = await fetch(`/api/album/${albumId}`, { method: 'DELETE' });
+          queued = !res.ok;
+          btn.textContent = res.ok ? '+ Queue' : '✓ Queued';
         } else {
-          btn.disabled = false;
-          btn.textContent = '+ Queue';
+          const res = await fetch('/api/queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ albumId }),
+          });
+          queued = res.ok || res.status === 409;
+          btn.textContent = queued ? '✓ Queued' : '+ Queue';
         }
       } catch {
-        btn.disabled = false;
-        btn.textContent = '+ Queue';
+        btn.textContent = queued ? '✓ Queued' : '+ Queue';
       }
+      btn.disabled = false;
     });
   }
 </script>

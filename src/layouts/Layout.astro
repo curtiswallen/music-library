@@ -100,5 +100,43 @@ const user = Astro.locals.user;
         });
       })();
     </script>
+
+    <!-- Confirm modal -->
+    <div id="confirm-modal" class="confirm-overlay" style="display:none">
+      <div class="confirm-box">
+        <p id="confirm-modal-msg" class="confirm-msg"></p>
+        <div class="confirm-actions">
+          <button id="confirm-modal-cancel" class="btn">Cancel</button>
+          <button id="confirm-modal-ok" class="btn btn-danger">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <script is:inline>
+    (function () {
+      var overlay  = document.getElementById('confirm-modal');
+      var msgEl    = document.getElementById('confirm-modal-msg');
+      var okBtn    = document.getElementById('confirm-modal-ok');
+      var cancelBtn = document.getElementById('confirm-modal-cancel');
+      var _resolve = null;
+      function close(result) {
+        overlay.style.display = 'none';
+        if (_resolve) { _resolve(result); _resolve = null; }
+      }
+      cancelBtn.addEventListener('click', function () { close(false); });
+      okBtn.addEventListener('click', function () { close(true); });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) close(false); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay.style.display !== 'none') close(false); });
+      window.showConfirm = function (message, okLabel) {
+        return new Promise(function (resolve) {
+          _resolve = resolve;
+          msgEl.textContent = message;
+          okBtn.textContent = okLabel || 'Confirm';
+          overlay.style.display = 'flex';
+          okBtn.focus();
+        });
+      };
+    })();
+    </script>
   </body>
 </html>

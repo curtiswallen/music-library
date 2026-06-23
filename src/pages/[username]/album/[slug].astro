@@ -727,7 +727,8 @@ function exitEditMode() {
 }
 
 async function deleteAlbum(id: string, back: string) {
-  if (!confirm('Remove this album from your library? This cannot be undone.')) return;
+  const ok = await window.showConfirm('Remove this album from your library? This cannot be undone.', 'Remove');
+  if (!ok) return;
   await fetch(`/api/album/${id}`, { method: 'DELETE' });
   window.location.href = back;
 }
@@ -772,27 +773,41 @@ if (window.matchMedia('(max-width: 640px)').matches) {
   });
 }
 
+if (new URLSearchParams(location.search).get('edit') === '1') {
+  enterEditMode();
+  history.replaceState(null, '', location.pathname);
+}
+
 const queueBtn = document.getElementById('queue-btn') as HTMLButtonElement | null;
 if (queueBtn) {
+  const qAlbumId = Number(queueBtn.dataset.albumId);
+  let qQueued = false;
+
+  queueBtn.addEventListener('mouseenter', () => { if (qQueued) queueBtn.textContent = '× Remove'; });
+  queueBtn.addEventListener('mouseleave', () => { if (qQueued) queueBtn.textContent = '✓ Queued'; });
+
   queueBtn.addEventListener('click', async () => {
+    if (queueBtn.disabled) return;
     queueBtn.disabled = true;
     queueBtn.textContent = '…';
     try {
-      const res = await fetch('/api/queue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ albumId: Number(queueBtn.dataset.albumId) }),
-      });
-      if (res.ok || res.status === 409) {
-        queueBtn.textContent = 'In Queue →';
+      if (qQueued) {
+        const res = await fetch(`/api/album/${qAlbumId}`, { method: 'DELETE' });
+        qQueued = !res.ok;
+        queueBtn.textContent = res.ok ? '+ Queue' : '✓ Queued';
       } else {
-        queueBtn.disabled = false;
-        queueBtn.textContent = '+ Queue';
+        const res = await fetch('/api/queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ albumId: qAlbumId }),
+        });
+        qQueued = res.ok || res.status === 409;
+        queueBtn.textContent = qQueued ? '✓ Queued' : '+ Queue';
       }
     } catch {
-      queueBtn.disabled = false;
-      queueBtn.textContent = '+ Queue';
+      queueBtn.textContent = qQueued ? '✓ Queued' : '+ Queue';
     }
+    queueBtn.disabled = false;
   });
 }
 </script>
