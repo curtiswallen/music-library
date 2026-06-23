@@ -88,6 +88,10 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
     <!-- ── Left: form fields ── -->
     <div class="edit-fields">
 
+      <p class="canonical-note" id="canonical-lock-note" style={hasMbid ? '' : 'display:none'}>
+        Artist, title, year, and type are locked — sourced from MusicBrainz.
+      </p>
+
       {includeDbAlbumId && (
         <div class="form-group mb-wrap" style="margin-bottom:24px">
           <label for="mb-search">Search MusicBrainz to autofill</label>
@@ -108,18 +112,21 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
             {initialArtists.map((a, i) => (
               <div class="artist-row">
                 <input name="artist" type="text" class="artist-input"
-                       value={a} placeholder="Artist name" required={i === 0} />
+                       value={a} placeholder="Artist name" required={i === 0}
+                       readonly={hasMbid} />
                 <button type="button" class="remove-artist-btn" aria-label="Remove artist"
-                        style={initialArtists.length > 1 ? '' : 'display:none'}>−</button>
+                        style={(hasMbid || initialArtists.length <= 1) ? 'display:none' : ''}>−</button>
               </div>
             ))}
           </div>
-          <button type="button" id="add-artist-btn" class="add-artist-btn">+ Add Artist</button>
+          <button type="button" id="add-artist-btn" class="add-artist-btn"
+                  style={hasMbid ? 'display:none' : ''}>+ Add Artist</button>
         </div>
 
         <div class="form-group">
           <label for="f-album">Album *</label>
-          <input id="f-album" name="album" type="text" required value={values.album ?? ''} />
+          <input id="f-album" name="album" type="text" required value={values.album ?? ''}
+                 readonly={hasMbid} />
           <div class="form-group" id="release-select-wrap"
                style={values.release_mbid ? '' : 'display:none'}>
             <label for="f-release-select">Release</label>
@@ -137,7 +144,8 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
 
         <div class="form-group">
           <label for="f-year">Year</label>
-          <input id="f-year" name="year" type="number" min="1900" max="2099" value={values.year ?? ''} />
+          <input id="f-year" name="year" type="number" min="1900" max="2099" value={values.year ?? ''}
+                 readonly={hasMbid} />
         </div>
 
         <div class="form-group">

@@ -711,6 +711,12 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 }
 .cover-box-lg img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
+.album-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.album-actions .btn { flex: 1; justify-content: center; }
+
+.canonical-note { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+.edit-fields input[readonly] { opacity: 0.6; background: var(--bg); cursor: default; }
+
 .album-meta { flex: 1; min-width: 0; }
 .album-mobile-header { display: none; margin-bottom: 8px; }
 .album-mobile-header .album-meta-title { font-size: 15px; margin-bottom: 4px; }

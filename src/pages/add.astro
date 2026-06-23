@@ -321,7 +321,7 @@ function pick(r: MBResult) {
   set('f-db-album-id', r.dbId ? String(r.dbId) : '');
   set('f-artist-mbid', r.artistId ?? '');
   set('f-release-type', r.releaseType ?? '');
-  setReleaseTypeLocked(!!r.mbid);
+  setCanonicalLocked(!!r.mbid);
   setArtists(r.artists?.length ? r.artists : r.artist.split(' / '));
   set('f-album',  r.title);
   set('f-year',   r.year);
@@ -461,8 +461,26 @@ function set(id: string, val: string) {
 function setReleaseTypeLocked(locked: boolean) {
   const sel  = document.getElementById('f-release-type')      as HTMLSelectElement | null;
   const note = document.getElementById('f-release-type-note') as HTMLElement | null;
-  if (sel)  sel.disabled            = locked;
-  if (note) note.style.display      = locked ? '' : 'none';
+  if (sel)  sel.disabled       = locked;
+  if (note) note.style.display = locked ? '' : 'none';
+}
+function setCanonicalLocked(locked: boolean) {
+  document.querySelectorAll<HTMLInputElement>('.artist-input').forEach(el => { el.readOnly = locked; });
+  const addBtn = document.getElementById('add-artist-btn') as HTMLButtonElement | null;
+  if (addBtn) addBtn.style.display = locked ? 'none' : '';
+  document.querySelectorAll<HTMLButtonElement>('.remove-artist-btn').forEach(btn => {
+    if (locked) { btn.style.display = 'none'; }
+    else { const count = document.querySelectorAll('.artist-input').length; btn.style.display = count > 1 ? '' : 'none'; }
+  });
+  const albumInput = document.getElementById('f-album') as HTMLInputElement | null;
+  if (albumInput) albumInput.readOnly = locked;
+  const yearInput = document.getElementById('f-year') as HTMLInputElement | null;
+  if (yearInput) yearInput.readOnly = locked;
+  setReleaseTypeLocked(locked);
+  const replaceBtn = document.getElementById('cover-replace-btn') as HTMLButtonElement | null;
+  if (replaceBtn) replaceBtn.style.display = locked ? 'none' : '';
+  const note = document.getElementById('canonical-lock-note') as HTMLElement | null;
+  if (note) note.style.display = locked ? '' : 'none';
 }
 function closeResults() { resultsEl.classList.remove('open'); resultsEl.innerHTML = ''; }
 
@@ -476,7 +494,7 @@ document.getElementById('clear-form-btn')?.addEventListener('click', () => {
   set('f-db-album-id', '');
   set('f-artist-mbid', '');
   set('f-release-type', '');
-  setReleaseTypeLocked(false);
+  setCanonicalLocked(false);
   set('f-album', '');
   set('f-year', '');
   set('f-country', '');
@@ -516,6 +534,69 @@ function esc(s: string) {
 document.addEventListener('click', e => {
   if (!(e.target as Element).closest('.mb-wrap')) closeResults();
 });
+
+// ── Pre-fill from URL params (e.g. "Log Album" on album detail pages) ───────
+(function () {
+  const params      = new URLSearchParams(window.location.search);
+  const dbId        = params.get('dbId');
+  const mbid        = params.get('mbid');
+  const title       = params.get('title');
+  const artist      = params.get('artist');
+  const year        = params.get('year');
+  const cover       = params.get('cover');
+  const releaseType = params.get('releaseType');
+  const artistMbid  = params.get('artistMbid');
+
+  if (!title && !artist) return;
+
+  set('f-mbid',        mbid        ?? '');
+  set('f-db-album-id', dbId        ?? '');
+  set('f-artist-mbid', artistMbid  ?? '');
+  set('f-release-type', releaseType ?? '');
+  setArtists(artist ? artist.split(' / ') : ['']);
+  set('f-album', title  ?? '');
+  set('f-year',  year   ?? '');
+  setCanonicalLocked(!!mbid);
+
+  if (cover) {
+    const img             = document.getElementById('cover-img')         as HTMLImageElement | null;
+    const coverPreview    = document.getElementById('cover-preview')     as HTMLElement | null;
+    const coverUploadWrap = document.getElementById('cover-upload-wrap') as HTMLElement | null;
+    if (img) {
+      img.onload  = () => { img.style.display = ''; set('f-cover-url', cover); if (coverPreview) coverPreview.style.display = 'block'; if (coverUploadWrap) coverUploadWrap.style.display = 'none'; };
+      img.onerror = () => { set('f-cover-url', ''); if (coverPreview) coverPreview.style.display = 'none'; if (coverUploadWrap) coverUploadWrap.style.display = ''; };
+      img.src = cover;
+    }
+  }
+
+  if (mbid) {
+    const loadingEl = document.getElementById('tracks-loading') as HTMLElement | null;
+    if (loadingEl) loadingEl.hidden = false;
+    setTracks([]);
+    fetch(`/api/musicbrainz-release?id=${encodeURIComponent(mbid)}`)
+      .then(res => res.json())
+      .then(data => { setTracks(data as TrackData[]); })
+      .catch(() => {})
+      .finally(() => { if (loadingEl) loadingEl.hidden = true; });
+    fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(mbid)}`)
+      .then(res => res.json())
+      .then(data => { populateReleaseSelect(data as Array<{ id: string; label: string; data?: unknown }>); })
+      .catch(() => {});
+  }
+
+  const qBtn = document.getElementById('add-to-queue-btn') as HTMLButtonElement | null;
+  if (qBtn) {
+    qBtn.style.display     = '';
+    qBtn.dataset.mbid        = mbid        ?? '';
+    qBtn.dataset.title       = title       ?? '';
+    qBtn.dataset.artist      = artist      ?? '';
+    qBtn.dataset.year        = year        ?? '';
+    qBtn.dataset.coverUrl    = cover       ?? '';
+    qBtn.dataset.releaseType = releaseType ?? '';
+    qBtn.dataset.artistMbid  = artistMbid  ?? '';
+    qBtn.dataset.dbId        = dbId        ?? '';
+  }
+})();
 
 // ── "Add to Queue" shortcut button ─────────────────────────────────────────
 (document.getElementById('add-to-queue-btn') as HTMLButtonElement | null)

@@ -379,6 +379,17 @@ if (loggedInUser && !isOwner) {
 if (!isOwner && !profileUser.is_private) {
   Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 }
+
+const logAlbumParams = new URLSearchParams();
+logAlbumParams.set('dbId', String(album.id));
+if (album.mbid) logAlbumParams.set('mbid', album.mbid);
+logAlbumParams.set('title', album.album);
+logAlbumParams.set('artist', album.artist);
+if (album.year != null) logAlbumParams.set('year', String(album.year));
+if (album.cover_url) logAlbumParams.set('cover', album.cover_url);
+if (album.release_type) logAlbumParams.set('releaseType', album.release_type);
+if (album.artist_mbid) logAlbumParams.set('artistMbid', album.artist_mbid);
+const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
@@ -399,15 +410,6 @@ if (!isOwner && !profileUser.is_private) {
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
     </div>
     <div class="page-header-actions" style="display:flex;gap:8px">
-      {!isOwner && loggedInUser && viewerEntry === 'logged' && (
-        <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">My Entry</a>
-      )}
-      {!isOwner && loggedInUser && viewerEntry === 'queued' && (
-        <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">In Queue →</a>
-      )}
-      {!isOwner && loggedInUser && viewerEntry === 'none' && (
-        <button id="queue-btn" class="btn" data-album-id={String(album.id)}>+ Queue</button>
-      )}
       {isOwner && (
         <>
           <!-- View-mode buttons (hidden when editing) -->
@@ -435,6 +437,26 @@ if (!isOwner && !profileUser.is_private) {
             <img src={album.cover_url} alt="" onerror="this.style.display='none'" />
           )}
         </div>
+
+        {!isOwner && loggedInUser && (
+          <div class="album-actions">
+            {viewerEntry === 'none' && (
+              <button id="queue-btn" class="btn" data-album-id={String(album.id)}>Add to Queue</button>
+            )}
+            {viewerEntry === 'queued' && (
+              <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">✓ In Queue</a>
+            )}
+            {viewerEntry !== 'logged' && (
+              <a href={viewerEntry === 'queued'
+                ? `/${loggedInUser.profile_url}/album/${album.slug}?edit=1`
+                : logAlbumHref} class="btn btn-primary">Log Album</a>
+            )}
+            {viewerEntry === 'logged' && (
+              <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">→ My Entry</a>
+            )}
+          </div>
+        )}
+
         {(releaseInfo || album.release_title) && (
           <div class="release-detail">
             {releaseInfo ? (
