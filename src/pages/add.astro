@@ -255,6 +255,7 @@ const resultsEl   = document.getElementById('mb-results') as HTMLDivElement;
 const spinner     = document.getElementById('mb-spinner') as HTMLSpanElement;
 
 let timer: ReturnType<typeof setTimeout>;
+let searchSeq = 0;
 
 searchInput.addEventListener('input', () => {
   clearTimeout(timer);
@@ -264,17 +265,20 @@ searchInput.addEventListener('input', () => {
 });
 
 async function doSearch(q: string) {
+  const seq = ++searchSeq;
   spinner.classList.add('active');
   closeResults();
   try {
     const res  = await fetch(`/api/musicbrainz?q=${encodeURIComponent(q)}`);
+    if (seq !== searchSeq) return;
     const data = await res.json() as MBResult[];
     renderResults(data);
   } catch {
+    if (seq !== searchSeq) return;
     resultsEl.innerHTML = '<p class="mb-empty">Search failed.</p>';
     resultsEl.classList.add('open');
   } finally {
-    spinner.classList.remove('active');
+    if (seq === searchSeq) spinner.classList.remove('active');
   }
 }
 

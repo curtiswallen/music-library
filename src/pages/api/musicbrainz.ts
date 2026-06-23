@@ -71,8 +71,8 @@ export const GET: APIRoute = async (context) => {
     const HDR = { 'User-Agent': UA, Accept: 'application/json' };
     const enc = encodeURIComponent;
     const [artistRes, titleRes] = await Promise.all([
-      fetch(`${MB}/release-group?query=artist:${enc(q)}&type=album&fmt=json&limit=8&inc=genres`, { headers: HDR }),
-      fetch(`${MB}/release-group?query=${enc(q)}&type=album&fmt=json&limit=5&inc=genres`,        { headers: HDR }),
+      fetch(`${MB}/release-group?query=artist:${enc(`"${q}"`)}&type=album&fmt=json&limit=8&inc=genres`, { headers: HDR }),
+      fetch(`${MB}/release-group?query=${enc(q)}&type=album&fmt=json&limit=5&inc=genres`,               { headers: HDR }),
     ]);
     const artistRgs = artistRes.ok ? ((await artistRes.json()) as MBResponse)['release-groups'] ?? [] : [];
     const titleRgs  = titleRes.ok  ? ((await titleRes.json())  as MBResponse)['release-groups'] ?? [] : [];
