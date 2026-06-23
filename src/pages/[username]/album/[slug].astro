@@ -7,6 +7,7 @@ import { slugify, generateUniqueSlug, countryCode, normalizeSearch } from '../..
 import { md } from '../../../lib/markdown';
 import { syncArtistData, syncAllArtistsForAlbum } from '../../../lib/artist-cache';
 import { getGenreCache } from '../../../lib/genre-cache';
+import { getDescriptorCache } from '../../../lib/descriptor-cache';
 import { invalidateLibraryOverview } from '../../../lib/library-cache';
 
 const { username, slug: slugParam } = Astro.params;
@@ -53,15 +54,12 @@ if (Astro.request.method === 'POST') {
   const subgenresList = ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean);
   const subgenres = JSON.stringify(subgenresList);
 
+  const canonicalDescriptors = await getDescriptorCache(kv, db);
+  const canonicalSet = new Set(canonicalDescriptors.map(d => d.toLowerCase()));
   let descriptorsList: string[] = [];
   try { descriptorsList = JSON.parse((data.get('descriptors') as string) || '[]'); } catch {}
-  const newDescriptors = descriptorsList.map(d => d.trim().toLowerCase()).filter(Boolean);
+  const newDescriptors = descriptorsList.map(d => d.trim().toLowerCase()).filter(d => canonicalSet.has(d));
   const descriptorsJson = JSON.stringify(newDescriptors);
-  if (newDescriptors.length) {
-    await db.batch(newDescriptors.map(d =>
-      db.prepare('INSERT OR IGNORE INTO descriptors (name) VALUES (?)').bind(d)
-    ));
-  }
 
   let rawTracks: Array<Record<string, unknown>> = [];
   try { rawTracks = JSON.parse((data.get('tracks') as string) || '[]'); } catch {}
@@ -332,11 +330,15 @@ function fmtLoggedAt(dateStr: string | null, tz = 'UTC'): string {
 
 const addedAt = album.added_at ? fmtLoggedAt(album.added_at, profileUser.timezone || 'UTC') : null;
 
-// Only owners see the edit form — skip genre lookup for public visitors
+// Only owners see the edit form — skip genre/descriptor lookup for public visitors
 let genreMap: Record<string, string[]> = {};
 let groupedGenres: Array<{ group: string; options: string[] }> = [];
+let canonicalDescriptors: string[] = [];
 if (isOwner) {
-  ({ genreMap, groupedGenres } = await getGenreCache(kv, db));
+  ([{ genreMap, groupedGenres }, canonicalDescriptors] = await Promise.all([
+    getGenreCache(kv, db),
+    getDescriptorCache(kv, db),
+  ]));
 }
 
 let otherLogs: Array<{ display_name: string | null; profile_url: string; avatar_url: string | null; rating: number | null }> = [];
@@ -669,6 +671,7 @@ if (!isOwner && !profileUser.is_private) {
         submitLabel="Save Changes"
         genreMap={genreMap}
         groupedGenres={groupedGenres}
+        canonicalDescriptors={canonicalDescriptors}
         deleteAlbumId={album.id}
         deleteBackHref={`${libBase}/library`}
       />

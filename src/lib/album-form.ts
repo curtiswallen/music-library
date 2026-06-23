@@ -16,6 +16,13 @@ export function readGenreMap(): Record<string, string[]> {
   } catch { return {}; }
 }
 
+function readDescriptorList(): string[] {
+  try {
+    const el = document.getElementById('descriptor-list-data');
+    return el?.textContent ? (JSON.parse(el.textContent) as string[]) : [];
+  } catch { return []; }
+}
+
 export function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -358,14 +365,8 @@ export function initAlbumForm() {
     });
     _syncDescriptors();
 
-    let descTimer: ReturnType<typeof setTimeout>;
-    let fetchToken = 0;
+    const allDescriptors = readDescriptorList();
     let focusedIdx = -1;
-
-    function getGenre(): string {
-      const genreEl = document.getElementById('f-genre');
-      return genreEl?.closest('.combo')?.querySelector<HTMLInputElement>('.combo-hidden')?.value ?? '';
-    }
 
     function getExistingTags(): Set<string> {
       return new Set(
@@ -384,31 +385,24 @@ export function initAlbumForm() {
       if (focusedIdx >= 0) opts[focusedIdx].scrollIntoView({ block: 'nearest' });
     }
 
-    async function fetchAndShow(q: string): Promise<void> {
-      const token = ++fetchToken;
-      const genre = getGenre();
-      const params = new URLSearchParams();
-      if (q)     params.set('q', q);
-      if (genre) params.set('genre', genre);
-      try {
-        const res      = await fetch(`/api/descriptors?${params}`);
-        if (token !== fetchToken) return;
-        const all      = (await res.json()) as string[];
-        const existing = getExistingTags();
-        const opts     = all.filter(r => !existing.has(r.toLowerCase()));
-        focusedIdx = -1;
-        if (!opts.length) { drop.innerHTML = ''; drop.classList.remove('open'); return; }
-        drop.innerHTML = opts.map(r => `<div class="descriptor-opt">${esc(r)}</div>`).join('');
-        drop.classList.add('open');
-        drop.querySelectorAll<HTMLElement>('.descriptor-opt').forEach(el => {
-          el.addEventListener('mousedown', ev => { ev.preventDefault(); addDescriptorTag(el.textContent ?? ''); });
-        });
-      } catch {}
+    function showDropdown(q: string): void {
+      const existing = getExistingTags();
+      const lower    = q.toLowerCase();
+      const opts     = allDescriptors.filter(d =>
+        !existing.has(d.toLowerCase()) && (!lower || d.toLowerCase().includes(lower))
+      );
+      focusedIdx = -1;
+      if (!opts.length) { drop.innerHTML = ''; drop.classList.remove('open'); return; }
+      drop.innerHTML = opts.map(r => `<div class="descriptor-opt">${esc(r)}</div>`).join('');
+      drop.classList.add('open');
+      drop.querySelectorAll<HTMLElement>('.descriptor-opt').forEach(el => {
+        el.addEventListener('mousedown', ev => { ev.preventDefault(); addDescriptorTag(el.textContent ?? ''); });
+      });
     }
 
     const addDescriptorTag = (val: string) => {
       const tag = val.trim();
-      if (tag.length < 2) return;
+      if (!tag) return;
       if (getExistingTags().has(tag.toLowerCase())) { dinput.value = ''; return; }
       chips.appendChild(_makeDescriptorChip(tag));
       const allChips = Array.from(chips.querySelectorAll<HTMLElement>('.descriptor-chip'));
@@ -416,16 +410,16 @@ export function initAlbumForm() {
       allChips.forEach(c => chips.appendChild(c));
       _syncDescriptors();
       dinput.value = '';
-      fetchAndShow('');
+      showDropdown('');
     };
 
-    dinput.addEventListener('focus', () => fetchAndShow(dinput.value.trim()));
-    dinput.addEventListener('click', () => fetchAndShow(dinput.value.trim()));
+    dinput.addEventListener('focus', () => showDropdown(dinput.value.trim()));
+    dinput.addEventListener('click', () => showDropdown(dinput.value.trim()));
 
     dinput.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        if (!drop.classList.contains('open')) fetchAndShow(dinput.value.trim());
+        if (!drop.classList.contains('open')) showDropdown(dinput.value.trim());
         else setFocused(focusedIdx + 1);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -437,16 +431,13 @@ export function initAlbumForm() {
         const opts = getOpts();
         if (focusedIdx >= 0 && opts[focusedIdx]) {
           addDescriptorTag(opts[focusedIdx].textContent ?? '');
-        } else {
-          addDescriptorTag(dinput.value);
+        } else if (opts.length === 1) {
+          addDescriptorTag(opts[0].textContent ?? '');
         }
       }
     });
 
-    dinput.addEventListener('input', () => {
-      clearTimeout(descTimer);
-      descTimer = setTimeout(() => fetchAndShow(dinput.value.trim()), 250);
-    });
+    dinput.addEventListener('input', () => showDropdown(dinput.value.trim()));
 
     dinput.addEventListener('blur', () => {
       setTimeout(() => { drop.innerHTML = ''; drop.classList.remove('open'); }, 150);

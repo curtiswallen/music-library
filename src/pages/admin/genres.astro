@@ -1,0 +1,264 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { env } from 'cloudflare:workers';
+import { invalidateGenreCache } from '../../lib/genre-cache';
+
+const user = Astro.locals.user;
+if (!user || !user.is_admin) return new Response(null, { status: 403 });
+
+const db = env.DB;
+const kv = env.GENRE_CACHE;
+
+// ── POST handlers ─────────────────────────────────────────────────────────────
+if (Astro.request.method === 'POST') {
+  const action = Astro.url.searchParams.get('action');
+  const data   = await Astro.request.formData();
+
+  if (action === 'add-genre') {
+    const name = (data.get('name') as string)?.trim();
+    if (name) {
+      const { results: max } = await db.prepare(
+        'SELECT MAX(sort_order) AS m FROM genres'
+      ).all<{ m: number | null }>();
+      const nextOrder = (max[0]?.m ?? 0) + 10;
+      await db.prepare(
+        'INSERT OR IGNORE INTO genres (name, sort_order) VALUES (?, ?)'
+      ).bind(name, nextOrder).run();
+    }
+
+  } else if (action === 'rename-genre') {
+    const id   = parseInt(data.get('id') as string);
+    const name = (data.get('name') as string)?.trim();
+    if (id && name) {
+      await db.prepare('UPDATE genres SET name = ? WHERE id = ?').bind(name, id).run();
+    }
+
+  } else if (action === 'delete-genre') {
+    const id = parseInt(data.get('id') as string);
+    if (id) {
+      await db.prepare('DELETE FROM genres WHERE id = ?').bind(id).run();
+    }
+
+  } else if (action === 'add-subgenre') {
+    const genreId = parseInt(data.get('genre_id') as string);
+    const name    = (data.get('name') as string)?.trim();
+    if (genreId && name) {
+      const { results: max } = await db.prepare(
+        'SELECT MAX(sort_order) AS m FROM subgenres WHERE genre_id = ?'
+      ).bind(genreId).all<{ m: number | null }>();
+      const nextOrder = (max[0]?.m ?? 0) + 10;
+      await db.prepare(
+        'INSERT OR IGNORE INTO subgenres (genre_id, name, sort_order) VALUES (?, ?, ?)'
+      ).bind(genreId, name, nextOrder).run();
+    }
+
+  } else if (action === 'rename-subgenre') {
+    const id   = parseInt(data.get('id') as string);
+    const name = (data.get('name') as string)?.trim();
+    if (id && name) {
+      await db.prepare('UPDATE subgenres SET name = ? WHERE id = ?').bind(name, id).run();
+    }
+
+  } else if (action === 'delete-subgenre') {
+    const id = parseInt(data.get('id') as string);
+    if (id) {
+      await db.prepare('DELETE FROM subgenres WHERE id = ?').bind(id).run();
+    }
+
+  } else if (action === 'set-genre-group') {
+    const id    = parseInt(data.get('id') as string);
+    const group = (data.get('group') as string)?.trim() || null;
+    if (id) {
+      await db.prepare('UPDATE genres SET genre_group = ? WHERE id = ?').bind(group, id).run();
+    }
+  }
+
+  await invalidateGenreCache(kv);
+  return Astro.redirect('/admin/genres');
+}
+
+const GENRE_GROUPS = [
+  'Electronic', 'Folk, Blues & Jazz', 'Hip-Hop, R&B & Reggae',
+  'Metal', 'Pop & Country', 'Rock & Punk', 'World & Experimental',
+];
+
+// ── GET: load genres + subgenres ──────────────────────────────────────────────
+const { results: genres } = await db.prepare(`
+  SELECT id, name, genre_group FROM genres ORDER BY genre_group NULLS LAST, name ASC
+`).all<{ id: number; name: string; genre_group: string | null }>();
+
+const { results: subRows } = await db.prepare(`
+  SELECT id, genre_id, name FROM subgenres ORDER BY genre_id, name ASC
+`).all<{ id: number; genre_id: number; name: string }>();
+
+const subsByGenre = new Map<number, Array<{ id: number; name: string }>>();
+for (const r of subRows) {
+  const arr = subsByGenre.get(r.genre_id) ?? [];
+  arr.push({ id: r.id, name: r.name });
+  subsByGenre.set(r.genre_id, arr);
+}
+
+type GenreRow = { id: number; name: string; genre_group: string | null };
+const genresByGroup = new Map<string, GenreRow[]>();
+for (const g of genres) {
+  const key = g.genre_group ?? 'No Group';
+  const arr = genresByGroup.get(key) ?? [];
+  arr.push(g);
+  genresByGroup.set(key, arr);
+}
+const sortedGroups = [...genresByGroup.keys()].sort((a, b) =>
+  a === 'No Group' ? 1 : b === 'No Group' ? -1 : a.localeCompare(b)
+);
+---
+
+<Layout title="Admin — Genres & Subgenres">
+  <div class="page-header">
+    <h1>Admin — Genres &amp; Subgenres</h1>
+    <div style="display:flex;gap:8px">
+      <a href="/admin" class="btn">← Admin</a>
+      <a href={`/${user.profile_url}/library`} class="btn">My Library</a>
+    </div>
+  </div>
+
+  <div class="admin-wrap">
+
+    <!-- Add genre -->
+    <form method="post" action="/admin/genres?action=add-genre" class="add-genre-form">
+      <input name="name" type="text" placeholder="New genre name…" required class="admin-input" />
+      <button type="submit" class="btn btn-primary">Add Genre</button>
+    </form>
+
+    <!-- Genre list grouped -->
+    <div class="genre-list">
+      {sortedGroups.map(groupName => {
+        const groupGenres = genresByGroup.get(groupName)!;
+        return (
+          <details class="group-section">
+            <summary class="group-summary">
+              {groupName}
+              <span class="group-count">{groupGenres.length}</span>
+            </summary>
+            <div class="group-body">
+              {groupGenres.map(g => {
+                const subs = subsByGenre.get(g.id) ?? [];
+                return (
+                  <div class="genre-card">
+                    <div class="genre-header">
+                      <form method="post" action="/admin/genres?action=rename-genre" class="rename-form">
+                        <input type="hidden" name="id" value={g.id} />
+                        <input name="name" type="text" value={g.name} required class="admin-input genre-name-input" />
+                        <button type="submit" class="btn btn-sm">Rename</button>
+                      </form>
+                      <form method="post" action="/admin/genres?action=set-genre-group" class="group-form">
+                        <input type="hidden" name="id" value={g.id} />
+                        <select name="group" class="admin-input admin-select" onchange="this.form.submit()">
+                          <option value="">No group</option>
+                          {GENRE_GROUPS.map(grp => (
+                            <option value={grp} selected={g.genre_group === grp}>{grp}</option>
+                          ))}
+                        </select>
+                      </form>
+                      <form method="post" action="/admin/genres?action=delete-genre"
+                            onsubmit={`return confirm('Delete "${g.name}" and all its subgenres?')`}>
+                        <input type="hidden" name="id" value={g.id} />
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                      </form>
+                    </div>
+                    <div class="sub-area">
+                      <div class="sub-chips">
+                        {subs.map(s => (
+                          <span class="sub-chip-admin">
+                            <span class="sub-name">{s.name}</span>
+                            <form method="post" action="/admin/genres?action=delete-subgenre" class="inline-form">
+                              <input type="hidden" name="id" value={s.id} />
+                              <button type="submit" class="chip-del" title={`Remove ${s.name}`}>×</button>
+                            </form>
+                          </span>
+                        ))}
+                      </div>
+                      <form method="post" action="/admin/genres?action=add-subgenre" class="add-sub-form">
+                        <input type="hidden" name="genre_id" value={g.id} />
+                        <input name="name" type="text" placeholder="Add subgenre…" required class="admin-input admin-input-sm" />
+                        <button type="submit" class="btn btn-sm">Add</button>
+                      </form>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  </div>
+</Layout>
+
+<style>
+.admin-wrap { max-width: 860px; }
+
+.add-genre-form {
+  display: flex; gap: 8px; margin-bottom: 24px; align-items: center;
+}
+
+.admin-input {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 10px; border-radius: 4px; font-size: 13px; font-family: inherit;
+}
+.admin-input-sm { width: 160px; }
+.admin-select { padding: 5px 8px; cursor: pointer; }
+.group-form { display: flex; align-items: center; }
+
+.genre-list { display: flex; flex-direction: column; gap: 8px; }
+
+.group-section {
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+}
+.group-summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; cursor: pointer; user-select: none;
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted);
+  background: var(--bg-card); list-style: none;
+}
+.group-summary::-webkit-details-marker { display: none; }
+.group-summary::before {
+  content: '▶'; font-size: 9px; transition: transform 0.15s;
+}
+details[open] > .group-summary::before { transform: rotate(90deg); }
+.group-count {
+  margin-left: auto; font-size: 11px; font-weight: 400;
+  color: var(--text-muted); opacity: 0.7;
+}
+.group-body { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+
+.genre-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 6px; padding: 14px 16px;
+}
+.genre-header {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
+}
+.rename-form { display: flex; gap: 6px; align-items: center; flex: 1; }
+.genre-name-input { flex: 1; max-width: 260px; }
+
+.sub-area { border-top: 1px solid var(--border); padding-top: 10px; }
+.sub-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+.sub-chip-admin {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg-hover); border: 1px solid var(--border);
+  border-radius: 3px; padding: 3px 4px 3px 8px; font-size: 12px;
+}
+.sub-name { color: var(--text); }
+
+.inline-form { display: inline; }
+.chip-del {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 14px; padding: 0 2px; line-height: 1;
+}
+.chip-del:hover { color: var(--text); }
+
+.add-sub-form { display: flex; gap: 6px; align-items: center; }
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+</style>

@@ -29,6 +29,7 @@ interface Props {
   values?: FormValues;
   genreMap?: Record<string, string[]>;
   groupedGenres?: Array<{ group: string; options: string[] }>;
+  canonicalDescriptors?: string[];
   includeDbAlbumId?: boolean;
   submitLabel?: string;
   cancelHref?: string;
@@ -40,6 +41,7 @@ const {
   values = {},
   genreMap = {},
   groupedGenres,
+  canonicalDescriptors = [],
   includeDbAlbumId = false,
   submitLabel = 'Save',
   cancelHref,
@@ -71,6 +73,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
 ---
 
 <script type="application/json" id="genre-map-data" is:inline set:html={JSON.stringify(genreMap)}></script>
+<script type="application/json" id="descriptor-list-data" is:inline set:html={JSON.stringify(canonicalDescriptors)}></script>
 <form method="post" id="album-form">
   <input type="hidden" name="mbid"          id="f-mbid"          value={values.mbid ?? ''} />
   {includeDbAlbumId && <input type="hidden" name="db_album_id" id="f-db-album-id" />}
@@ -239,11 +242,11 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
             </div>
             <div class="descriptor-input-wrap">
               <input type="text" id="descriptor-input" class="descriptor-input"
-                    placeholder="Type to search or add…" autocomplete="off" />
+                    placeholder="Type to search…" autocomplete="off" />
               <div class="descriptor-dropdown" id="descriptor-dropdown"></div>
             </div>
           </div>
-          <span class="field-hint-inline">Press Enter or comma to add. Backspace removes the last tag.</span>
+          <span class="field-hint-inline">Select from the list. Backspace removes the last tag.</span>
           <input type="hidden" name="descriptors" id="f-descriptors"
                 value={JSON.stringify(initialDescriptors)} />
         </div>
