@@ -711,7 +711,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 }
 .cover-box-lg img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
-.album-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.album-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .album-actions .btn { flex: 1; justify-content: center; }
 
 .canonical-note { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }

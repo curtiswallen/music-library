@@ -287,7 +287,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
             {myEntry !== 'logged' && (
               <a href={myEntry === 'queued'
                 ? `/${loggedInUser.profile_url}/album/${slugParam}?edit=1`
-                : logAlbumHref} class="btn btn-primary">Log Album</a>
+                : logAlbumHref} class="btn">Log Album</a>
             )}
             {myEntry === 'logged' && (
               <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">→ My Entry</a>
