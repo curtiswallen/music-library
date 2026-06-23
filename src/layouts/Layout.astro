@@ -101,6 +101,23 @@ const user = Astro.locals.user;
       })();
     </script>
 
+    <!-- Queue-add modal -->
+    <div id="qa-modal" class="confirm-overlay" style="display:none">
+      <div class="qa-box">
+        <div class="qa-header">
+          <span class="qa-title">Add to Queue</span>
+          <button id="qa-close" class="btn" type="button">×</button>
+        </div>
+        <div style="position:relative">
+          <input id="qa-input" type="text" class="search-input qa-search-input"
+                 placeholder="Search MusicBrainz..." autocomplete="off" spellcheck="false" />
+          <span id="qa-spinner" class="spinner" style="position:absolute;right:10px;top:50%;transform:translateY(-50%)"></span>
+        </div>
+        <div id="qa-results" class="mb-results qa-results"></div>
+        <p id="qa-msg" style="display:none" class="qa-msg"></p>
+      </div>
+    </div>
+
     <!-- Confirm modal -->
     <div id="confirm-modal" class="confirm-overlay" style="display:none">
       <div class="confirm-box">
@@ -136,6 +153,144 @@ const user = Astro.locals.user;
           okBtn.focus();
         });
       };
+    })();
+    </script>
+
+    <script is:inline>
+    (function () {
+      var modal   = document.getElementById('qa-modal');
+      var closeBtn = document.getElementById('qa-close');
+      var input   = document.getElementById('qa-input');
+      var spinner = document.getElementById('qa-spinner');
+      var results = document.getElementById('qa-results');
+      var msg     = document.getElementById('qa-msg');
+      if (!modal) return;
+
+      var _timer, _seq = 0, _onQueued = null;
+
+      function openModal(onQueued) {
+        _onQueued = onQueued || null;
+        input.value = '';
+        results.innerHTML = '';
+        results.classList.remove('open');
+        msg.style.display = 'none';
+        modal.style.display = 'flex';
+        setTimeout(function () { input.focus(); }, 50);
+      }
+      function closeModal() {
+        modal.style.display = 'none';
+        _seq++; // cancel in-flight searches
+        _onQueued = null;
+      }
+
+      closeBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.style.display !== 'none') closeModal();
+      });
+
+      input.addEventListener('input', function () {
+        clearTimeout(_timer);
+        var q = input.value.trim();
+        if (q.length < 2) { results.innerHTML = ''; results.classList.remove('open'); return; }
+        _timer = setTimeout(function () { doSearch(q); }, 380);
+      });
+
+      function doSearch(q) {
+        var seq = ++_seq;
+        spinner.classList.add('active');
+        results.innerHTML = ''; results.classList.remove('open');
+        fetch('/api/musicbrainz?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (seq !== _seq) return;
+            renderItems(data);
+          })
+          .catch(function () {
+            if (seq !== _seq) return;
+            results.innerHTML = '<p class="mb-empty">Search failed.</p>';
+            results.classList.add('open');
+          })
+          .finally(function () { if (seq === _seq) spinner.classList.remove('active'); });
+      }
+
+      function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+
+      function renderItems(items) {
+        if (!items || !items.length) {
+          results.innerHTML = '<p class="mb-empty">No results.</p>';
+          results.classList.add('open');
+          return;
+        }
+        results.innerHTML = items.map(function (r, i) {
+          return '<div class="mb-item' + (r.inLibrary ? ' mb-item-in-library' : '') + '" data-i="' + i + '">'
+            + '<div class="mb-thumb-wrap"><img class="mb-thumb" src="' + esc(r.coverUrl) + '" alt=""'
+            + ' onerror="this.style.opacity=\'0\'" loading="lazy" /></div>'
+            + '<div class="mb-info"><strong>' + esc(r.title) + '</strong>'
+            + '<span>' + esc(r.artist) + (r.year ? ' · ' + r.year : '')
+            + (r.inLibrary ? ' <span class="mb-in-library-badge">In library</span>' : '') + '</span>'
+            + '</div></div>';
+        }).join('');
+        results.classList.add('open');
+        var stored = items.slice();
+        results.querySelectorAll('.mb-item').forEach(function (el, i) {
+          el.addEventListener('click', function () { queueItem(stored[i]); });
+        });
+      }
+
+      function queueItem(r) {
+        results.innerHTML = ''; results.classList.remove('open');
+        spinner.classList.add('active');
+        input.disabled = true;
+        msg.style.display = 'none';
+
+        var body = r.dbId != null
+          ? { albumId: r.dbId }
+          : { mbid: r.mbid, title: r.title, artist: r.artist,
+              year: r.year ? parseInt(r.year, 10) : null,
+              coverUrl: r.coverUrl, releaseType: r.releaseType, artistMbid: r.artistId };
+
+        fetch('/api/queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+          .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, status: res.status, data: d }; }); })
+          .then(function (res) {
+            spinner.classList.remove('active');
+            input.disabled = false;
+            if (res.ok || res.status === 409) {
+              if (res.status === 409 && res.data.status === 'logged') {
+                msg.textContent = r.artist + ' — ' + r.title + ' is already in your library.';
+              } else {
+                msg.textContent = (res.status === 409 ? 'Already queued: ' : 'Queued: ')
+                  + r.artist + ' — ' + r.title;
+              }
+              msg.style.display = 'block';
+              input.value = '';
+              if (res.ok && _onQueued) {
+                _onQueued({
+                  slug: res.data.slug, title: r.title, artist: r.artist,
+                  year: r.year, coverUrl: r.coverUrl, releaseType: r.releaseType,
+                  albumId: res.data.albumId,
+                });
+              }
+            } else {
+              msg.textContent = 'Failed to queue. Please try again.';
+              msg.style.display = 'block';
+            }
+          })
+          .catch(function () {
+            spinner.classList.remove('active');
+            input.disabled = false;
+            msg.textContent = 'Failed to queue. Please try again.';
+            msg.style.display = 'block';
+          });
+      }
+
+      window.showQueueAdd = function (onQueued) { openModal(onQueued); };
     })();
     </script>
   </body>

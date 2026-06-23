@@ -220,7 +220,12 @@ const [{ genreMap, groupedGenres }, canonicalDescriptors] = await Promise.all([
   </div>
 
   <div id="add-wrapper" data-profile-url={user.profile_url}>
-    <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} genreMap={genreMap} groupedGenres={groupedGenres} canonicalDescriptors={canonicalDescriptors} />
+    <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} genreMap={genreMap} groupedGenres={groupedGenres} canonicalDescriptors={canonicalDescriptors}>
+      <button slot="extra-actions" id="add-to-queue-btn" class="btn" type="button"
+              style="display:none;margin-left:auto" title="Add to queue without rating">
+        Add to Queue
+      </button>
+    </AlbumForm>
   </div>
 </Layout>
 
@@ -381,6 +386,20 @@ function pick(r: MBResult) {
 
   closeResults();
   document.getElementById('album-form')?.dispatchEvent(new Event('input'));
+
+  // Reveal the "Add to Queue" shortcut once an album is selected
+  const qBtn = document.getElementById('add-to-queue-btn') as HTMLButtonElement | null;
+  if (qBtn) {
+    qBtn.style.display = '';
+    qBtn.dataset.mbid        = r.mbid        ?? '';
+    qBtn.dataset.title       = r.title       ?? '';
+    qBtn.dataset.artist      = r.artist      ?? '';
+    qBtn.dataset.year        = r.year        ?? '';
+    qBtn.dataset.coverUrl    = r.coverUrl    ?? '';
+    qBtn.dataset.releaseType = r.releaseType ?? '';
+    qBtn.dataset.artistMbid  = r.artistId    ?? '';
+    qBtn.dataset.dbId        = r.dbId        != null ? String(r.dbId) : '';
+  }
 }
 
 function resolveGenre(tags: string[]) {
@@ -448,6 +467,8 @@ function setReleaseTypeLocked(locked: boolean) {
 function closeResults() { resultsEl.classList.remove('open'); resultsEl.innerHTML = ''; }
 
 document.getElementById('clear-form-btn')?.addEventListener('click', () => {
+  const qBtn = document.getElementById('add-to-queue-btn') as HTMLButtonElement | null;
+  if (qBtn) qBtn.style.display = 'none';
   searchInput.value = '';
   closeResults();
   setArtists(['']);
@@ -495,4 +516,37 @@ function esc(s: string) {
 document.addEventListener('click', e => {
   if (!(e.target as Element).closest('.mb-wrap')) closeResults();
 });
+
+// ── "Add to Queue" shortcut button ─────────────────────────────────────────
+(document.getElementById('add-to-queue-btn') as HTMLButtonElement | null)
+  ?.addEventListener('click', async function () {
+    const btn = this as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    const body = btn.dataset.dbId
+      ? { albumId: parseInt(btn.dataset.dbId, 10) }
+      : {
+          mbid:        btn.dataset.mbid        || undefined,
+          title:       btn.dataset.title       || '',
+          artist:      btn.dataset.artist      || '',
+          year:        btn.dataset.year        ? parseInt(btn.dataset.year, 10) : undefined,
+          coverUrl:    btn.dataset.coverUrl    || undefined,
+          releaseType: btn.dataset.releaseType || undefined,
+          artistMbid:  btn.dataset.artistMbid  || undefined,
+        };
+
+    const res = await fetch('/api/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok || res.status === 409) {
+      window.location.href = `/${profileUrl}/library`;
+    } else {
+      btn.textContent = 'Add to Queue';
+      btn.disabled = false;
+    }
+  });
 </script>

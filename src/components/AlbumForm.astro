@@ -275,6 +275,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
             Delete Album
           </button>
         )}
+        <slot name="extra-actions" />
       </div>
     </div><!-- end edit-fields -->
 

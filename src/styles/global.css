@@ -1730,3 +1730,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 .confirm-msg { font-size: 13px; color: var(--text); margin-bottom: 20px; line-height: 1.55; }
 .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Queue-add modal ── */
+.qa-box {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px;
+  max-width: 480px; width: 95%;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.qa-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.qa-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.qa-search-input { width: 100%; box-sizing: border-box; }
+.qa-results { position: relative; top: 0; max-height: 260px; }
+.qa-msg { font-size: 12px; color: var(--text-muted); margin: 12px 0 4px; text-align: center; }

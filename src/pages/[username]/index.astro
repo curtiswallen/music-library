@@ -91,7 +91,7 @@ if (isOwner || !profileUser.is_private) {
     db.prepare(`
       SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type, ua.rating, ua.recommended, ua.added_at, ua.genre
       FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-      WHERE ua.is_hidden = 0 AND ua.rating IS NULL
+      WHERE ua.is_hidden = 0 AND ua.is_queued = 1
       ORDER BY ua.added_at DESC LIMIT 15
     `).bind(profileUser.id).all<DashAlbum>(),
     db.prepare(`
@@ -224,9 +224,10 @@ const sections = [
   {
     title: 'Queue',
     albums: queueAlbums,
-    viewAllHref: `${libBase}?rated=no&sort=added&dir=desc`,
+    viewAllHref: libBase,
     emptyText: 'Queue empty.',
     showDate: true,
+    showQueueAdd: isOwner,
   },
 ];
 
@@ -309,11 +310,14 @@ if (!isOwner && !profileUser.is_private) {
 
       {/* ── Dashboard panels ──────────────────────────────────────────────── */}
       <div class="dash-grid" style={`grid-template-columns: repeat(${sections.length}, 1fr)`}>
-        {sections.map(({ title, albums, viewAllHref, emptyText, showDate }) => (
+        {sections.map(({ title, albums, viewAllHref, emptyText, showDate, showQueueAdd }) => (
           <div class="dash-grid-wrapper">
             <div class="dash-section-header">
                 <h2 class="dash-title">{title}</h2>
-                <a href={viewAllHref} class="dash-view-all">View all →</a>
+                <div style="display:flex;gap:8px;align-items:center">
+                  {showQueueAdd && <button class="btn dash-queue-add-btn" type="button" title="Add to queue">+</button>}
+                  <a href={viewAllHref} class="dash-view-all">View all →</a>
+                </div>
             </div>
             <section class="dash-section"> 
               {albums.length === 0 ? (
@@ -574,6 +578,16 @@ if (!isOwner && !profileUser.is_private) {
   .dash-row:hover { background: none; }
 }
 </style>
+
+<script is:inline>
+  (function () {
+    document.querySelectorAll('.dash-queue-add-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (window.showQueueAdd) window.showQueueAdd();
+      });
+    });
+  })();
+</script>
 
 <script is:inline>
   (function () {
