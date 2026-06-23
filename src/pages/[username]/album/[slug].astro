@@ -141,6 +141,17 @@ if (Astro.request.method === 'POST') {
       .bind(oldEffective, newEffective, profileUser.id).run();
   }
 
+  // Replace this user's track ratings with the current submission
+  const trackRatingInserts = rawTracks
+    .filter(t => t.rating != null)
+    .map(t => db.prepare(
+      'INSERT INTO track_ratings (album_id, user_id, track_pos, rating) VALUES (?, ?, ?, ?)'
+    ).bind(existing.id, profileUser.id, String(t.pos), Number(t.rating)));
+  await db.batch([
+    db.prepare('DELETE FROM track_ratings WHERE album_id = ? AND user_id = ?').bind(existing.id, profileUser.id),
+    ...trackRatingInserts,
+  ]);
+
   await db.prepare(`
     UPDATE albums SET
       all_subgenres     = COALESCE((SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM user_albums, json_each(user_albums.subgenres)  WHERE user_albums.album_id = ?)), '[]'),
@@ -593,13 +604,13 @@ if (!isOwner && !profileUser.is_private) {
                     : <div class="cover-thumb" />}
                   <div class="rel-info">
                     <span class="rel-title">
-                      {a.artist}
-                      {cc && <span class="added-cell tip-link" data-tip={a.country}> {cc.toUpperCase()}</span>}
-                    </span>
-                    <span class="rel-sub">
-                      {a.year != null && <span class="year-chip">{a.year}</span>}
                       {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
                       <span class="rel-sub-text">{a.album}{a.recommended ? <span class="rec-star" title="Recommended"> ★</span> : null}</span>
+                      {a.year != null && <span class="year-chip">{a.year}</span>}
+                    </span>
+                    <span class="rel-sub">
+                      {a.artist}
+                      {cc && <span class="added-cell tip-link dash-cc" data-tip={a.country}> {cc.toUpperCase()}</span>}
                     </span>
                   </div>
                   <div class="rel-right">

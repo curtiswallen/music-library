@@ -488,16 +488,16 @@ if (!hasFilter) {
                     ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
                     : <div class="dash-cover dash-cover-empty" />}
                   <div class="dash-info">
-                    <div class="dash-artist-wrap">
-                      <span class="dash-artist">{a.artist}</span>
+                    <div class="dash-album-wrap">
+                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type]}</span>}
+                      <span class="dash-album">{a.album}</span>
+                      {a.year && <span class="year-chip">{a.year}</span>}
+                      {a.recommended === 1 && <span class="rec-star"> ★</span>}
+                    </div>
+                    <span class="dash-artist-name">
+                      <span class="dash-artist-text">{a.artist}</span>
                       {a.country && countryCode(a.country) && <span class="dash-cc">{countryCode(a.country).toUpperCase()}</span>}
                       {a.genre && <span class="dash-genre">{a.genre}</span>}
-                    </div>
-                    <span class="dash-album-name">
-                      {a.year && <span class="year-chip">{a.year}</span>}
-                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type]}</span>}
-                      <span class="dash-album-text">{a.album}</span>
-                      {a.recommended === 1 && <span class="rec-star"> ★</span>}
                     </span>
                   </div>
 
@@ -537,15 +537,15 @@ if (!hasFilter) {
                     ? <img src={a.cover_url} class="dash-cover" alt="" loading="lazy" />
                     : <div class="dash-cover dash-cover-empty" />}
                   <div class="dash-info">
-                    <div class="dash-artist-wrap">
-                      <span class="dash-artist">{a.artist}</span>
+                    <div class="dash-album-wrap">
+                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type]}</span>}
+                      <span class="dash-album">{a.album}</span>
+                      {a.year && <span class="year-chip">{a.year}</span>}
+                    </div>
+                    <span class="dash-artist-name">
+                      <span class="dash-artist-text">{a.artist}</span>
                       {a.country && countryCode(a.country) && <span class="dash-cc">{countryCode(a.country).toUpperCase()}</span>}
                       {a.topGenre && <span class="dash-genre">{a.topGenre}</span>}
-                    </div>
-                    <span class="dash-album-name">
-                      {a.year && <span class="year-chip">{a.year}</span>}
-                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type]}</span>}
-                      <span class="dash-album-text">{a.album}</span>
                     </span>
                   </div>
                   <div class="dash-rating-wrap">
@@ -677,9 +677,9 @@ h1 { padding-top: 4px; }
 .dash-cover { width: 36px; height: 36px; flex-shrink: 0; object-fit: cover; border-radius: 2px; border: 1px solid var(--border); }
 .dash-cover-empty { background: var(--bg-hover); }
 .dash-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 5px; }
-.dash-artist     { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dash-album-name { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; }
-.dash-album-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dash-album     { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-artist-name { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; }
+.dash-artist-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 .dash-user-avatar { position: relative; z-index: 2; flex-shrink: 0; border-radius: 50%; padding-left: 5px;}
 .user-avatar    { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }

@@ -10,7 +10,13 @@ const RESERVED_SLUGS = new Set(['add', 'settings', 'admin']);
 // Valid profile URL slug pattern (without leading slash)
 const SLUG_RE = /^([a-z0-9][a-z0-9_-]{1,28}[a-z0-9]|[a-z0-9]{3})$/;
 
-function isPublicProfilePath(path: string): boolean {
+// Public non-profile routes accessible without a session
+const PUBLIC_PATHS = new Set(['/']);
+const PUBLIC_PREFIXES = ['/artist/', '/album/'];
+
+function isPublicPath(path: string): boolean {
+  if (PUBLIC_PATHS.has(path)) return true;
+  if (PUBLIC_PREFIXES.some(p => path.startsWith(p))) return true;
   const segs = path.split('/').filter(Boolean);
   if (!segs.length) return false;
   const slug = segs[0];
@@ -42,8 +48,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.user      = null;
   context.locals.sessionId = null;
 
-  // Public profile paths are accessible without a session
-  if (isPublicProfilePath(path)) {
+  // Public paths are accessible without a session
+  if (isPublicPath(path)) {
     return next();
   }
 

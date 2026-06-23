@@ -165,6 +165,15 @@ if (Astro.request.method === 'POST') {
       .bind(trackSeconds, user.id).run();
   }
 
+  const trackRatingInserts = rawTracks
+    .filter(t => t.rating != null)
+    .map(t => db.prepare(
+      'INSERT OR IGNORE INTO track_ratings (album_id, user_id, track_pos, rating) VALUES (?, ?, ?, ?)'
+    ).bind(albumId, user.id, String(t.pos), Number(t.rating)));
+  if (trackRatingInserts.length > 0) {
+    await db.batch(trackRatingInserts);
+  }
+
   await db.prepare(`
     UPDATE albums SET
       logged_by_user_ids = (SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?),
