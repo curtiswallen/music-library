@@ -166,7 +166,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
         <div class="form-group">
           <label for="f-country">Country</label>
           <Combobox id="f-country" name="country" options={COUNTRIES.map(c => c.name)}
-                    value={values.country ?? ''} placeholder="Search country..." />
+                    value={values.country ?? ''} placeholder="Search country..." disabled={hasMbid} />
         </div>
 
         <div class="form-group">

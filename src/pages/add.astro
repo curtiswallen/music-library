@@ -216,7 +216,7 @@ const [{ genreMap, groupedGenres }, canonicalDescriptors] = await Promise.all([
 <Layout title="Add Album">
   <div class="page-header">
     <h1>Add Album</h1>
-    <a href={`/${user.profile_url}`} class="btn">← Back</a>
+    <button type="button" class="btn" onclick="history.back()">← Back</button>
   </div>
 
   <div id="add-wrapper" data-profile-url={user.profile_url}>
@@ -477,6 +477,10 @@ function setCanonicalLocked(locked: boolean) {
   const yearInput = document.getElementById('f-year') as HTMLInputElement | null;
   if (yearInput) yearInput.readOnly = locked;
   setReleaseTypeLocked(locked);
+  const countryInput = document.getElementById('f-country') as HTMLInputElement | null;
+  if (countryInput) countryInput.disabled = locked;
+  const countryWrap = countryInput?.closest<HTMLElement>('.combo');
+  if (countryWrap) countryWrap.style.opacity = locked ? '0.6' : '';
   const replaceBtn = document.getElementById('cover-replace-btn') as HTMLButtonElement | null;
   if (replaceBtn) replaceBtn.style.display = locked ? 'none' : '';
   const note = document.getElementById('canonical-lock-note') as HTMLElement | null;
@@ -544,18 +548,23 @@ document.addEventListener('click', e => {
   const artist      = params.get('artist');
   const year        = params.get('year');
   const cover       = params.get('cover');
+  const country     = params.get('country');
   const releaseType = params.get('releaseType');
   const artistMbid  = params.get('artistMbid');
 
   if (!title && !artist) return;
+
+  const mbWrap = document.querySelector<HTMLElement>('.mb-wrap');
+  if (mbWrap) mbWrap.style.display = 'none';
 
   set('f-mbid',        mbid        ?? '');
   set('f-db-album-id', dbId        ?? '');
   set('f-artist-mbid', artistMbid  ?? '');
   set('f-release-type', releaseType ?? '');
   setArtists(artist ? artist.split(' / ') : ['']);
-  set('f-album', title  ?? '');
-  set('f-year',  year   ?? '');
+  set('f-album',   title   ?? '');
+  set('f-year',    year    ?? '');
+  set('f-country', country ?? '');
   setCanonicalLocked(!!mbid);
 
   if (cover) {

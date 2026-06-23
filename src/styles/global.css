@@ -715,7 +715,8 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .album-actions .btn { flex: 1; justify-content: center; }
 
 .canonical-note { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
-.edit-fields input[readonly] { opacity: 0.6; background: var(--bg); cursor: default; }
+.edit-fields input[readonly],
+.edit-fields .combo-input:disabled { opacity: 0.6; background: var(--bg); cursor: default; }
 
 .album-meta { flex: 1; min-width: 0; }
 .album-mobile-header { display: none; margin-bottom: 8px; }

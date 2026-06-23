@@ -7,8 +7,9 @@ interface Props {
   groupedOptions?: Array<{ group: string; options: string[] }>;
   value?: string;
   placeholder?: string;
+  disabled?: boolean;
 }
-const { id, name, options = [], labeledOptions, groupedOptions, value = '', placeholder = 'Search...' } = Astro.props;
+const { id, name, options = [], labeledOptions, groupedOptions, value = '', placeholder = 'Search...', disabled = false } = Astro.props;
 
 // When using labeledOptions, show the label for the current value in the text input
 const displayValue = labeledOptions
@@ -25,6 +26,7 @@ const displayValue = labeledOptions
     spellcheck="false"
     placeholder={placeholder}
     value={displayValue}
+    disabled={disabled || undefined}
   />
   <div class="combo-dropdown" role="listbox" hidden>
     <div class="combo-opt combo-clear" role="option" data-val="">Clear</div>
