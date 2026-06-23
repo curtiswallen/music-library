@@ -368,6 +368,14 @@ const communityAvg = allRatings.length > 1
 
 const notesHtml = album.notes ? md.parse(album.notes) as string : '';
 
+let viewerEntry: 'none' | 'queued' | 'logged' = 'none';
+if (loggedInUser && !isOwner) {
+  const mine = await db.prepare(
+    'SELECT is_queued FROM user_albums WHERE album_id = ? AND user_id = ? LIMIT 1'
+  ).bind(album.id, loggedInUser.id).first<{ is_queued: number }>();
+  if (mine) viewerEntry = mine.is_queued ? 'queued' : 'logged';
+}
+
 if (!isOwner && !profileUser.is_private) {
   Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 }
@@ -391,6 +399,15 @@ if (!isOwner && !profileUser.is_private) {
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
     </div>
     <div class="page-header-actions" style="display:flex;gap:8px">
+      {!isOwner && loggedInUser && viewerEntry === 'logged' && (
+        <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">My Entry</a>
+      )}
+      {!isOwner && loggedInUser && viewerEntry === 'queued' && (
+        <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">In Queue →</a>
+      )}
+      {!isOwner && loggedInUser && viewerEntry === 'none' && (
+        <button id="queue-btn" class="btn" data-album-id={String(album.id)}>+ Queue</button>
+      )}
       {isOwner && (
         <>
           <!-- View-mode buttons (hidden when editing) -->
@@ -752,6 +769,30 @@ if (window.matchMedia('(max-width: 640px)').matches) {
   });
   document.addEventListener('click', () => {
     allTips().forEach(t => { t.style.display = 'none'; });
+  });
+}
+
+const queueBtn = document.getElementById('queue-btn') as HTMLButtonElement | null;
+if (queueBtn) {
+  queueBtn.addEventListener('click', async () => {
+    queueBtn.disabled = true;
+    queueBtn.textContent = '…';
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ albumId: Number(queueBtn.dataset.albumId) }),
+      });
+      if (res.ok || res.status === 409) {
+        queueBtn.textContent = 'In Queue →';
+      } else {
+        queueBtn.disabled = false;
+        queueBtn.textContent = '+ Queue';
+      }
+    } catch {
+      queueBtn.disabled = false;
+      queueBtn.textContent = '+ Queue';
+    }
   });
 }
 </script>
