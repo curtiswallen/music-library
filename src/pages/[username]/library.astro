@@ -111,18 +111,18 @@ if (isOwner || !profileUser.is_private) {
 }
 
 let queuedAlbums: Array<{
-  slug: string; artist: string; album: string;
+  id: number; slug: string; artist: string; album: string;
   year: number | null; cover_url: string | null; release_type: string | null;
 }> = [];
 if (isOwner) {
   const { results: qr } = await db.prepare(`
-    SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.release_type
+    SELECT a.id, a.slug, a.artist, a.album, a.year, a.cover_url, a.release_type
     FROM albums a
     JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-    WHERE ua.is_queued = 1
-    ORDER BY ua.added_at DESC
+    WHERE ua.rating IS NULL
+    ORDER BY ua.is_queued DESC, ua.added_at DESC
   `).bind(profileUser.id).all<{
-    slug: string; artist: string; album: string;
+    id: number; slug: string; artist: string; album: string;
     year: number | null; cover_url: string | null; release_type: string | null;
   }>();
   queuedAlbums = qr;
@@ -390,23 +390,26 @@ if (!isOwner && !profileUser.is_private) {
       </form>
 
       {isOwner && queuedAlbums.length > 0 && (
-        <section class="queue-section">
-          <p class="queue-heading">Queue ({queuedAlbums.length})</p>
-          <div class="queue-grid">
+        <section class="queue-section" id="queue-section">
+          <p class="queue-heading">Unrated ({queuedAlbums.length})</p>
+          <div class="queue-grid" id="queue-grid">
             {queuedAlbums.map(a => (
-              <a href={`${base}/album/${a.slug}`} class="queue-card">
-                <div class="queue-cover">
-                  {a.cover_url && <img src={a.cover_url} alt="" loading="lazy" />}
-                </div>
-                <div class="queue-info">
-                  <span class="queue-artist">{a.artist}</span>
-                  <span class="queue-title">
-                    {a.year != null && <span class="year-chip">{a.year}</span>}
-                    {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type] ?? a.release_type}</span>}
-                    {a.album}
-                  </span>
-                </div>
-              </a>
+              <div class="queue-card" data-album-id={String(a.id)}>
+                <a href={`${base}/album/${a.slug}`} class="queue-card-link">
+                  <div class="queue-cover">
+                    {a.cover_url && <img src={a.cover_url} alt="" loading="lazy" />}
+                  </div>
+                  <div class="queue-info">
+                    <span class="queue-artist">{a.artist}</span>
+                    <span class="queue-title">
+                      {a.year != null && <span class="year-chip">{a.year}</span>}
+                      {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type] ?? a.release_type}</span>}
+                      {a.album}
+                    </span>
+                  </div>
+                </a>
+                <button class="queue-remove" data-album-id={String(a.id)} title="Remove from library">×</button>
+              </div>
             ))}
           </div>
         </section>
@@ -488,12 +491,15 @@ if (!isOwner && !profileUser.is_private) {
 }
 .queue-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .queue-card {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
-  padding: 8px 12px; text-decoration: none; color: inherit; max-width: 300px;
-  transition: border-color 0.15s;
+  max-width: 300px; overflow: hidden; transition: border-color 0.15s;
 }
 .queue-card:hover { border-color: var(--text-muted); }
+.queue-card-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; text-decoration: none; color: inherit; flex: 1; min-width: 0;
+}
 .queue-cover {
   width: 36px; height: 36px; flex-shrink: 0;
   background: var(--bg-hover); border-radius: 3px; overflow: hidden;
@@ -502,6 +508,12 @@ if (!isOwner && !profileUser.is_private) {
 .queue-info { display: flex; flex-direction: column; gap: 1px; overflow: hidden; min-width: 0; }
 .queue-artist { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .queue-title { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
+.queue-remove {
+  background: none; border: none; cursor: pointer; flex-shrink: 0;
+  color: var(--text-muted); font-size: 16px; padding: 0 10px; align-self: stretch;
+  display: flex; align-items: center; border-left: 1px solid var(--border);
+}
+.queue-remove:hover { color: var(--text); background: var(--bg-hover); }
 
 </style>
 
@@ -632,4 +644,26 @@ if (descWrap) {
 // ── sessionStorage: persist filter/sort state ─────────────────────────────
 const PARAMS_KEY = 'lib:' + location.pathname.split('/')[1] + ':params';
 if (location.search) sessionStorage.setItem(PARAMS_KEY, location.search);
+
+// ── Queue remove buttons ──────────────────────────────────────────────────
+document.querySelectorAll<HTMLButtonElement>('.queue-remove').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const albumId = btn.dataset.albumId;
+    if (!albumId) return;
+    if (!confirm('Remove this album from your library?')) return;
+    btn.disabled = true;
+    const res = await fetch(`/api/album/${albumId}`, { method: 'DELETE' });
+    if (res.ok) {
+      const card = btn.closest('.queue-card') as HTMLElement | null;
+      card?.remove();
+      const grid = document.getElementById('queue-grid');
+      if (grid && !grid.querySelector('.queue-card')) {
+        document.getElementById('queue-section')?.remove();
+      }
+    } else {
+      btn.disabled = false;
+    }
+  });
+});
 </script>
