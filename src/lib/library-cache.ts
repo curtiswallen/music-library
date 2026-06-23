@@ -24,7 +24,7 @@ export async function getLibraryOverview(
     SELECT a.country, ua.genre, ua.subgenres, ua.descriptors
     FROM user_albums ua
     JOIN albums a ON a.id = ua.album_id
-    WHERE ua.user_id = ? ${hiddenFilter}
+    WHERE ua.user_id = ? ${hiddenFilter} AND (ua.is_queued = 0 OR ua.is_queued IS NULL)
   `).bind(userId).all<{ country: string; genre: string; subgenres: string; descriptors: string }>();
 
   const countrySet    = new Set<string>();

@@ -184,7 +184,7 @@ if (Astro.request.method === 'POST') {
 
   await db.prepare(`
     UPDATE albums SET
-      logged_by_user_ids = (SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ?),
+      logged_by_user_ids = (SELECT json_group_array(user_id) FROM user_albums WHERE album_id = ? AND (is_queued = 0 OR is_queued IS NULL)),
       all_subgenres      = COALESCE((SELECT json_group_array(subgenre)    FROM (SELECT DISTINCT subgenre    FROM user_album_subgenres  WHERE album_id = ?)), '[]'),
       all_descriptors    = COALESCE((SELECT json_group_array(descriptor)  FROM (SELECT DISTINCT descriptor  FROM user_album_descriptors WHERE album_id = ?)), '[]'),
       genre_counts       = COALESCE((SELECT json_group_object(genre, cnt) FROM (SELECT genre, COUNT(*) as cnt FROM user_albums WHERE album_id = ? AND genre != '' GROUP BY genre)), '{}'),

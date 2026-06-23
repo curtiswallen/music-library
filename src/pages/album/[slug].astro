@@ -38,7 +38,7 @@ const [
     SELECT u.display_name, u.profile_url, u.avatar_url, ua.rating, ua.genre, ua.added_at
     FROM user_albums ua
     JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-    WHERE ua.album_id = ? AND ua.is_hidden = 0
+    WHERE ua.album_id = ? AND ua.is_hidden = 0 AND (ua.is_queued = 0 OR ua.is_queued IS NULL)
     ORDER BY ua.added_at DESC
     LIMIT 10
   `).bind(album.id).all<{
@@ -182,12 +182,12 @@ function fmtLen(seconds: number | null): string {
 
 const loggedInUser = Astro.locals.user;
 
-let myEntry = false;
+let myEntry: 'none' | 'queued' | 'logged' = 'none';
 if (loggedInUser) {
   const mine = await db.prepare(
-    'SELECT 1 FROM user_albums WHERE album_id = ? AND user_id = ? LIMIT 1'
-  ).bind(album.id, loggedInUser.id).first();
-  myEntry = mine != null;
+    'SELECT is_queued FROM user_albums WHERE album_id = ? AND user_id = ? LIMIT 1'
+  ).bind(album.id, loggedInUser.id).first<{ is_queued: number }>();
+  if (mine) myEntry = mine.is_queued ? 'queued' : 'logged';
 }
 
 const artistParts  = album.artist.split(' / ').map(s => s.trim()).filter(Boolean);
@@ -253,8 +253,14 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
     </div>
     <div style="display:flex;gap:8px">
-      {loggedInUser && myEntry && (
+      {loggedInUser && myEntry === 'logged' && (
         <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">My Entry</a>
+      )}
+      {loggedInUser && myEntry === 'queued' && (
+        <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">In Queue →</a>
+      )}
+      {loggedInUser && myEntry === 'none' && (
+        <button id="queue-btn" class="btn" data-album-id={String(album.id)}>+ Queue</button>
       )}
     </div>
   </div>
@@ -536,3 +542,29 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
     flex-direction: column;
   }
 </style>
+
+<script>
+  const btn = document.getElementById('queue-btn') as HTMLButtonElement | null;
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        const res = await fetch('/api/queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ albumId: Number(btn.dataset.albumId) }),
+        });
+        if (res.ok || res.status === 409) {
+          btn.textContent = 'In Queue →';
+        } else {
+          btn.disabled = false;
+          btn.textContent = '+ Queue';
+        }
+      } catch {
+        btn.disabled = false;
+        btn.textContent = '+ Queue';
+      }
+    });
+  }
+</script>

@@ -112,7 +112,7 @@ if (Astro.request.method === 'POST') {
       genre = ?, subgenres = ?, rating = ?, notes = ?,
       tracks_data = ?, recommended = ?, is_hidden = ?,
       release_mbid = ?, release_title = ?, release_data = ?, descriptors = ?,
-      track_seconds = ?${isFirstRating ? ', added_at = CURRENT_TIMESTAMP' : ''}
+      track_seconds = ?, is_queued = 0${isFirstRating ? ', added_at = CURRENT_TIMESTAMP' : ''}
     WHERE album_id = ? AND user_id = ?
   `).bind(
     (data.get('genre') as string) || '',

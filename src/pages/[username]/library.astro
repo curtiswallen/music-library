@@ -62,7 +62,9 @@ const safeSortCol = VALID_SORTS[safeSort];
 const safeDir     = dir === 'desc' ? 'DESC' : 'ASC';
 
 // ── Filter SQL ────────────────────────────────────────────────────────────────
-const clauses: string[] = isOwner ? [] : ['ua.is_hidden = 0'];
+const clauses: string[] = isOwner
+  ? ['(ua.is_queued = 0 OR ua.is_queued IS NULL)']
+  : ['ua.is_hidden = 0', '(ua.is_queued = 0 OR ua.is_queued IS NULL)'];
 const params:  (string | number)[] = [];
 
 if (q) { clauses.push('(a.artist LIKE ? OR a.album LIKE ? OR a.search_text LIKE ?)'); params.push(`%${q}%`, `%${q}%`, `%${normalizeSearch(q)}%`); }
@@ -106,6 +108,24 @@ if (isOwner || !profileUser.is_private) {
   allDescriptors   = overview.descriptors;
   librarySubMap    = overview.subMap;
   for (const g of overview.genres) libraryGenreSet.add(g);
+}
+
+let queuedAlbums: Array<{
+  slug: string; artist: string; album: string;
+  year: number | null; cover_url: string | null; release_type: string | null;
+}> = [];
+if (isOwner) {
+  const { results: qr } = await db.prepare(`
+    SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.release_type
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+    WHERE ua.is_queued = 1
+    ORDER BY ua.added_at DESC
+  `).bind(profileUser.id).all<{
+    slug: string; artist: string; album: string;
+    year: number | null; cover_url: string | null; release_type: string | null;
+  }>();
+  queuedAlbums = qr;
 }
 
 const { groupedGenres: allGroupedGenres } = await getGenreCache(kv, db);
@@ -369,6 +389,29 @@ if (!isOwner && !profileUser.is_private) {
         </div>
       </form>
 
+      {isOwner && queuedAlbums.length > 0 && (
+        <section class="queue-section">
+          <p class="queue-heading">Queue ({queuedAlbums.length})</p>
+          <div class="queue-grid">
+            {queuedAlbums.map(a => (
+              <a href={`${base}/album/${a.slug}`} class="queue-card">
+                <div class="queue-cover">
+                  {a.cover_url && <img src={a.cover_url} alt="" loading="lazy" />}
+                </div>
+                <div class="queue-info">
+                  <span class="queue-artist">{a.artist}</span>
+                  <span class="queue-title">
+                    {a.year != null && <span class="year-chip">{a.year}</span>}
+                    {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type] ?? a.release_type}</span>}
+                    {a.album}
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
       {albums.length === 0 ? (
         <div class="empty-state">
           {isOwner
@@ -437,6 +480,28 @@ if (!isOwner && !profileUser.is_private) {
 .added-cell { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
 .album-hidden { opacity: 0.5; }
 .hidden-badge { font-size: 11px; opacity: 0.6; cursor: default; }
+
+.queue-section { margin-bottom: 24px; }
+.queue-heading {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px;
+}
+.queue-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.queue-card {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 12px; text-decoration: none; color: inherit; max-width: 300px;
+  transition: border-color 0.15s;
+}
+.queue-card:hover { border-color: var(--text-muted); }
+.queue-cover {
+  width: 36px; height: 36px; flex-shrink: 0;
+  background: var(--bg-hover); border-radius: 3px; overflow: hidden;
+}
+.queue-cover img { width: 100%; height: 100%; object-fit: cover; }
+.queue-info { display: flex; flex-direction: column; gap: 1px; overflow: hidden; min-width: 0; }
+.queue-artist { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.queue-title { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
 
 </style>
 

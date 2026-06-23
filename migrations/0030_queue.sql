@@ -1,0 +1,1 @@
+ALTER TABLE user_albums ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0;
