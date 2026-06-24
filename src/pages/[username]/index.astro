@@ -251,7 +251,7 @@ if (!isOwner && !profileUser.is_private) {
     </div>
   ) : (
     <>
-    <div id="dashboard-wrapper" data-user-base={userBase}>
+    <div id="dashboard-wrapper" data-user-base={userBase} data-tz={tz}>
       {/* ── Activity section ──────────────────────────────────────────────── */}
       <div class="activity-section">
         <div class="dash-title dash-section-header">Overall Stats</div>
@@ -600,6 +600,14 @@ if (!isOwner && !profileUser.is_private) {
             : '<div class="dash-cover dash-cover-empty"></div>';
           var albumId   = String(album.albumId || '');
 
+          var userTz = (document.getElementById('dashboard-wrapper') || {}).dataset?.tz || 'UTC';
+          var dtParts = new Intl.DateTimeFormat('en-US', {
+            timeZone: userTz, month: 'numeric', day: 'numeric', year: '2-digit',
+            hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+          }).formatToParts(new Date());
+          var dget = function(t) { return (dtParts.find(function(p){ return p.type===t; }) || {}).value || ''; };
+          var addedAtStr = dget('month')+'/'+dget('day')+'/'+dget('year')+' '+dget('hour')+':'+dget('minute');
+
           var row = document.createElement('div');
           row.className = 'dash-row dash-queue-row';
           row.dataset.albumId = albumId;
@@ -617,6 +625,7 @@ if (!isOwner && !profileUser.is_private) {
             '</a>' +
             '<div class="dash-queue-remove-wrap">' +
               '<button class="dash-queue-remove tip-left" data-album-id="' + esc(albumId) + '" type="button" aria-label="Remove from queue" data-tip="Remove from queue">×</button>' +
+              '<span class="dash-logged-date">' + addedAtStr + '</span>' +
             '</div>';
 
           list.insertBefore(row, list.firstChild);
