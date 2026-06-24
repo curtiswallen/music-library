@@ -1,6 +1,6 @@
 ---
 import Combobox from './Combobox.astro';
-import { COUNTRIES } from '../lib/utils';
+import { COUNTRIES, countryCode } from '../lib/utils';
 import { md } from '../lib/markdown';
 
 interface FormValues {
@@ -91,7 +91,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
     <div class="edit-fields">
 
       <p class="canonical-note" id="canonical-lock-note" style={hasMbid ? '' : 'display:none'}>
-        Artist, title, year, and type are locked — sourced from MusicBrainz.
+        Artist, album title, year, type, and country are locked — sourced from MusicBrainz.
       </p>
 
       {showMbSearch && (
@@ -337,21 +337,18 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
         <!-- Album meta: matches real album page structure -->
         <div class="album-meta preview-meta">
 
-          <!-- Identity: album title + artist + country -->
-          <div id="prev-identity">
-            <div class="prev-album-name" id="prev-album-name">
-              {values.album
-                ? <strong>{values.album}</strong>
-                : <span class="preview-placeholder">album title</span>
-              }
-            </div>
-            <div class="prev-artist-line" id="prev-artist-line">
-              {values.artist
-                ? <span class="prev-artist-name">{values.artist}</span>
-                : <span class="preview-placeholder">artist</span>
-              }
-              {values.country && <span class="prev-country-code">{values.country}</span>}
-            </div>
+          <!-- Identity: album title + artist + country (mirrors album-mobile-header on detail page) -->
+          <div class="album-mobile-header" id="prev-identity">
+            <p class="album-meta-artist" id="prev-artist-line">
+              {!values.artist && <span class="preview-placeholder">artist</span>}
+              {values.artist}
+              {values.artist && values.country && (
+                <span class="breadcrumb-tag">{countryCode(values.country) || values.country}</span>
+              )}
+            </p>
+            <p class="album-meta-title" id="prev-album-name">
+              {values.album || <span class="preview-placeholder">album title</span>}
+            </p>
           </div>
 
           <div class="album-upper-wrapper">
@@ -364,7 +361,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
                   : <span class="preview-placeholder">year</span>
                 }
                 {values.release_type
-                  ? <span class="album-type-badge">{values.release_type.toUpperCase()}</span>
+                  ? <span class="type-chip">{values.release_type}</span>
                   : <span class="preview-placeholder">type</span>
                 }
                 {values.genre
@@ -372,8 +369,8 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
                   : <span class="preview-placeholder">genre</span>
                 }
                 {values.rating != null
-                  ? <span class={`rating ${ratingClass(values.rating)}`}>{values.rating} / 100</span>
-                  : <span class="preview-placeholder">— / 100</span>
+                  ? <span class={`rating ${ratingClass(values.rating)}`}>{values.rating}</span>
+                  : <span class="preview-placeholder">—</span>
                 }
                 {isRecommended && <span class="rec-star" title="Recommended">★</span>}
                 {isHidden && (
@@ -450,6 +447,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
 
 <script>
 import { Marked } from 'marked';
+import { countryCode } from '../lib/utils';
 const _md = new Marked({
   gfm: true, breaks: true,
   renderer: {
@@ -483,7 +481,7 @@ function refreshPreview(): void {
   if (albumNameEl) {
     const album = val('f-album');
     albumNameEl.innerHTML = album
-      ? `<strong>${_esc(album)}</strong>`
+      ? _esc(album)
       : '<span class="preview-placeholder">album title</span>';
   }
 
@@ -496,12 +494,13 @@ function refreshPreview(): void {
     const country   = val('f-country');
     artistLineEl.innerHTML = '';
     if (artistStr) {
-      const s = document.createElement('span'); s.className = 'prev-artist-name'; s.textContent = artistStr; artistLineEl.appendChild(s);
+      artistLineEl.appendChild(document.createTextNode(artistStr));
     } else {
       artistLineEl.appendChild(_ph('artist'));
     }
-    if (country) {
-      const c = document.createElement('span'); c.className = 'prev-country-code'; c.textContent = country; artistLineEl.appendChild(c);
+    if (artistStr && country) {
+      const code = countryCode(country) || country;
+      const c = document.createElement('span'); c.className = 'breadcrumb-tag'; c.textContent = code; artistLineEl.appendChild(c);
     }
   }
 
@@ -519,7 +518,7 @@ function refreshPreview(): void {
       attrsEl.appendChild(_ph('year'));
     }
     if (releaseType) {
-      const s = document.createElement('span'); s.className = 'album-type-badge'; s.textContent = releaseType.toUpperCase(); attrsEl.appendChild(s);
+      const s = document.createElement('span'); s.className = 'type-chip'; s.textContent = releaseType; attrsEl.appendChild(s);
     } else {
       attrsEl.appendChild(_ph('type'));
     }
@@ -531,9 +530,9 @@ function refreshPreview(): void {
     {
       const s = document.createElement('span');
       if (rating) {
-        s.className = `rating ${_rc(rating)}`; s.textContent = `${rating} / 100`;
+        s.className = `rating ${_rc(rating)}`; s.textContent = String(rating);
       } else {
-        s.className = 'preview-placeholder'; s.textContent = '— / 100';
+        s.className = 'preview-placeholder'; s.textContent = '—';
       }
       attrsEl.appendChild(s);
     }

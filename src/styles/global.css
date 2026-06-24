@@ -14,6 +14,7 @@
   --yellow:       #f1c40f;
   --red:          #c0392b;
   --sketchy:      #c0392b;
+  color-scheme:   light;
 }
 
 /* ── Dark theme (system preference) ── */
@@ -33,6 +34,7 @@
     --yellow:       #f1c40f;
     --red:          #e74c3c;
     --sketchy:      #50201b;
+    color-scheme:   dark;
   }
 }
 
@@ -52,6 +54,7 @@
   --yellow:       #f1c40f;
   --red:          #e74c3c;
   --sketchy:      #50201b;
+  color-scheme:   dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -266,7 +269,7 @@ input[type="text"],
 input[type="number"],
 select,
 textarea {
-  background: var(--bg-card);
+  background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 3px;
@@ -281,6 +284,15 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--border-hover);
 }
 textarea { resize: vertical; min-height: 80px; }
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 24px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 10px 6px;
+}
 
 .form-grid {
   display: grid;
@@ -485,7 +497,7 @@ tr:hover td { background: var(--bg-hover); }
   top: calc(100% + 2px);
   left: 0;
   right: 0;
-  background: var(--bg-card);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   max-height: 220px;
@@ -714,9 +726,10 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .album-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-direction: row; }
 .album-actions .btn { flex: 1; justify-content: center; font-size: 10px; padding: 3px 6px; height: auto; }
 
-.canonical-note { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+.canonical-note { font-size: 10px; color: var(--text-muted); margin-bottom: 14px; }
 .edit-fields input[readonly],
-.edit-fields .combo-input:disabled { opacity: 0.6; background: var(--bg); cursor: default; }
+.edit-fields select:disabled,
+.edit-fields .combo-input:disabled { opacity: 0.5; background-color: var(--bg-card); cursor: default; }
 
 .album-meta { flex: 1; min-width: 0; }
 .album-mobile-header { display: none; margin-bottom: 8px; }
@@ -756,7 +769,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   color: var(--text);
   font-weight: 500;
 }
-.album-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; }
+.album-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
 .album-notes {
   color: var(--text);
   font-size: 13px;
@@ -1073,13 +1086,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 .track-rating-input {
   width: 68px;
-  padding: 3px 4px;
+  padding: 3px 20px 3px 4px;
   font-size: 12px;
-  background: var(--bg-card);
+  background-color: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 3px;
   font-family: inherit;
+  height: 33px;
 }
 .track-note-input {
   width: 100%;
@@ -1125,22 +1139,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .track-title-text { font-size: 12px; }
 .tracks-loading { color: var(--text-muted); font-size: 12px; padding: 8px 0; }
 
-/* ── Preview identity section ── */
-#prev-identity { margin-bottom: 10px; }
-.prev-album-name { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.3; }
-.prev-artist-line { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
-.prev-country-code {
-  font-size: 10px; font-family: monospace; padding: 1px 4px;
-  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 3px;
-  color: var(--text-muted);
-}
-
-/* ── Release type badge (preview + detail pages) ── */
-.album-type-badge {
-  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 2px 5px; border-radius: 3px;
-  background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-muted);
-}
+/* ── Preview panel: force the mobile-only identity header to always show ── */
+.preview-meta .album-mobile-header { display: block; margin-bottom: 8px; }
+.preview-meta .album-mobile-header .album-meta-title { font-size: 15px; margin-bottom: 4px; }
+.preview-meta .album-mobile-header .album-meta-artist { font-size: 12px; margin-bottom: 0; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
 @media (max-width: 640px) {
   /* Track form rows: 2-row grid on mobile so title/note have room */
@@ -1212,10 +1214,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
 /* ── Release select ── */
 .form-group select {
-  background: var(--bg);
+  background-color: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 6px 10px;
+  padding: 6px 24px 6px 10px;
   border-radius: 3px;
   font-size: 13px;
   font-family: inherit;
@@ -1391,7 +1393,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   top: calc(100% + 2px);
   left: 0;
   right: 0;
-  background: var(--bg-card);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   max-height: 180px;

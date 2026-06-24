@@ -257,12 +257,13 @@ function setCanonicalLocked(locked: boolean) {
   setReleaseTypeLocked(locked);
   const countryInput = document.getElementById('f-country') as HTMLInputElement | null;
   if (countryInput) countryInput.disabled = locked;
-  const countryWrap = countryInput?.closest<HTMLElement>('.combo');
-  if (countryWrap) countryWrap.style.opacity = locked ? '0.6' : '';
   const replaceBtn = document.getElementById('cover-replace-btn') as HTMLButtonElement | null;
   if (replaceBtn) replaceBtn.style.display = locked ? 'none' : '';
   const note = document.getElementById('canonical-lock-note') as HTMLElement | null;
-  if (note) note.style.display = locked ? '' : 'none';
+  if (note) {
+    note.style.display = locked ? '' : 'none';
+    if (locked) note.textContent = 'Artist, album title, year, type, and country are locked — sourced from MusicBrainz.';
+  }
 }
 
 // ── Pre-fill from URL params ──────────────────────────────────────────────────
