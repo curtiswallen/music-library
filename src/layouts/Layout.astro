@@ -35,7 +35,8 @@ const user = Astro.locals.user;
             <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
               <button class="btn" type="submit">Sign out</button>
             </form>
-            <a href="/add" class="btn icon-btn" aria-label="Add Album" data-tip="Add Album">+</a>
+            <button id="add-album-btn" class="btn icon-btn" aria-label="Log Album" data-tip="Log Album"
+                    data-profile-url={user.profile_url} type="button">+</button>
             <div class="nav-hamburger" id="nav-hamburger">
               <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
               <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
@@ -100,6 +101,22 @@ const user = Astro.locals.user;
         });
       })();
     </script>
+
+    <!-- Album-pick modal (search MB → navigate to /add?params) -->
+    <div id="ap-modal" class="confirm-overlay" style="display:none">
+      <div class="qa-box">
+        <div class="qa-header">
+          <span class="qa-title">Log an Album</span>
+          <button id="ap-close" class="btn" type="button">×</button>
+        </div>
+        <div style="position:relative">
+          <input id="ap-input" type="text" class="search-input qa-search-input"
+                 placeholder="Search MusicBrainz..." autocomplete="off" spellcheck="false" />
+          <span id="ap-spinner" class="spinner" style="position:absolute;right:10px;top:50%;transform:translateY(-50%)"></span>
+        </div>
+        <div id="ap-results" class="mb-results qa-results"></div>
+      </div>
+    </div>
 
     <!-- Queue-add modal -->
     <div id="qa-modal" class="confirm-overlay" style="display:none">
@@ -171,6 +188,98 @@ const user = Astro.locals.user;
           okBtn.focus();
         });
       };
+    })();
+    </script>
+
+    <script is:inline>
+    (function () {
+      var modal    = document.getElementById('ap-modal');
+      var closeBtn = document.getElementById('ap-close');
+      var input    = document.getElementById('ap-input');
+      var spinner  = document.getElementById('ap-spinner');
+      var results  = document.getElementById('ap-results');
+      var navBtn   = document.getElementById('add-album-btn');
+      if (!modal) return;
+
+      var _timer, _seq = 0;
+      var profileUrl = (navBtn && navBtn.dataset.profileUrl) || '';
+
+      function openModal() {
+        input.value = '';
+        results.innerHTML = '';
+        results.classList.remove('open');
+        modal.style.display = 'flex';
+        setTimeout(function () { input.focus(); }, 50);
+      }
+      function closeModal() { modal.style.display = 'none'; _seq++; }
+
+      if (navBtn) navBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.style.display !== 'none') closeModal();
+      });
+
+      input.addEventListener('input', function () {
+        clearTimeout(_timer);
+        var q = input.value.trim();
+        if (q.length < 2) { results.innerHTML = ''; results.classList.remove('open'); return; }
+        _timer = setTimeout(function () { doSearch(q); }, 380);
+      });
+
+      function doSearch(q) {
+        var seq = ++_seq;
+        spinner.classList.add('active');
+        results.innerHTML = ''; results.classList.remove('open');
+        fetch('/api/musicbrainz?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(function (data) { if (seq !== _seq) return; renderItems(data); })
+          .catch(function () {
+            if (seq !== _seq) return;
+            results.innerHTML = '<p class="mb-empty">Search failed.</p>';
+            results.classList.add('open');
+          })
+          .finally(function () { if (seq === _seq) spinner.classList.remove('active'); });
+      }
+
+      function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+
+      function renderItems(items) {
+        if (!items || !items.length) {
+          results.innerHTML = '<p class="mb-empty">No results.</p>';
+          results.classList.add('open');
+          return;
+        }
+        results.innerHTML = items.map(function (r, i) {
+          return '<div class="mb-item' + (r.inLibrary ? ' mb-item-in-library' : '') + '" data-i="' + i + '">'
+            + '<div class="mb-thumb-wrap"><img class="mb-thumb" src="' + esc(r.coverUrl) + '" alt=""'
+            + ' onerror="this.style.opacity=\'0\'" loading="lazy" /></div>'
+            + '<div class="mb-info"><strong>' + esc(r.title) + '</strong>'
+            + '<span>' + esc(r.artist) + (r.year ? ' · ' + r.year : '')
+            + (r.inLibrary ? ' <span class="mb-in-library-badge">In library</span>' : '') + '</span>'
+            + '</div></div>';
+        }).join('');
+        results.classList.add('open');
+        var stored = items.slice();
+        results.querySelectorAll('.mb-item').forEach(function (el, i) {
+          el.addEventListener('click', function () { pickItem(stored[i]); });
+        });
+      }
+
+      function pickItem(r) {
+        if (r.inLibrary && r.slug && profileUrl) {
+          window.location.href = '/' + profileUrl + '/album/' + r.slug;
+          return;
+        }
+        var p = new URLSearchParams();
+        if (r.dbId != null) p.set('dbId', String(r.dbId));
+        if (r.mbid)         p.set('mbid', r.mbid);
+        window.location.href = '/add?' + p.toString();
+      }
+
+      window.showAlbumPick = openModal;
     })();
     </script>
 

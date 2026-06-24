@@ -4,6 +4,7 @@
 interface Window {
   showConfirm(message: string, okLabel?: string, opts?: { coverUrl?: string; albumName?: string }): Promise<boolean>;
   showQueueAdd(onQueued?: (album: { slug: string; title: string; artist: string; year?: string; coverUrl?: string; releaseType?: string; albumId: number }) => void): void;
+  showAlbumPick(): void;
 }
 
 declare namespace Cloudflare {

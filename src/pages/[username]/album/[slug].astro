@@ -383,13 +383,6 @@ if (!isOwner && !profileUser.is_private) {
 const logAlbumParams = new URLSearchParams();
 logAlbumParams.set('dbId', String(album.id));
 if (album.mbid) logAlbumParams.set('mbid', album.mbid);
-logAlbumParams.set('title', album.album);
-logAlbumParams.set('artist', album.artist);
-if (album.year != null) logAlbumParams.set('year', String(album.year));
-if (album.country) logAlbumParams.set('country', album.country);
-if (album.cover_url) logAlbumParams.set('cover', album.cover_url);
-if (album.release_type) logAlbumParams.set('releaseType', album.release_type);
-if (album.artist_mbid) logAlbumParams.set('artistMbid', album.artist_mbid);
 const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 ---
 

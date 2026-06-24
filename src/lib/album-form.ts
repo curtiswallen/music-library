@@ -33,10 +33,7 @@ function fmtLen(s: number | null): string {
   if (s == null) return '';
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-function parseLenInput(v: string): number | null {
-  const m = v.match(/^(\d+):(\d{1,2})$/);
-  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
-}
+
 function totalLen(ts: TrackData[]): string {
   const t = ts.reduce((s, t) => s + (t.length ?? 0), 0);
   if (!t) return '';
@@ -287,8 +284,8 @@ export function initAlbumForm() {
     tbody.innerHTML = tracks.map((t, i) => `
       <tr>
         <td class="track-num">${i + 1}</td>
-        <td><input class="track-title-input ti" type="text" value="${esc(t.title)}" data-i="${i}" data-f="title"></td>
-        <td class="track-len"><input class="track-len-input ti" type="text" value="${fmtLen(t.length)}" placeholder="m:ss" data-i="${i}" data-f="length"></td>
+        <td class="track-title-text">${esc(t.title)}</td>
+        <td class="track-len">${fmtLen(t.length)}</td>
         <td class="track-rating-cell">
           <select class="track-rating-input ti" data-i="${i}" data-f="rating">
             <option value="">—</option>
@@ -300,24 +297,20 @@ export function initAlbumForm() {
           <input type="checkbox" class="ti" data-i="${i}" data-f="notable"${t.notable ? ' checked' : ''} style="display:none">
         </td>
         <td><input class="track-note-input ti" type="text" value="${esc(t.note)}" placeholder="Note..." data-i="${i}" data-f="note"></td>
-        <td><button type="button" class="track-remove-btn" data-i="${i}">×</button></td>
       </tr>
     `).join('');
     const tot = totalLen(tracks);
     tfoot.innerHTML = tot
-      ? `<tr class="tracks-total-row"><td class="track-num"></td><td></td><td class="track-len tracks-total">${tot}</td><td colspan="4"></td></tr>`
+      ? `<tr class="tracks-total-row"><td class="track-num"></td><td></td><td class="track-len tracks-total">${tot}</td><td colspan="3"></td></tr>`
       : '';
     tbody.querySelectorAll<HTMLElement>('.ti').forEach(el => {
       el.addEventListener('change', () => {
         const inp = el as HTMLInputElement;
         const i = parseInt(inp.dataset.i!), f = inp.dataset.f!;
-        if      (f === 'title')   tracks[i].title   = inp.value;
-        else if (f === 'length')  tracks[i].length  = parseLenInput(inp.value);
-        else if (f === 'rating')  tracks[i].rating  = inp.value ? parseInt(inp.value) : null;
+        if      (f === 'rating')  tracks[i].rating  = inp.value ? parseInt(inp.value) : null;
         else if (f === 'notable') tracks[i].notable = inp.checked;
         else if (f === 'note')    tracks[i].note    = inp.value;
-        if (f === 'length') renderTracks();
-        else saveTracks();
+        saveTracks();
       });
     });
     tbody.querySelectorAll<HTMLButtonElement>('.track-notable-btn').forEach(btn => {
@@ -331,16 +324,8 @@ export function initAlbumForm() {
         saveTracks();
       });
     });
-    tbody.querySelectorAll<HTMLButtonElement>('.track-remove-btn').forEach(btn => {
-      btn.addEventListener('click', () => { tracks.splice(parseInt(btn.dataset.i!), 1); renderTracks(); });
-    });
     saveTracks();
   }
-
-  document.getElementById('add-track-btn')!.addEventListener('click', () => {
-    tracks.push({ pos: tracks.length + 1, title: '', length: null, rating: null, note: '' });
-    renderTracks();
-  });
 
   renderTracks();
 

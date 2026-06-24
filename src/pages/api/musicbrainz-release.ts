@@ -39,13 +39,20 @@ export const GET: APIRoute = async ({ url }) => {
     const tracks = (rel.media ?? []).flatMap(m =>
       (m.tracks ?? []).map(t => {
         let title = t.title;
+        const ac = t.recording?.['artist-credit'] ?? [];
         if (isSplit) {
-          const ac = t.recording?.['artist-credit'] ?? [];
           const trackArtist = ac
-            .map(c => (c.artist?.name ?? '') + (c.joinphrase ?? ''))
+            .map(c => (c.name ?? c.artist?.name ?? '') + (c.joinphrase ?? ''))
             .join('')
             .trim();
           if (trackArtist) title = `${trackArtist} - ${title}`;
+        } else if (ac.length > 1) {
+          // Append featured/additional artists using the joinphrase from the first credit
+          // e.g. [{artist: "Main", joinphrase: " feat. "}, {artist: "Feature", joinphrase: ""}]
+          // → title + " feat. Feature"
+          const featSuffix = (ac[0].joinphrase ?? '')
+            + ac.slice(1).map(c => (c.name ?? c.artist?.name ?? '') + (c.joinphrase ?? '')).join('');
+          if (featSuffix.trim()) title = title + featSuffix;
         }
         return {
           pos:    ++pos,
@@ -70,6 +77,7 @@ const json = (data: unknown) =>
 
 interface ArtistCredit {
   artist?: { id: string; name: string };
+  name?: string;
   joinphrase?: string;
 }
 

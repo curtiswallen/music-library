@@ -49,6 +49,7 @@ if (Astro.request.method === 'POST') {
 
   let albumId: number;
   let albumSlug: string;
+  let canonicalArtistMbid = artistMbid;
 
   if (dbAlbumId) {
     const existing = await db.prepare('SELECT id, slug FROM albums WHERE id = ?')
@@ -63,70 +64,56 @@ if (Astro.request.method === 'POST') {
       albumId   = existing.id;
       albumSlug = existing.slug;
     } else {
-      // Check for a manually-added row with matching artist+title that hasn't been linked to MB yet
-      const manualMatch = await db.prepare(
-        'SELECT id, slug FROM albums WHERE mbid IS NULL AND LOWER(artist) = LOWER(?) AND LOWER(album) = LOWER(?)'
-      ).bind(artist, album).first<{ id: number; slug: string }>();
+      // Re-fetch canonical data from MB — prevents form field tampering for new albums
+      const mbRes = await fetch(
+        `https://musicbrainz.org/ws/2/release-group/${encodeURIComponent(mbid)}?inc=artist-credits&fmt=json`,
+        { headers: { 'User-Agent': 'MusicLibraryApp/0.1', Accept: 'application/json' } }
+      );
+      if (!mbRes.ok) return new Response('Invalid or unknown MBID.', { status: 400 });
+      const rg = await mbRes.json() as {
+        title: string;
+        'first-release-date'?: string;
+        'primary-type'?: string;
+        'secondary-types'?: string[];
+        'artist-credit'?: Array<{ artist?: { id: string; name: string }; name?: string; joinphrase?: string }>;
+      };
+      const credits     = rg['artist-credit'] ?? [];
+      const mbArtist    = credits.map(c => (c.name ?? c.artist?.name ?? '') + (c.joinphrase ?? '')).join('');
+      const mbArtistId  = credits[0]?.artist?.id ?? null;
+      const mbYear      = rg['first-release-date']?.slice(0, 4) ? parseInt(rg['first-release-date']!.slice(0, 4)) : null;
+      const mbPrimary   = (rg['primary-type'] ?? '').toLowerCase();
+      const mbSecondary = (rg['secondary-types'] ?? []).map((s: string) => s.toLowerCase());
+      const mbType      = mbSecondary.includes('demo')        ? 'demo'
+                        : mbSecondary.includes('compilation') ? 'compilation'
+                        : mbPrimary === 'album'               ? 'lp'
+                        : mbPrimary === 'ep'                  ? 'ep'
+                        : mbPrimary === 'single'              ? 'single'
+                        : mbPrimary                           ? 'other' : null;
 
-      if (manualMatch) {
-        // Upgrade the existing row with MB data; preserve its slug so existing user URLs stay valid
-        await db.prepare(`
-          UPDATE albums SET
-            mbid = ?, artist = ?, album = ?, country = ?, year = ?,
-            cover_url = ?, tracks = ?, search_text = ?, artist_mbid = ?, release_type = ?
-          WHERE id = ?
-        `).bind(
-          mbid, artist, album,
-          (data.get('country') as string) || '',
-          data.get('year') ? parseInt(data.get('year') as string) : null,
-          (data.get('cover_url') as string) || null,
-          canonicalTracks,
-          normalizeSearch(`${artist} ${album}`),
-          artistMbid, releaseType,
-          manualMatch.id,
-        ).run();
-        albumId   = manualMatch.id;
-        albumSlug = manualMatch.slug;
-      } else {
-        albumSlug = await generateUniqueSlug(db, artist, album);
-        const r = await db.prepare(`
-          INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text, artist_mbid, release_type)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          mbid, albumSlug, artist, album,
-          (data.get('country') as string) || '',
-          data.get('year') ? parseInt(data.get('year') as string) : null,
-          (data.get('cover_url') as string) || null,
-          canonicalTracks,
-          normalizeSearch(`${artist} ${album}`),
-          artistMbid, releaseType,
-        ).run();
-        albumId = r.meta.last_row_id as number;
-      }
-    }
-  } else {
-    const existing = await db.prepare(
-      'SELECT id, slug FROM albums WHERE LOWER(artist) = LOWER(?) AND LOWER(album) = LOWER(?)'
-    ).bind(artist, album).first<{ id: number; slug: string }>();
-    if (existing) {
-      albumId   = existing.id;
-      albumSlug = existing.slug;
-    } else {
-      albumSlug = await generateUniqueSlug(db, artist, album);
+      const canonicalArtist = mbArtist || artist;
+      const canonicalTitle  = rg.title  || album;
+      canonicalArtistMbid   = mbArtistId ?? artistMbid;
+
+      albumSlug = await generateUniqueSlug(db, canonicalArtist, canonicalTitle);
       const r = await db.prepare(`
-        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text, artist_mbid, release_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO albums (mbid, slug, artist, album, country, year, cover_url, tracks, search_text, artist_mbid, release_type, first_logged_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        null, albumSlug, artist, album,
+        mbid, albumSlug, canonicalArtist, canonicalTitle,
         (data.get('country') as string) || '',
-        data.get('year') ? parseInt(data.get('year') as string) : null,
+        mbYear ?? (data.get('year') ? parseInt(data.get('year') as string) : null),
         (data.get('cover_url') as string) || null,
         canonicalTracks,
-        normalizeSearch(`${artist} ${album}`),
-        artistMbid, releaseType,
+        normalizeSearch(`${canonicalArtist} ${canonicalTitle}`),
+        canonicalArtistMbid, mbType ?? releaseType,
+        user.id,
       ).run();
       albumId = r.meta.last_row_id as number;
+      await db.prepare('UPDATE users SET first_logs_count = first_logs_count + 1 WHERE id = ?')
+        .bind(user.id).run();
     }
+  } else {
+    return new Response('An MBID is required to log an album.', { status: 400 });
   }
 
   const alreadyLogged = await db.prepare(
@@ -199,9 +186,9 @@ if (Astro.request.method === 'POST') {
 
   if (artist.includes(' / ') && mbid) {
     Astro.locals.cfContext.waitUntil(syncAllArtistsForAlbum(db, mbid));
-  } else if (artistMbid) {
+  } else if (canonicalArtistMbid) {
     const primaryArtist = artist.split(' / ')[0].trim();
-    Astro.locals.cfContext.waitUntil(syncArtistData(db, artistMbid, primaryArtist));
+    Astro.locals.cfContext.waitUntil(syncArtistData(db, canonicalArtistMbid, primaryArtist));
   }
 
   return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
@@ -230,221 +217,12 @@ const [{ genreMap, groupedGenres }, canonicalDescriptors] = await Promise.all([
 </Layout>
 
 <script>
-import { initAlbumForm, setArtists, setDescriptors, populateReleaseSelect, readGenreMap } from '../lib/album-form';
+import { initAlbumForm, setArtists, setDescriptors, populateReleaseSelect } from '../lib/album-form';
 import type { TrackData } from '../lib/album-form';
-
-interface MBResult {
-  mbid:        string;
-  title:       string;
-  artist:      string;
-  artists:     string[];
-  artistId:    string;
-  year:        string;
-  tags:        string[];
-  coverUrl:    string;
-  releaseType: string;
-  dbId?:       number;
-  country?:    string;
-  slug?:       string;
-  fromDb?:     boolean;
-  inLibrary?:  boolean;
-  dbTracks?:   Array<{ pos: number; title: string; length: number | null }>;
-}
 
 const profileUrl = (document.getElementById('add-wrapper') as HTMLElement).dataset.profileUrl!;
 
-const { setTracks, renderSubgenreWidget, setSelectedSubs } = initAlbumForm();
-
-// ── MusicBrainz search ──────────────────────────────────────────────────────
-const searchInput = document.getElementById('mb-search') as HTMLInputElement;
-const resultsEl   = document.getElementById('mb-results') as HTMLDivElement;
-const spinner     = document.getElementById('mb-spinner') as HTMLSpanElement;
-
-let timer: ReturnType<typeof setTimeout>;
-let searchSeq = 0;
-
-searchInput.addEventListener('input', () => {
-  clearTimeout(timer);
-  const q = searchInput.value.trim();
-  if (q.length < 2) { closeResults(); return; }
-  timer = setTimeout(() => doSearch(q), 380);
-});
-
-async function doSearch(q: string) {
-  const seq = ++searchSeq;
-  spinner.classList.add('active');
-  closeResults();
-  try {
-    const res  = await fetch(`/api/musicbrainz?q=${encodeURIComponent(q)}`);
-    if (seq !== searchSeq) return;
-    const data = await res.json() as MBResult[];
-    renderResults(data);
-  } catch {
-    if (seq !== searchSeq) return;
-    resultsEl.innerHTML = '<p class="mb-empty">Search failed.</p>';
-    resultsEl.classList.add('open');
-  } finally {
-    if (seq === searchSeq) spinner.classList.remove('active');
-  }
-}
-
-function renderResults(items: MBResult[]) {
-  if (!items.length) {
-    resultsEl.innerHTML = '<p class="mb-empty">No results.</p>';
-    resultsEl.classList.add('open');
-    return;
-  }
-  resultsEl.innerHTML = items.map((r, i) => `
-    <div class="mb-item${r.inLibrary ? ' mb-item-in-library' : ''}" data-i="${i}">
-      <div class="mb-thumb-wrap">
-        <img class="mb-thumb" src="${esc(r.coverUrl)}" alt=""
-             onerror="this.style.opacity='0'" loading="lazy" />
-      </div>
-      <div class="mb-info">
-        <strong>${esc(r.title)}</strong>
-        <span>${esc(r.artist)}${r.year ? ' · ' + r.year : ''}${r.inLibrary ? ' <span class="mb-in-library-badge">In library</span>' : ''}</span>
-      </div>
-    </div>
-  `).join('');
-  resultsEl.classList.add('open');
-  resultsEl.querySelectorAll('.mb-item').forEach((el, i) => {
-    el.addEventListener('click', () => pick(items[i]));
-  });
-}
-
-function pick(r: MBResult) {
-  if (r.inLibrary && r.slug) {
-    window.location.href = `/${profileUrl}/album/${r.slug}`;
-    return;
-  }
-  set('f-mbid',        r.mbid ?? '');
-  set('f-db-album-id', r.dbId ? String(r.dbId) : '');
-  set('f-artist-mbid', r.artistId ?? '');
-  set('f-release-type', r.releaseType ?? '');
-  setCanonicalLocked(!!r.mbid);
-  setArtists(r.artists?.length ? r.artists : r.artist.split(' / '));
-  set('f-album',  r.title);
-  set('f-year',   r.year);
-  searchInput.value = `${r.artist} — ${r.title}`;
-
-  if (r.tags?.length) resolveGenre(r.tags);
-
-  if (r.country) {
-    set('f-country', r.country);
-  } else if (r.artistId) {
-    fetch(`/api/musicbrainz-artist?id=${encodeURIComponent(r.artistId)}`)
-      .then(res => res.json())
-      .then(data => { const d = data as { country: string }; if (d.country) set('f-country', d.country); })
-      .catch(() => {});
-  }
-
-  if (r.dbTracks?.length && !r.mbid) {
-    setTracks(r.dbTracks.map(t => ({ pos: t.pos, title: t.title, length: t.length, rating: null, notable: false, note: '' })));
-  } else if (r.mbid) {
-    const loadingEl = document.getElementById('tracks-loading') as HTMLElement;
-    loadingEl.hidden = false;
-    setTracks([]);
-    fetch(`/api/musicbrainz-release?id=${encodeURIComponent(r.mbid)}`)
-      .then(res => res.json())
-      .then(data => { setTracks(data as TrackData[]); })
-      .catch(() => {})
-      .finally(() => { loadingEl.hidden = true; });
-  }
-
-  // Reset release select, then fetch releases if we have an MBID
-  populateReleaseSelect([]);
-  set('f-release-mbid', '');
-  set('f-release-title', '');
-  if (r.mbid) {
-    fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(r.mbid)}`)
-      .then(res => res.json())
-      .then(data => { populateReleaseSelect(data as Array<{ id: string; label: string; data?: unknown }>); })
-      .catch(() => {});
-  }
-
-  const coverPreview    = document.getElementById('cover-preview')    as HTMLElement;
-  const coverUploadWrap = document.getElementById('cover-upload-wrap') as HTMLElement;
-  const img             = document.getElementById('cover-img')        as HTMLImageElement;
-  if (r.coverUrl) {
-    img.onload  = () => {
-      img.style.display = '';
-      set('f-cover-url', r.coverUrl);
-      coverPreview.style.display    = 'block';
-      coverUploadWrap.style.display = 'none';
-    };
-    img.onerror = () => {
-      set('f-cover-url', '');
-      coverPreview.style.display    = 'none';
-      coverUploadWrap.style.display = '';
-    };
-    img.src = r.coverUrl;
-  } else {
-    set('f-cover-url', '');
-    coverPreview.style.display    = 'none';
-    coverUploadWrap.style.display = '';
-  }
-
-  closeResults();
-  document.getElementById('album-form')?.dispatchEvent(new Event('input'));
-
-  // Reveal the "Add to Queue" shortcut once an album is selected
-  const qBtn = document.getElementById('add-to-queue-btn') as HTMLButtonElement | null;
-  if (qBtn) {
-    qBtn.style.display = '';
-    qBtn.dataset.mbid        = r.mbid        ?? '';
-    qBtn.dataset.title       = r.title       ?? '';
-    qBtn.dataset.artist      = r.artist      ?? '';
-    qBtn.dataset.year        = r.year        ?? '';
-    qBtn.dataset.coverUrl    = r.coverUrl    ?? '';
-    qBtn.dataset.releaseType = r.releaseType ?? '';
-    qBtn.dataset.artistMbid  = r.artistId    ?? '';
-    qBtn.dataset.dbId        = r.dbId        != null ? String(r.dbId) : '';
-  }
-}
-
-function resolveGenre(tags: string[]) {
-  const genreInput = document.getElementById('f-genre') as HTMLInputElement;
-  if (genreInput.value) return;
-
-  const genreNames = Object.keys(readGenreMap());
-  // Broad tags that should lose to any specific match
-  const GENERIC = new Set(['rock', 'pop', 'electronic', 'folk', 'jazz', 'classical',
-                            'blues', 'country', 'world music', 'experimental', 'ambient', 'metal']);
-
-  // Collect exact matches across all tags (tags are ordered by MB vote count)
-  const exactMatches: string[] = [];
-  for (const t of tags) {
-    const key = genreNames.find(k => k.toLowerCase() === t.trim().toLowerCase());
-    if (key && !exactMatches.includes(key)) exactMatches.push(key);
-  }
-
-  // Prefer specific over generic; fall back to first exact match
-  const best = exactMatches.find(k => !GENERIC.has(k.toLowerCase())) ?? exactMatches[0];
-  if (best) {
-    set('f-genre', best);
-    setSelectedSubs([]);
-    return;
-  }
-
-  // No exact match: try partial match across all tags (handles "melodic black metal" → genre + subgenre)
-  for (const t of tags) {
-    const tag = t.trim().toLowerCase();
-    const matchKey = genreNames.find(k => tag.includes(k.toLowerCase()));
-    if (matchKey) {
-      set('f-genre', matchKey);
-      const prefix = tag.replace(matchKey.toLowerCase(), '').trim();
-      setSelectedSubs([]);
-      renderSubgenreWidget();
-      if (prefix) {
-        const prefixTitle = prefix.replace(/\b\w/g, c => c.toUpperCase());
-        const subChips = document.querySelectorAll<HTMLButtonElement>('.subgenre-chip');
-        const match = Array.from(subChips).find(c => c.dataset.sub?.toLowerCase() === prefixTitle.toLowerCase());
-        if (match) match.click();
-      }
-      return;
-    }
-  }
-}
+const { setTracks, renderSubgenreWidget: _rsg, setSelectedSubs } = initAlbumForm();
 
 function set(id: string, val: string) {
   const el = document.getElementById(id) as HTMLInputElement;
@@ -486,125 +264,105 @@ function setCanonicalLocked(locked: boolean) {
   const note = document.getElementById('canonical-lock-note') as HTMLElement | null;
   if (note) note.style.display = locked ? '' : 'none';
 }
-function closeResults() { resultsEl.classList.remove('open'); resultsEl.innerHTML = ''; }
 
-document.getElementById('clear-form-btn')?.addEventListener('click', () => {
-  const qBtn = document.getElementById('add-to-queue-btn') as HTMLButtonElement | null;
-  if (qBtn) qBtn.style.display = 'none';
-  searchInput.value = '';
-  closeResults();
-  setArtists(['']);
-  set('f-mbid', '');
-  set('f-db-album-id', '');
-  set('f-artist-mbid', '');
-  set('f-release-type', '');
-  setCanonicalLocked(false);
-  set('f-album', '');
-  set('f-year', '');
-  set('f-country', '');
-  set('f-genre', '');
-  setSelectedSubs([]);
-  set('f-cover-url', '');
-  set('f-release-mbid', '');
-  set('f-release-title', '');
-  set('f-release-data', '');
-  setDescriptors([]);
-  setTracks([]);
-  populateReleaseSelect([]);
-  const notes = document.getElementById('f-notes') as HTMLTextAreaElement | null;
-  if (notes) notes.value = '';
-  (document.getElementById('clear-rating') as HTMLButtonElement | null)?.click();
-  const img = document.getElementById('cover-img') as HTMLImageElement | null;
-  if (img) img.src = '';
-  const coverPreview    = document.getElementById('cover-preview')     as HTMLElement | null;
-  const coverUploadWrap = document.getElementById('cover-upload-wrap') as HTMLElement | null;
-  if (coverPreview)    coverPreview.style.display    = 'none';
-  if (coverUploadWrap) coverUploadWrap.style.display = '';
-  const recommended = document.querySelector<HTMLInputElement>('[name="recommended"]');
-  const isHidden    = document.querySelector<HTMLInputElement>('[name="is_hidden"]');
-  if (recommended) recommended.checked = false;
-  if (isHidden)    isHidden.checked    = false;
-  document.getElementById('rec-btn')?.classList.remove('active');
-  document.getElementById('hidden-btn')?.classList.remove('active');
-  const loadingEl = document.getElementById('tracks-loading') as HTMLElement | null;
-  if (loadingEl) loadingEl.hidden = true;
-  document.getElementById('album-form')?.dispatchEvent(new Event('input'));
-});
-
-function esc(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-document.addEventListener('click', e => {
-  if (!(e.target as Element).closest('.mb-wrap')) closeResults();
-});
-
-// ── Pre-fill from URL params (e.g. "Log Album" on album detail pages) ───────
+// ── Pre-fill from URL params ──────────────────────────────────────────────────
 (function () {
-  const params      = new URLSearchParams(window.location.search);
-  const dbId        = params.get('dbId');
-  const mbid        = params.get('mbid');
-  const title       = params.get('title');
-  const artist      = params.get('artist');
-  const year        = params.get('year');
-  const cover       = params.get('cover');
-  const country     = params.get('country');
-  const releaseType = params.get('releaseType');
-  const artistMbid  = params.get('artistMbid');
+  const params = new URLSearchParams(window.location.search);
+  const dbId   = params.get('dbId');
+  const mbid   = params.get('mbid');
 
-  if (!title && !artist) return;
-
-  const mbWrap = document.querySelector<HTMLElement>('.mb-wrap');
-  if (mbWrap) mbWrap.style.display = 'none';
-
-  set('f-mbid',        mbid        ?? '');
-  set('f-db-album-id', dbId        ?? '');
-  set('f-artist-mbid', artistMbid  ?? '');
-  set('f-release-type', releaseType ?? '');
-  setArtists(artist ? artist.split(' / ') : ['']);
-  set('f-album',   title   ?? '');
-  set('f-year',    year    ?? '');
-  set('f-country', country ?? '');
-  setCanonicalLocked(!!mbid);
-
-  if (cover) {
-    const img             = document.getElementById('cover-img')         as HTMLImageElement | null;
-    const coverPreview    = document.getElementById('cover-preview')     as HTMLElement | null;
-    const coverUploadWrap = document.getElementById('cover-upload-wrap') as HTMLElement | null;
-    if (img) {
-      img.onload  = () => { img.style.display = ''; set('f-cover-url', cover); if (coverPreview) coverPreview.style.display = 'block'; if (coverUploadWrap) coverUploadWrap.style.display = 'none'; };
-      img.onerror = () => { set('f-cover-url', ''); if (coverPreview) coverPreview.style.display = 'none'; if (coverUploadWrap) coverUploadWrap.style.display = ''; };
-      img.src = cover;
-    }
+  if (!mbid && !dbId) {
+    // No album selected — open search modal
+    setTimeout(function () {
+      if (typeof window.showAlbumPick === 'function') window.showAlbumPick();
+    }, 0);
+    return;
   }
 
-  if (mbid) {
-    const loadingEl = document.getElementById('tracks-loading') as HTMLElement | null;
-    if (loadingEl) loadingEl.hidden = false;
-    setTracks([]);
-    fetch(`/api/musicbrainz-release?id=${encodeURIComponent(mbid)}`)
-      .then(res => res.json())
-      .then(data => { setTracks(data as TrackData[]); })
-      .catch(() => {})
-      .finally(() => { if (loadingEl) loadingEl.hidden = true; });
-    fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(mbid)}`)
-      .then(res => res.json())
-      .then(data => { populateReleaseSelect(data as Array<{ id: string; label: string; data?: unknown }>); })
-      .catch(() => {});
-  }
+  // Set hidden ID fields immediately
+  if (mbid) set('f-mbid', mbid);
+  if (dbId) set('f-db-album-id', dbId);
 
-  const qBtn = document.getElementById('add-to-queue-btn') as HTMLButtonElement | null;
-  if (qBtn) {
-    qBtn.style.display     = '';
-    qBtn.dataset.mbid        = mbid        ?? '';
-    qBtn.dataset.title       = title       ?? '';
-    qBtn.dataset.artist      = artist      ?? '';
-    qBtn.dataset.year        = year        ?? '';
-    qBtn.dataset.coverUrl    = cover       ?? '';
-    qBtn.dataset.releaseType = releaseType ?? '';
-    qBtn.dataset.artistMbid  = artistMbid  ?? '';
-    qBtn.dataset.dbId        = dbId        ?? '';
-  }
+  if (!mbid) return; // dbId-only (old manual entry) — nothing to fetch from MB
+
+  // Disable submit and show loading state while fetching canonical data from MB
+  const submitBtn = document.querySelector<HTMLButtonElement>('[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  const note = document.getElementById('canonical-lock-note') as HTMLElement | null;
+  if (note) { note.style.display = ''; note.textContent = 'Loading album data from MusicBrainz…'; }
+
+  type RGInfo = { title: string; artist: string; artists: string[]; year: string | null; releaseType: string | null; artistMbid: string | null; coverUrl: string };
+
+  fetch(`/api/mb-rginfo?id=${encodeURIComponent(mbid)}`)
+    .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json() as Promise<RGInfo>; })
+    .then(d => {
+      setArtists(d.artists?.length ? d.artists : (d.artist ? d.artist.split(' / ') : ['']));
+      set('f-album',        d.title       ?? '');
+      set('f-year',         d.year        ?? '');
+      set('f-artist-mbid',  d.artistMbid  ?? '');
+      set('f-release-type', d.releaseType ?? '');
+      setCanonicalLocked(true);
+      if (submitBtn) submitBtn.disabled = false;
+
+      // Fetch country from artist
+      if (d.artistMbid) {
+        fetch(`/api/musicbrainz-artist?id=${encodeURIComponent(d.artistMbid)}`)
+          .then(r => r.json())
+          .then((a) => {
+            const { country } = a as { country?: string };
+            if (country) {
+              set('f-country', country);
+              document.getElementById('album-form')?.dispatchEvent(new Event('input'));
+            }
+          })
+          .catch(() => {});
+      }
+      document.getElementById('album-form')?.dispatchEvent(new Event('input'));
+
+      // Load cover art — hide upload form immediately to avoid flicker
+      const img             = document.getElementById('cover-img')         as HTMLImageElement | null;
+      const coverPreview    = document.getElementById('cover-preview')     as HTMLElement | null;
+      const coverUploadWrap = document.getElementById('cover-upload-wrap') as HTMLElement | null;
+      if (coverUploadWrap) coverUploadWrap.style.display = 'none';
+      if (img) {
+        const coverUrl = d.coverUrl;
+        img.onload  = () => { img.style.display = ''; set('f-cover-url', coverUrl); if (coverPreview) coverPreview.style.display = 'block'; };
+        img.onerror = () => { set('f-cover-url', ''); if (coverPreview) coverPreview.style.display = 'none'; if (coverUploadWrap) coverUploadWrap.style.display = ''; };
+        img.src = coverUrl;
+      }
+
+      // Load tracks and release edition select
+      const loadingEl = document.getElementById('tracks-loading') as HTMLElement | null;
+      if (loadingEl) loadingEl.hidden = false;
+      setTracks([]);
+      fetch(`/api/musicbrainz-release?id=${encodeURIComponent(mbid)}`)
+        .then(res => res.json())
+        .then(data => { setTracks(data as TrackData[]); })
+        .catch(() => {})
+        .finally(() => { if (loadingEl) loadingEl.hidden = true; });
+      fetch(`/api/musicbrainz-releases?rgId=${encodeURIComponent(mbid)}`)
+        .then(res => res.json())
+        .then(data => { populateReleaseSelect(data as Array<{ id: string; label: string; data?: unknown }>); })
+        .catch(() => {});
+
+      // Populate queue button
+      const qBtn = document.getElementById('add-to-queue-btn') as HTMLButtonElement | null;
+      if (qBtn) {
+        qBtn.style.display       = '';
+        qBtn.dataset.mbid        = mbid;
+        qBtn.dataset.title       = d.title       ?? '';
+        qBtn.dataset.artist      = d.artist      ?? '';
+        qBtn.dataset.year        = d.year        ?? '';
+        qBtn.dataset.coverUrl    = d.coverUrl    ?? '';
+        qBtn.dataset.releaseType = d.releaseType ?? '';
+        qBtn.dataset.artistMbid  = d.artistMbid  ?? '';
+        qBtn.dataset.dbId        = dbId          ?? '';
+      }
+    })
+    .catch(() => {
+      if (note) note.textContent = 'Could not load album data. This MusicBrainz ID may be invalid.';
+      // submitBtn stays disabled — prevents logging with no canonical data
+    });
 })();
 
 // ── "Add to Queue" shortcut button ─────────────────────────────────────────

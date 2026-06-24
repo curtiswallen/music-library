@@ -31,6 +31,7 @@ interface Props {
   groupedGenres?: Array<{ group: string; options: string[] }>;
   canonicalDescriptors?: string[];
   includeDbAlbumId?: boolean;
+  showMbSearch?: boolean;
   submitLabel?: string;
   cancelHref?: string;
   deleteAlbumId?: number;
@@ -43,6 +44,7 @@ const {
   groupedGenres,
   canonicalDescriptors = [],
   includeDbAlbumId = false,
+  showMbSearch = false,
   submitLabel = 'Save',
   cancelHref,
   deleteAlbumId,
@@ -92,7 +94,7 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
         Artist, title, year, and type are locked — sourced from MusicBrainz.
       </p>
 
-      {includeDbAlbumId && (
+      {showMbSearch && (
         <div class="form-group mb-wrap" style="margin-bottom:24px">
           <label for="mb-search">Search MusicBrainz to autofill</label>
           <div class="mb-input-row">
@@ -334,14 +336,36 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
 
         <!-- Album meta: matches real album page structure -->
         <div class="album-meta preview-meta">
+
+          <!-- Identity: album title + artist + country -->
+          <div id="prev-identity">
+            <div class="prev-album-name" id="prev-album-name">
+              {values.album
+                ? <strong>{values.album}</strong>
+                : <span class="preview-placeholder">album title</span>
+              }
+            </div>
+            <div class="prev-artist-line" id="prev-artist-line">
+              {values.artist
+                ? <span class="prev-artist-name">{values.artist}</span>
+                : <span class="preview-placeholder">artist</span>
+              }
+              {values.country && <span class="prev-country-code">{values.country}</span>}
+            </div>
+          </div>
+
           <div class="album-upper-wrapper">
             <div class="album-header">
 
-              <!-- Attrs: year · genre · rating · rec star · hidden eye (each with its own placeholder) -->
+              <!-- Attrs: year · type · genre · rating · rec star · hidden eye -->
               <div class="album-attrs" id="prev-attrs">
                 {values.year
                   ? <span>{values.year}</span>
                   : <span class="preview-placeholder">year</span>
+                }
+                {values.release_type
+                  ? <span class="album-type-badge">{values.release_type.toUpperCase()}</span>
+                  : <span class="preview-placeholder">type</span>
                 }
                 {values.genre
                   ? <span class="album-genre-label">{values.genre}</span>
@@ -408,13 +432,11 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
                     <th class="track-rating-cell">Rating</th>
                     <th class="track-notable-cell" title="Notable track">★</th>
                     <th>Note</th>
-                    <th style="width:28px"></th>
                   </tr>
                 </thead>
                 <tbody id="tracks-tbody"></tbody>
                 <tfoot id="tracks-tfoot"></tfoot>
               </table>
-              <button type="button" class="btn tracks-add-btn" id="add-track-btn">+ Add Track</button>
             </div>
             <input type="hidden" name="tracks" id="f-tracks" value={values.tracks ?? '[]'} />
           </div>
@@ -456,10 +478,38 @@ function refreshPreview(): void {
   const $ = (id: string) => document.getElementById(id);
   const val = (id: string) => ($(id) as HTMLInputElement | null)?.value ?? '';
 
-  // Attrs row: year · genre · rating — each field has its own placeholder
+  // Identity: album name
+  const albumNameEl = $('prev-album-name');
+  if (albumNameEl) {
+    const album = val('f-album');
+    albumNameEl.innerHTML = album
+      ? `<strong>${_esc(album)}</strong>`
+      : '<span class="preview-placeholder">album title</span>';
+  }
+
+  // Identity: artist + country
+  const artistLineEl = $('prev-artist-line');
+  if (artistLineEl) {
+    const artists = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="artist"]'))
+      .map(el => el.value.trim()).filter(Boolean);
+    const artistStr = artists.join(' / ');
+    const country   = val('f-country');
+    artistLineEl.innerHTML = '';
+    if (artistStr) {
+      const s = document.createElement('span'); s.className = 'prev-artist-name'; s.textContent = artistStr; artistLineEl.appendChild(s);
+    } else {
+      artistLineEl.appendChild(_ph('artist'));
+    }
+    if (country) {
+      const c = document.createElement('span'); c.className = 'prev-country-code'; c.textContent = country; artistLineEl.appendChild(c);
+    }
+  }
+
+  // Attrs row: year · type · genre · rating — each field has its own placeholder
   const attrsEl = $('prev-attrs');
   if (attrsEl) {
-    const year   = val('f-year');
+    const year        = val('f-year');
+    const releaseType = (document.getElementById('f-release-type-val') as HTMLInputElement | null)?.value ?? '';
     const genre  = val('f-genre');
     const rating = val('f-rating');
     attrsEl.innerHTML = '';
@@ -467,6 +517,11 @@ function refreshPreview(): void {
       const s = document.createElement('span'); s.textContent = year; attrsEl.appendChild(s);
     } else {
       attrsEl.appendChild(_ph('year'));
+    }
+    if (releaseType) {
+      const s = document.createElement('span'); s.className = 'album-type-badge'; s.textContent = releaseType.toUpperCase(); attrsEl.appendChild(s);
+    } else {
+      attrsEl.appendChild(_ph('type'));
     }
     if (genre) {
       const s = document.createElement('span'); s.className = 'album-genre-label'; s.textContent = genre; attrsEl.appendChild(s);
