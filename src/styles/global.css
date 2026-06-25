@@ -1840,3 +1840,5 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .qa-search-input { width: 100%; box-sizing: border-box; }
 .qa-results { position: relative; top: 0; max-height: 260px; }
 .qa-msg { font-size: 12px; color: var(--text-muted); margin: 12px 0 4px; text-align: center; }
+#ap-modal,
+#qa-modal { align-items: flex-start; padding-top: min(12vh, 80px); overflow-y: auto; }
