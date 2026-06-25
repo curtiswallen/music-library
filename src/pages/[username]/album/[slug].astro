@@ -714,8 +714,9 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 
 <script>
 import { initAlbumForm, populateReleaseSelect } from '../../../lib/album-form';
+import type { TrackData } from '../../../lib/album-form';
 
-initAlbumForm();
+const { setTracks } = initAlbumForm();
 
 function enterEditMode() {
   document.getElementById('view-panel')!.classList.add('hidden');
@@ -732,6 +733,32 @@ function enterEditMode() {
         populateReleaseSelect(data as Array<{ id: string; label: string; data?: unknown }>, currentReleaseMbid);
       })
       .catch(() => {});
+
+    // Auto-fetch tracks if the album was queued before tracks were saved
+    const tracksInput = document.getElementById('f-tracks') as HTMLInputElement | null;
+    if (tracksInput && (tracksInput.value === '[]' || !tracksInput.value)) {
+      fetch(`/api/musicbrainz-release?id=${encodeURIComponent(mbid)}`)
+        .then(r => r.json())
+        .then(data => setTracks(data as TrackData[]))
+        .catch(() => {});
+    }
+
+    // Auto-fetch country if missing
+    const artistMbid = (document.getElementById('f-artist-mbid') as HTMLInputElement | null)?.value ?? '';
+    const countryInput = document.getElementById('f-country') as HTMLInputElement | null;
+    const countryHidden = countryInput?.closest('.combo')?.querySelector<HTMLInputElement>('.combo-hidden');
+    if (artistMbid && countryHidden && !countryHidden.value) {
+      fetch(`/api/musicbrainz-artist?id=${encodeURIComponent(artistMbid)}`)
+        .then(r => r.json())
+        .then((a: { country?: string }) => {
+          if (a.country && countryHidden) {
+            countryHidden.value = a.country;
+            if (countryInput) countryInput.value = a.country;
+            document.getElementById('album-form')?.dispatchEvent(new Event('input'));
+          }
+        })
+        .catch(() => {});
+    }
   }
 }
 
