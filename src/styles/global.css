@@ -59,9 +59,9 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* iOS Safari uses the html element's background for the safe-area and rubber-band
-   overscroll regions when viewport-fit=cover is set — must match --bg to avoid bleed. */
-/* iOS Safari uses the html element's background for rubber-band overscroll regions. */
+/* iOS fills the area around the viewport (status bar / Dynamic Island) with the html
+   background. Without viewport-fit=cover the browser handles the safe-area inset
+   automatically — this just ensures the colour matches the app theme. */
 html { background-color: var(--bg); }
 
 body {
@@ -70,13 +70,7 @@ body {
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
-  /* Push all body content below the Dynamic Island / status bar safe area.
-     The body background fills that zone, so no scrolled content ever enters it. */
-  padding-top: env(safe-area-inset-top);
 }
-
-/* #header-cover element in Layout.astro — hidden on desktop, not needed */
-#header-cover { display: none; }
 
 a { color: var(--text); text-decoration: none; }
 a:hover { color: var(--text-hi); }
@@ -91,7 +85,7 @@ nav {
   padding: 28px 28px 28px 18px;
   background-color: var(--bg);
   position: sticky;
-  top: env(safe-area-inset-top);
+  top: 0;
   right: 0;
   z-index: 100;
   width: fit-content;
@@ -306,7 +300,7 @@ select {
   gap: 16px;
   min-height: 36px;
   position: sticky;
-  top: env(safe-area-inset-top);
+  top: 0;
   background-color: var(--bg);
   z-index: 101;
 }
