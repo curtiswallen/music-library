@@ -83,6 +83,27 @@ body::before {
   pointer-events: none;
 }
 
+/* Full-width cover behind the nav/page-header on mobile.
+   z-index 99: above scrollable content but below page-header (101) and nav (100),
+   so those elements stay fully visible while content scrolling into the header zone is hidden.
+   Only active on mobile — desktop has no safe-area concern and uses float:right layout. */
+#header-cover {
+  display: none;
+}
+@media (max-width: 640px) {
+  #header-cover {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: calc(env(safe-area-inset-top) + 67px);
+    background-color: var(--bg);
+    z-index: 99;
+    pointer-events: none;
+  }
+}
+
 a { color: var(--text); text-decoration: none; }
 a:hover { color: var(--text-hi); }
 
@@ -1549,21 +1570,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 @media (max-width: 640px) {
   main { padding: 0 16px 16px 16px; }
 
-  /* Full-width nav so the entire top of the screen is covered by the nav background.
-     With float:right/width:fit-content the left portion was uncovered, letting scrolled
-     content show through into the Dynamic Island / status bar zone. */
   nav {
-    float: none;
-    width: 100%;
-    justify-content: flex-end;
-    padding: 16px;
+    padding: 16px 16px 16px 8px;
     padding-top: calc(16px + env(safe-area-inset-top));
   }
 
-  /* Page-header sticks just below the nav bottom edge (nav = safe-area + 16+35+16 = safe-area+67px) */
   .page-header {
     padding: 16px 0;
-    top: calc(env(safe-area-inset-top) + 67px);
+    padding-top: calc(16px + env(safe-area-inset-top));
+    top: 0;
     height: auto;
   }
   .form-grid { grid-template-columns: 1fr; }
