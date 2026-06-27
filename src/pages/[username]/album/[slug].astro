@@ -750,10 +750,11 @@ function enterEditMode() {
     if (artistMbid && countryHidden && !countryHidden.value) {
       fetch(`/api/musicbrainz-artist?id=${encodeURIComponent(artistMbid)}`)
         .then(r => r.json())
-        .then((a: { country?: string }) => {
-          if (a.country && countryHidden) {
-            countryHidden.value = a.country;
-            if (countryInput) countryInput.value = a.country;
+        .then((a) => {
+          const artist = a as { country?: string };
+          if (artist.country && countryHidden) {
+            countryHidden.value = artist.country;
+            if (countryInput) countryInput.value = artist.country;
             document.getElementById('album-form')?.dispatchEvent(new Event('input'));
           }
         })

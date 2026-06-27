@@ -1547,17 +1547,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 
 @media (max-width: 640px) {
-  #safari-fix {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    height: calc(env(safe-area-inset-top) + 64px);
-    background-color: var(--bg);
-    z-index: 100;
-    pointer-events: none;
-  }
   main { padding: 0 16px 16px 16px; }
   nav { padding: 16px 16px 16px 8px; padding-top: calc(16px + env(safe-area-inset-top)); }
   .page-header {
@@ -1566,10 +1555,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
     /* Bleed background to screen edges so no content peeks through on the sides */
     height: 67px;
   }
-  /* Full-width fixed backdrop behind the nav on mobile.
-     z-index 98: above scrolled content (z-index auto) but below page-header (99) and nav (100),
-     so those elements remain visible while content scrolling into the nav zone is hidden. */
-  main::before {
+  .page-header::before {
     content: '';
     position: fixed;
     top: 0;
@@ -1577,7 +1563,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
     right: 0;
     height: calc(env(safe-area-inset-top) + 64px);
     background-color: var(--bg);
-    z-index: 98;
+    z-index: 100;
     pointer-events: none;
   }
   .form-grid { grid-template-columns: 1fr; }
