@@ -1548,23 +1548,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 
 @media (max-width: 640px) {
   main { padding: 0 16px 16px 16px; }
-  nav { padding: 16px 16px 16px 8px; padding-top: calc(16px + env(safe-area-inset-top)); }
+  nav { padding: 16px 16px 16px 8px; padding-top: 32px; }
   .page-header {
-    padding: 0 0 16px 0;
-    padding-top: calc(16px + env(safe-area-inset-top));
-    /* Bleed background to screen edges so no content peeks through on the sides */
+    padding: 16px 0;
+    padding-top: 32px;
     height: 67px;
-  }
-  .page-header::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: calc(env(safe-area-inset-top) + 64px);
-    background-color: var(--bg);
-    z-index: 100;
-    pointer-events: none;
   }
   .form-grid { grid-template-columns: 1fr; }
 
