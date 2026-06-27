@@ -59,15 +59,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* --safe-top is the iOS status bar / Dynamic Island inset. With viewport-fit=cover
-   the page owns the full screen and env() reports the inset (0px everywhere else).
-   The sticky nav + page-header stick at top:0 and add this to their padding-top, so
-   their background paints over the island and tracks scroll reliably (sticky, not
-   fixed — fixed elements get composited under scrolling content on iOS). */
-html {
-  background-color: var(--bg);
-  --safe-top: env(safe-area-inset-top, 0px);
-}
+/* No viewport-fit=cover (see Layout.astro): iOS Safari insets the viewport below the
+   status bar / Dynamic Island, so page content can never scroll into that strip. The
+   strip itself is painted with the html background — keep it matched to the theme. */
+html { background-color: var(--bg); }
 
 body {
   font-family: monospace;
@@ -88,7 +83,6 @@ nav {
   display: flex;
   align-items: center;
   padding: 28px 28px 28px 18px;
-  padding-top: calc(28px + var(--safe-top));
   background-color: var(--bg);
   position: sticky;
   top: 0;
@@ -303,7 +297,6 @@ select {
   align-items: center;
   justify-content: space-between;
   padding: 28px 0;
-  padding-top: calc(28px + var(--safe-top));
   gap: 16px;
   min-height: 36px;
   position: sticky;
@@ -1543,8 +1536,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 @media (max-width: 640px) {
   main { padding: 0 16px 16px 16px; }
 
-  nav { padding: 16px 16px 16px 8px; padding-top: calc(16px + var(--safe-top)); }
-  .page-header { padding: 16px 0; padding-top: calc(16px + var(--safe-top)); height: auto; }
+  nav { padding: 16px 16px 16px 8px; }
+  .page-header { padding: 16px 0; height: auto; }
   .form-grid { grid-template-columns: 1fr; }
 
   /* Album detail: cover stays on left, album-header to its right */
