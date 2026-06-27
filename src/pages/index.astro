@@ -580,7 +580,7 @@ h1 { padding-top: 4px; }
 /* ── Filter form ─────────────────────────────────────────────────────────── */
 .gf-form { display: flex; flex-direction: column; gap: 8px; }
 
-.gf-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.gf-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; position: relative; }
 
 .gf-wrap { display: flex; flex-direction: column; gap: 10px; }
 .gf-wrap:first-child { width: 180px; }
@@ -604,13 +604,15 @@ h1 { padding-top: 4px; }
 .gf-year-wrap .gf-select { width: 72px; }
 
 .gf-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
   font-size: 16px;
   line-height: 1;
   color: var(--text-muted);
   text-decoration: none;
   padding: 4px 2px;
   border-radius: 3px;
-  align-self: flex-start;
   transition: color 0.1s;
 }
 .gf-clear:hover { color: var(--text); }
