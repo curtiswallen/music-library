@@ -203,7 +203,7 @@ if (!isOwner && !profileUser.is_private) {
     } catch (_) {}
   </script>
 
-  <div class="page-header">
+  <div class="page-header" slot="header">
     <div style="display:flex;align-items:center;gap:10px">
       {profileUser.avatar_url && <a href={`/${username}`} class="header-link"><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}
       <h1>

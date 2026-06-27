@@ -238,7 +238,7 @@ if (!isOwner && !profileUser.is_private) {
 ---
 
 <Layout title={isOwner ? 'Home' : displayName}>
-  <div class="page-header">
+  <div class="page-header" slot="header">
     <div style="display:flex;align-items:center;gap:10px">
       {profileUser.avatar_url && <img src={profileUser.avatar_url} class="profile-avatar" alt="" />}
       <h1>{displayName}</h1>

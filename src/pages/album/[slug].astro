@@ -240,7 +240,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
-  <div class="page-header">
+  <div class="page-header" slot="header">
     <div class="breadcrumb">
       <h1><a href="/">Music Library</a></h1>
       <h1><span class="breadcrumb-sep">›</span></h1>

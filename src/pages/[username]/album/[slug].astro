@@ -387,7 +387,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
-  <div class="page-header">
+  <div class="page-header" slot="header">
     <div class="breadcrumb">
       <h1>
         {profileUser.avatar_url && <a href={`/${username}`} class="header-link"><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}

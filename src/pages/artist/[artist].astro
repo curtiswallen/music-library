@@ -148,7 +148,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
 ---
 
 <Layout title={artistName}>
-  <div class="page-header artist-header">
+  <div class="page-header artist-header" slot="header">
     <div class="breadcrumb">
       <h1><a href="/">Music Library</a></h1>
       <h1><span class="breadcrumb-sep">›</span></h1>

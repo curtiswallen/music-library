@@ -69,7 +69,7 @@ if (Astro.url.searchParams.get('saved') === '1') saved = true;
 ---
 
 <Layout title="Settings">
-  <div class="page-header">
+  <div class="page-header" slot="header">
     <h1>Settings</h1>
     <a href={`/${user.profile_url}`} class="btn">← Dashboard</a>
   </div>

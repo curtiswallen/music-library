@@ -150,7 +150,7 @@ function sortedSubs(subs: string[]) {
 ---
 
 <Layout title={artistName}>
-  <div class="page-header artist-header">
+  <div class="page-header artist-header" slot="header">
     <div class="breadcrumb">
       <h1>
         {profileUser.avatar_url && <a href={`/${username}`} class="header-link"><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}

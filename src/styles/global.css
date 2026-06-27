@@ -59,9 +59,6 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* No viewport-fit=cover (see Layout.astro): iOS Safari insets the viewport below the
-   status bar / Dynamic Island, so page content can never scroll into that strip. The
-   strip itself is painted with the html background — keep it matched to the theme. */
 html { background-color: var(--bg); }
 
 body {
@@ -75,6 +72,18 @@ body {
 a { color: var(--text); text-decoration: none; }
 a:hover { color: var(--text-hi); }
 
+/* ── Site header ── */
+#site-header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: calc(28px + env(safe-area-inset-top)) 28px 28px;
+}
+
 /* ── Nav ── */
 .header-link { display: flex; }
 .breadcrumb .header-link { margin-right: 5px; }
@@ -82,14 +91,7 @@ a:hover { color: var(--text-hi); }
 nav {
   display: flex;
   align-items: center;
-  padding: 28px 28px 28px 18px;
-  background-color: var(--bg);
-  position: sticky;
-  top: 0;
-  right: 0;
-  z-index: 100;
-  width: fit-content;
-  float: right;
+  flex-shrink: 0;
 }
 
 .nav-brand {
@@ -296,13 +298,10 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 28px 0;
   gap: 16px;
   min-height: 36px;
-  position: sticky;
-  top: 0;
-  background-color: var(--bg);
-  z-index: 101;
+  flex: 1;
+  min-width: 0;
 }
 .page-header h1 { font-size: 18px; font-weight: 600; }
 .count { font-size: 12px; color: var(--text-muted); margin-left: 8px; font-weight: 400; }
@@ -1536,8 +1535,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 @media (max-width: 640px) {
   main { padding: 0 16px 16px 16px; }
 
-  nav { padding: 16px 16px 16px 8px; }
-  .page-header { padding: 16px 0; height: auto; }
+  #site-header { padding: calc(16px + env(safe-area-inset-top)) 16px 16px; gap: 8px; }
   .form-grid { grid-template-columns: 1fr; }
 
   /* Album detail: cover stays on left, album-header to its right */
