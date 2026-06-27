@@ -315,7 +315,7 @@ select {
   position: sticky;
   top: 0;
   background-color: var(--bg);
-  z-index: 99;
+  z-index: 101;
 }
 .page-header h1 { font-size: 18px; font-weight: 600; }
 .count { font-size: 12px; color: var(--text-muted); margin-left: 8px; font-weight: 400; }
@@ -1547,6 +1547,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 
 @media (max-width: 640px) {
+  #safari-fix {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: calc(env(safe-area-inset-top) + 64px);
+    background-color: var(--bg);
+    z-index: 100;
+    pointer-events: none;
+  }
   main { padding: 0 16px 16px 16px; }
   nav { padding: 16px 16px 16px 8px; padding-top: calc(16px + env(safe-area-inset-top)); }
   .page-header {
