@@ -59,10 +59,12 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* iOS fills the area around the viewport (status bar / Dynamic Island) with the html
-   background. Without viewport-fit=cover the browser handles the safe-area inset
-   automatically — this just ensures the colour matches the app theme. */
-html { background-color: var(--bg); }
+/* --safe-top is the iOS status bar / Dynamic Island inset. With viewport-fit=cover
+   the page owns the full screen and env() reports the inset (0px everywhere else). */
+html {
+  background-color: var(--bg);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
 
 body {
   font-family: monospace;
@@ -70,6 +72,25 @@ body {
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
+  /* Push the initial (unscrolled) page below the island. The chrome below pins at
+     --safe-top, so this keeps the first paint aligned with the scrolled state. */
+  padding-top: var(--safe-top);
+}
+
+/* Fixed, opaque bar that always fills the status bar / Dynamic Island region.
+   Because it is fixed (not in flow) it never scrolls away, so no page content is
+   ever visible above the header. z-index sits above all chrome/content but below
+   modal overlays (9999), which intentionally cover the whole screen. */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--safe-top);
+  background-color: var(--bg);
+  z-index: 9998;
+  pointer-events: none;
 }
 
 a { color: var(--text); text-decoration: none; }
@@ -85,7 +106,7 @@ nav {
   padding: 28px 28px 28px 18px;
   background-color: var(--bg);
   position: sticky;
-  top: 0;
+  top: var(--safe-top);
   right: 0;
   z-index: 100;
   width: fit-content;
@@ -300,7 +321,7 @@ select {
   gap: 16px;
   min-height: 36px;
   position: sticky;
-  top: 0;
+  top: var(--safe-top);
   background-color: var(--bg);
   z-index: 101;
 }
