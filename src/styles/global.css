@@ -59,6 +59,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* iOS Safari uses the html element's background for the safe-area and rubber-band
+   overscroll regions when viewport-fit=cover is set — must match --bg to avoid bleed. */
+html { background-color: var(--bg); }
+
 body {
   font-family: monospace;
   background: var(--bg);
@@ -91,14 +95,13 @@ nav {
   align-items: center;
   padding: 28px 28px 28px 18px;
   padding-top: calc(28px + env(safe-area-inset-top));
-  background: none;
+  background-color: var(--bg);
   position: sticky;
   top: 0;
   right: 0;
   z-index: 100;
   width: fit-content;
   float: right;
-  background: var(--bg);
 }
 
 .nav-brand {
@@ -311,7 +314,7 @@ select {
   min-height: 36px;
   position: sticky;
   top: 0;
-  background: var(--bg);
+  background-color: var(--bg);
   z-index: 99;
 }
 .page-header h1 { font-size: 18px; font-weight: 600; }

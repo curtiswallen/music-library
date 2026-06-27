@@ -188,7 +188,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
   genre ? optQuery('subgenres',   optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
   genre ? optQuery('descriptors', optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
 
-  db.prepare(`
+  isMobile ? Promise.resolve(null) : db.prepare(`
     SELECT a.slug, a.artist, a.album, a.year, a.country, a.cover_url,
            ROUND(a.avg_rating, 1) as avg_rating, a.rating_count,
            a.genre_counts, a.all_subgenres, a.all_descriptors,
@@ -203,7 +203,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
     GROUP BY a.id
   `).first<FeaturedAlbum>(),
 
-  db.prepare(`
+  isMobile ? Promise.resolve({ results: [] as { country: string }[] }) : db.prepare(`
     SELECT DISTINCT a.country
     FROM albums a
     JOIN user_albums ua ON ua.album_id = a.id
@@ -281,7 +281,7 @@ if (!hasFilter) {
     <div id="upper-wrapper">
 
       {/* ── Album Spotlight ────────────────────────────────────────────────── */}
-      {featured && (
+      {!isMobile && featured && (
         <div class="album-spotlight" id="album-spotlight">
           <div class="dash-title dash-section-header">Random Album</div>
 
@@ -373,7 +373,7 @@ if (!hasFilter) {
         </div>
 
         {/* ── Filter form ────────────────────────────────────────────────────── */}
-        <div class="filter-section">
+        {!isMobile && <div class="filter-section">
           <div class="dash-title dash-section-header">Filters</div>
           <form method="get" action="/" id="filter-form" class="gf-form">
             <div class="gf-controls">
@@ -464,9 +464,9 @@ if (!hasFilter) {
               );
             })()}
             </div>
-            
+
           </form>
-        </div>
+        </div>}
       </div>
 
     </div>

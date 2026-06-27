@@ -276,8 +276,9 @@ if (!isOwner && !profileUser.is_private) {
           )}
         </div>
 
-        <div id="hm-tip" aria-hidden="true"></div>
-
+        {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
+          <div id="hm-tip" aria-hidden="true"></div>
+        )}
         {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
           <div class="dash-title dash-section-header hm-header">Monthly Heatmap</div>
           <div class="hm-grid">
