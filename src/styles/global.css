@@ -61,6 +61,7 @@
 
 /* iOS Safari uses the html element's background for the safe-area and rubber-band
    overscroll regions when viewport-fit=cover is set — must match --bg to avoid bleed. */
+/* iOS Safari uses the html element's background for rubber-band overscroll regions. */
 html { background-color: var(--bg); }
 
 body {
@@ -69,40 +70,13 @@ body {
   color: var(--text);
   font-size: 13px;
   line-height: 1.5;
+  /* Push all body content below the Dynamic Island / status bar safe area.
+     The body background fills that zone, so no scrolled content ever enters it. */
+  padding-top: env(safe-area-inset-top);
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: env(safe-area-inset-top);
-  background: var(--bg);
-  z-index: 201;
-  pointer-events: none;
-}
-
-/* Full-width cover behind the nav/page-header on mobile.
-   z-index 99: above scrollable content but below page-header (101) and nav (100),
-   so those elements stay fully visible while content scrolling into the header zone is hidden.
-   Only active on mobile — desktop has no safe-area concern and uses float:right layout. */
-#header-cover {
-  display: none;
-}
-@media (max-width: 640px) {
-  #header-cover {
-    display: block;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: calc(env(safe-area-inset-top) + 67px);
-    background-color: var(--bg);
-    z-index: 99;
-    pointer-events: none;
-  }
-}
+/* #header-cover element in Layout.astro — hidden on desktop, not needed */
+#header-cover { display: none; }
 
 a { color: var(--text); text-decoration: none; }
 a:hover { color: var(--text-hi); }
@@ -115,10 +89,9 @@ nav {
   display: flex;
   align-items: center;
   padding: 28px 28px 28px 18px;
-  padding-top: calc(28px + env(safe-area-inset-top));
   background-color: var(--bg);
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top);
   right: 0;
   z-index: 100;
   width: fit-content;
@@ -330,11 +303,10 @@ select {
   align-items: center;
   justify-content: space-between;
   padding: 28px 0;
-  padding-top: calc(28px + env(safe-area-inset-top));
   gap: 16px;
   min-height: 36px;
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top);
   background-color: var(--bg);
   z-index: 101;
 }
@@ -1570,17 +1542,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 @media (max-width: 640px) {
   main { padding: 0 16px 16px 16px; }
 
-  nav {
-    padding: 16px 16px 16px 8px;
-    padding-top: calc(16px + env(safe-area-inset-top));
-  }
-
-  .page-header {
-    padding: 16px 0;
-    padding-top: calc(16px + env(safe-area-inset-top));
-    top: 0;
-    height: auto;
-  }
+  nav { padding: 16px 16px 16px 8px; }
+  .page-header { padding: 16px 0; height: auto; }
   .form-grid { grid-template-columns: 1fr; }
 
   /* Album detail: cover stays on left, album-header to its right */
