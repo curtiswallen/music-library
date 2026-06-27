@@ -1553,9 +1553,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
     padding: 0 0 16px 0;
     padding-top: calc(16px + env(safe-area-inset-top));
     /* Bleed background to screen edges so no content peeks through on the sides */
-    margin-left: -16px;
-    margin-right: -16px;
-    padding-right: 16px;
     height: 67px;
   }
   /* Full-width fixed backdrop behind the nav on mobile.
