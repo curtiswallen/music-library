@@ -306,12 +306,12 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
         )}
 
         {otherEditions.length > 0 && (
-          <section class="also-logged" style="margin-top:12px">
+          <section class="other-editions" style="margin-top:12px">
             <p class="attr-label">Other Editions</p>
-            <div class="also-logged-list">
+            <div class="other-editions-list">
               {otherEditions.map(e => (
-                <a href={`/album/${e.slug}`} class="also-logged-item">
-                  <span class="also-logged-name">
+                <a href={`/album/${e.slug}`} class="other-editions-item">
+                  <span class="other-editions-name">
                     {e.year && <span class="year-chip">{e.year}</span>}
                     {e.release_type && <span class="type-chip">{releaseTypeLabel(e.release_type)}</span>}
                   </span>
@@ -561,6 +561,19 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     white-space: nowrap;
     text-overflow: ellipsis;
     color: var(--text-muted);
+  }
+
+  .other-editions .rating { margin: 0 }
+
+  .other-editons-item { 
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: var(--text);
+    font-size: 11px;
+    padding: 3px 0;
+    justify-content: space-between;
   }
 
   .album-upper-wrapper {
