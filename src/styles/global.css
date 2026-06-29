@@ -510,7 +510,7 @@ tr:hover td { background: var(--bg-hover); }
   border-top: 1px solid var(--border); margin-top: 2px; pointer-events: none;
 }
 .combo-group-header:first-child { border-top: none; margin-top: 0; }
-#fp-country, #fp-genre, #fp-rated, #fp-desc-input, #fp-type, .search-input {padding-top: 5px !important; padding-bottom: 5px !important; background: var(--bg);}
+#fp-country, #fp-genre, #fp-rated, #fp-desc-input, #fp-type, .search-input, #fp-rating {padding-top: 5px !important; padding-bottom: 5px !important; background: var(--bg);}
 #fp-toggle, .filter-bar a { height: 26px; }
 
 /* ── MusicBrainz search ── */
