@@ -141,7 +141,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countryList] 
         SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type,
                ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts
         FROM albums a
-        WHERE a.public_entry_count > 0
+        WHERE a.public_entry_count > 0 AND a.rating_count > 0
         ORDER BY a.avg_rating DESC, a.rating_count DESC LIMIT 15
       `).all<TopEntry>()
     : db.prepare(`
