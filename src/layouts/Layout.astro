@@ -141,6 +141,17 @@ const user = Astro.locals.user;
         initDropdown('nav-hamburger-btn', 'nav-hamburger-menu', 'nav-hamburger');
         initDropdown('nav-user-btn', 'nav-user-dropdown', 'nav-user-menu');
 
+        window.addEventListener('pageshow', function () {
+          ['nav-user-dropdown', 'nav-hamburger-menu'].forEach(function (id) {
+            var m = document.getElementById(id);
+            if (m) m.hidden = true;
+          });
+          ['nav-user-btn', 'nav-hamburger-btn'].forEach(function (id) {
+            var b = document.getElementById(id);
+            if (b) b.setAttribute('aria-expanded', 'false');
+          });
+        });
+
         function closeMenu(menuId, btnId) {
           var menu = document.getElementById(menuId);
           var btn  = document.getElementById(btnId);
