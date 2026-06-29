@@ -391,6 +391,10 @@ if (!isOwner && !profileUser.is_private) {
   Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 }
 
+const navRef     = Astro.url.searchParams.get('ref') ?? '';
+const fromLib    = navRef === 'l';
+const refForward = fromLib ? '?ref=l' : '';
+
 const logAlbumParams = new URLSearchParams();
 logAlbumParams.set('dbId', String(album.id));
 if (album.mbid) logAlbumParams.set('mbid', album.mbid);
@@ -402,12 +406,15 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     <div class="breadcrumb">
       <h1>
         {profileUser.avatar_url && <a href={`/${username}`} class="header-link"><img src={profileUser.avatar_url} class="profile-avatar" alt="" /></a>}
-        <a href={`${libBase}/library`}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a>
+        {fromLib
+          ? <a href={`${libBase}/library`}>{isOwner ? 'My Library' : `${displayName}'s Library`}</a>
+          : <a href={`/${username}`}>{displayName}</a>
+        }
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1>
         {artistParts.map((p, i) => (
-          <>{i > 0 && <span class="breadcrumb-sep"> / </span>}<a href={`${libBase}/artist/${slugify(p)}`}>{p}</a></>
+          <>{i > 0 && <span class="breadcrumb-sep"> / </span>}<a href={`${libBase}/artist/${slugify(p)}${refForward}`}>{p}</a></>
         ))}
         {album.country && <span class="breadcrumb-tag tip-link" data-tip={album.country}>{countryCode(album.country) ? countryCode(album.country).toUpperCase() : album.country}</span>}
       </h1>

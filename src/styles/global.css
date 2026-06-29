@@ -80,7 +80,7 @@ a:hover { color: var(--text-hi); }
   background: var(--bg);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   padding: calc(28px + env(safe-area-inset-top)) 28px 28px;
 }
 
@@ -100,7 +100,6 @@ nav {
 }
 
 .user-chip {
-  padding-right: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -165,6 +164,27 @@ nav {
 
 .icon-btn { padding: 3px 6px; justify-content: center; }
 
+/* ── User circle menu (desktop) ── */
+.nav-user-menu { position: relative; }
+.nav-user-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg-card);
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: inherit;
+  line-height: 1;
+}
+.nav-user-btn:hover { background: var(--text-hi); }
+
 /* ── Hamburger nav ── */
 .nav-hamburger { display: none; position: relative; }
 .nav-hamburger-menu {
@@ -195,7 +215,7 @@ nav {
   background: none;
   border: none;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text);
   cursor: pointer;
 }
@@ -1785,7 +1805,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .dash-album-wrap { display: flex; flex-direction: row; gap: 6px; align-items: center; }
 .dash-album {
   font-size: 11px; font-weight: 600; color: var(--text);
-  overflow: hidden; text-overflow: ellipsis; display: flex; min-width: 0;
+  display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
 .dash-artist-name {
   display: flex; align-items: baseline; gap: 6px;

@@ -18,6 +18,7 @@ interface Props {
   sortedSubs:  (subs: string[]) => string[];
   subgenreHref:(s: string) => string;
   buildParams: (o: Record<string, string | string[] | null | undefined>) => string;
+  refSuffix?:  string;
 }
 
 const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
@@ -37,6 +38,7 @@ const {
   sortedSubs,
   subgenreHref,
   buildParams,
+  refSuffix = '',
 } = Astro.props;
 ---
 
@@ -76,7 +78,7 @@ const {
         const ownSubs: string[] = JSON.parse(a.subgenres || '[]') as string[];
         const cc = countryCode(a.country).toLowerCase();
         return (
-          <tr class={isOwner && a.is_hidden ? 'album-hidden' : ''} data-album-href={`${base}/album/${a.slug}`}>
+          <tr class={isOwner && a.is_hidden ? 'album-hidden' : ''} data-album-href={`${base}/album/${a.slug}${refSuffix}`}>
             <td>
               <div class="cover-thumb" style="background:#000;overflow:hidden">
                 {a.cover_url && (
@@ -88,7 +90,7 @@ const {
             </td>
             <td class="col-artist">
               {a.artist.split(' / ').map((p, i) => (
-                <>{i > 0 && <span class="artist-sep"> / </span>}<a href={`${base}/artist/${slugify(p.trim())}`}>{p.trim()}</a></>
+                <>{i > 0 && <span class="artist-sep"> / </span>}<a href={`${base}/artist/${slugify(p.trim())}${refSuffix}`}>{p.trim()}</a></>
               ))}
             </td>
             <td>
@@ -103,7 +105,7 @@ const {
               }
             </td>
             <td class="col-album">
-              <a href={`${base}/album/${a.slug}`}>
+              <a href={`${base}/album/${a.slug}${refSuffix}`}>
                 {a.year != null && <span class="year-chip col-album-year">{a.year}</span>}
                 {a.release_type && <span class="type-chip">{TYPE_LABELS[a.release_type] ?? a.release_type}</span>}
                 <span class="col-album-text">{a.album}</span>

@@ -113,11 +113,7 @@ const sortedGroups = [...genresByGroup.keys()].sort((a, b) =>
 
 <Layout title="Admin — Genres & Subgenres">
   <div class="page-header" slot="header">
-    <h1>Admin — Genres &amp; Subgenres</h1>
-    <div style="display:flex;gap:8px">
-      <a href="/admin" class="btn">← Admin</a>
-      <a href={`/${user.profile_url}/`} class="btn">My Dashboard</a>
-    </div>
+    <h1><a href="/admin">Admin</a> — Genres &amp; Subgenres</h1>
   </div>
 
   <div class="admin-wrap">

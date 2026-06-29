@@ -34,14 +34,29 @@ const user = Astro.locals.user;
         <div style="display:flex;gap:8px;align-items:center">
           {user ? (
             <>
-              <a href={`/${user.profile_url}`} class="user-chip nav-hide-mobile">{user.display_name || user.username}</a>
-              {user.is_admin === 1 && <a href="/admin" class="btn nav-hide-mobile">Admin</a>}
-              <a href="/settings" class="btn icon-btn nav-hide-mobile" aria-label="Settings" data-tip="Settings">⚙</a>
-              <form method="post" action="/auth/logout" style="margin:0" class="nav-hide-mobile">
-                <button class="btn" type="submit">Sign out</button>
-              </form>
               <button id="add-album-btn" class="btn icon-btn" aria-label="Log Album" data-tip="Log Album"
-                      data-profile-url={user.profile_url} type="button">+</button>
+                      data-profile-url={user.profile_url} type="button">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <div class="nav-user-menu nav-hide-mobile" id="nav-user-menu">
+                <button class="nav-user-btn" id="nav-user-btn" aria-label="Menu" aria-expanded="false">
+                  {(user.display_name || user.username)[0].toUpperCase()}
+                </button>
+                <div class="nav-hamburger-menu" id="nav-user-dropdown" hidden>
+                  <div class="nav-hamburger-header">
+                    {user.avatar_url && <img src={user.avatar_url} class="profile-avatar" alt="" />}
+                    <span>{user.display_name || user.username}</span>
+                  </div>
+                  <a href="/" class="nav-hamburger-item">Community</a>
+                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">My Dashboard</a>
+                  <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">My Library</a>
+                  {user.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
+                  <a href="/settings" class="nav-hamburger-item">Settings</a>
+                  <form method="post" action="/auth/logout" style="margin:0">
+                    <button type="submit" class="nav-hamburger-item">Sign out</button>
+                  </form>
+                </div>
+              </div>
               <div class="nav-hamburger" id="nav-hamburger">
                 <button class="btn nav-hamburger-btn" id="nav-hamburger-btn" aria-label="Menu" aria-expanded="false">☰</button>
                 <div class="nav-hamburger-menu" id="nav-hamburger-menu" hidden>
@@ -90,21 +105,25 @@ const user = Astro.locals.user;
       })();
 
       (function () {
-        var hbtn = document.getElementById('nav-hamburger-btn');
-        var menu = document.getElementById('nav-hamburger-menu');
-        if (!hbtn || !menu) return;
-        hbtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var open = menu.hidden;
-          menu.hidden = !open;
-          hbtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        });
-        document.addEventListener('click', function (e) {
-          if (!e.target.closest('#nav-hamburger')) {
-            menu.hidden = true;
-            hbtn.setAttribute('aria-expanded', 'false');
-          }
-        });
+        function initDropdown(btnId, menuId, containerId) {
+          var btn  = document.getElementById(btnId);
+          var menu = document.getElementById(menuId);
+          if (!btn || !menu) return;
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = menu.hidden;
+            menu.hidden = !open;
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          });
+          document.addEventListener('click', function (e) {
+            if (!e.target.closest('#' + containerId)) {
+              menu.hidden = true;
+              btn.setAttribute('aria-expanded', 'false');
+            }
+          });
+        }
+        initDropdown('nav-hamburger-btn', 'nav-hamburger-menu', 'nav-hamburger');
+        initDropdown('nav-user-btn', 'nav-user-dropdown', 'nav-user-menu');
       })();
     </script>
 
