@@ -48,7 +48,7 @@ const [
 
   db.prepare(`
     SELECT a.id, a.slug, a.artist, a.album, a.year, a.cover_url, a.release_type,
-           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts
+           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.all_subgenres
     FROM albums a
     WHERE (
       a.artist = ?
@@ -62,7 +62,7 @@ const [
   `).bind(album.artist, album.artist, album.artist, album.artist, album.id).all<{
     id: number; slug: string; artist: string; album: string;
     year: number | null; cover_url: string | null; release_type: string | null;
-    avg_rating: number | null; rating_count: number; genre_counts: string;
+    avg_rating: number | null; rating_count: number; all_subgenres: string;
   }>(),
 
   db.prepare(`
@@ -164,6 +164,14 @@ const trackRatings: Record<string, TrackRating> = Object.fromEntries(
   trackRatingRows.map(r => [r.track_pos, { avg: r.avg, count: r.count }])
 );
 const hasTrackRatings = trackRatingRows.length > 0;
+
+const totalAlbumLen = (() => {
+  const t = tracks.reduce((sum, tr) => sum + (tr.length ?? 0), 0);
+  if (!t) return '';
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+           : `${m}:${String(s).padStart(2,'0')}`;
+})();
 
 function fmtLen(seconds: number | null): string {
   if (!seconds) return '';
@@ -317,6 +325,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
         )}
       </div>
 
+    <div id="album-right-wrapper">
       <div class="album-meta">
         <div class="album-mobile-header">
           <p class="album-meta-artist">
@@ -360,136 +369,152 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
             )}
           </div>
 
-    {tracks.length > 0 && (
-      <section class="track-list-section">
-        <table class="track-list-table">
-          <thead>
-            <tr>
-              <th class="tl-pos">#</th>
-              <th class="tl-title">Title</th>
-              <th class="tl-len">Length</th>
-              {hasTrackRatings && <th class="tl-rating">Avg</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {tracks.map(t => {
-              const key = String(t.pos);
-              const tr  = trackRatings[key];
-              return (
-                <tr>
-                  <td class="tl-pos">{t.pos}</td>
-                  <td class="tl-title">{t.title}</td>
-                  <td class="tl-len">{fmtLen(t.length)}</td>
-                  {hasTrackRatings && (
-                    <td class="tl-rating">
-                      {tr ? <span class={`rating ${ratingClass(tr.avg)}`}>{tr.avg.toFixed(1)}</span> : <span class="tl-no-rating">—</span>}
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
-    )}
-
         </div>
       </div>
-    </div>
 
-    <section class="also-logged">
-        <p class="attr-label">Logged By</p>
-        <div class="also-logged-list">
-        {loggedBy.map(l => (
-            <a href={`/${l.profile_url}/album/${slugParam}`} class="also-logged-item">
-            {l.avatar_url
-                ? <img src={l.avatar_url} class="also-logged-avatar" alt="" />
-                : <span class="also-logged-avatar also-logged-placeholder" />
-            }
-            <span class="also-logged-name">
-                {l.display_name || l.profile_url}
-                {l.added_at && <span class="also-logged-date"> · {fmtDate(l.added_at)}</span>}
-            </span>
-            {l.rating != null && (
-                <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
+      {tracks.length > 0 && (
+        <div class="tracks-wrap">
+          <table class="tracks-table">
+            <thead>
+              <tr>
+                <th class="track-num">#</th>
+                <th>Title</th>
+                <th class="track-len">Length</th>
+                {hasTrackRatings && <th class="track-rating-cell">Avg</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {tracks.map(t => {
+                const key = String(t.pos);
+                const tr  = trackRatings[key];
+                return (
+                  <tr>
+                    <td class="track-num">{t.pos}</td>
+                    <td>{t.title}</td>
+                    <td class="track-len">{fmtLen(t.length)}</td>
+                    {hasTrackRatings && (
+                      <td class="track-rating-cell">
+                        {tr ? <span class={`rating ${ratingClass(tr.avg)}`}>{tr.avg.toFixed(1)}</span> : <span style="color:var(--text-muted)">—</span>}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+            {totalAlbumLen && (
+              <tfoot>
+                <tr class="tracks-total-row">
+                  <td class="track-num"></td>
+                  <td></td>
+                  <td class="track-len tracks-total">{totalAlbumLen}</td>
+                  {hasTrackRatings && <td></td>}
+                </tr>
+              </tfoot>
             )}
-            {l.notes && <span class="also-logged-note">{l.notes}</span>}
-            </a>
-        ))}
+          </table>
         </div>
-    </section>
+      )}
 
-    <section class="related-section">
-      {moreBy.length > 0 && (
-        <div class="more-by">
-          <p class="related-title">More by {album.artist}</p>
-          <div class="rel-list">
-            {moreBy.map(a => {
-              const genre = topGenreFn(a.genre_counts);
-              return (
-                <a href={`/album/${a.slug}`} class="rel-row">
-                  {a.cover_url
-                    ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
-                    : <div class="cover-thumb" />}
-                  <div class="rel-info">
-                    <span class="rel-title">{a.album}</span>
-                    {(a.year != null || a.release_type) && (
-                      <span class="rel-sub">
-                        {a.year != null && <span class="year-chip">{a.year}</span>}
+      <section class="also-logged">
+          <p class="attr-label">Logged By</p>
+          <div class="also-logged-list">
+          {loggedBy.map(l => (
+              <a href={`/${l.profile_url}/album/${slugParam}`} class="also-logged-item">
+              {l.avatar_url
+                  ? <img src={l.avatar_url} class="also-logged-avatar" alt="" />
+                  : <span class="also-logged-avatar also-logged-placeholder" />
+              }
+              <span class="also-logged-name">
+                  {l.display_name || l.profile_url}
+                  {l.added_at && <span class="also-logged-date"> · {fmtDate(l.added_at)}</span>}
+              </span>
+              {l.rating != null && (
+                  <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
+              )}
+              {l.notes && <span class="also-logged-note">{l.notes}</span>}
+              </a>
+          ))}
+          </div>
+      </section>
+
+      <section class="related-section">
+        {moreBy.length > 0 && (
+          <div class="more-by">
+            <p class="related-title">More by {album.artist}</p>
+            <div class="rel-list">
+              {moreBy.map(a => {
+                const subs: string[] = (() => { try { return JSON.parse(a.all_subgenres || '[]') as string[]; } catch { return []; } })();
+                const sorted = [...subs].sort((x, y) => x === 'Sketchy' ? -1 : y === 'Sketchy' ? 1 : 0);
+                return (
+                  <a href={`/album/${a.slug}`} class="rel-row">
+                    {a.cover_url
+                      ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
+                      : <div class="cover-thumb" />}
+                    <div class="rel-info">
+                      <span class="rel-title">{a.album}</span>
+                      {(a.year != null || a.release_type) && (
+                        <span class="rel-sub">
+                          {a.year != null && <span class="year-chip">{a.year}</span>}
+                          {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
+                        </span>
+                      )}
+                    </div>
+                    <div class="rel-right">
+                      <span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating ?? '—'}</span>
+                      {sorted.length > 0 && (
+                        <div class="rel-tags">
+                          {sorted.map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {similar.length > 0 && (
+          <div class="more-by">
+            <p class="related-title">Similar albums</p>
+            <div class="rel-list">
+              {similar.map(a => {
+                const cc = countryCode(a.country).toLowerCase();
+                const sorted = [...a.subs].sort((x, y) => x === 'Sketchy' ? -1 : y === 'Sketchy' ? 1 : 0);
+                return (
+                  <a href={`/album/${a.slug}`} class="rel-row">
+                    {a.cover_url
+                      ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
+                      : <div class="cover-thumb" />}
+                    <div class="rel-info">
+                      <span class="rel-title">
                         {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
+                        <span class="rel-sub-text">{a.album}</span>
+                        {a.year != null && <span class="year-chip">{a.year}</span>}
                       </span>
-                    )}
-                  </div>
-                  <div class="rel-right">
-                    <span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating ?? '—'}</span>
-                    {genre && <div class="rel-tags"><span class="tag">{genre}</span></div>}
-                  </div>
-                </a>
-              );
-            })}
+                      <span class="rel-sub">
+                        <span class="rel-artist">{a.artist}</span>
+                        {cc && <span class="added-cell tip-link" data-tip={a.country}> {cc.toUpperCase()}</span>}
+                      </span>
+                    </div>
+                    <div class="rel-right">
+                      <span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating ?? '—'}</span>
+                      {sorted.length > 0 && (
+                        <div class="rel-tags">
+                          {sorted.map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-
-      {similar.length > 0 && (
-        <div class="more-by">
-          <p class="related-title">Similar albums</p>
-          <div class="rel-list">
-            {similar.map(a => {
-              const cc = countryCode(a.country).toLowerCase();
-              const sorted = [...a.subs].sort((x, y) => x === 'Sketchy' ? -1 : y === 'Sketchy' ? 1 : 0);
-              return (
-                <a href={`/album/${a.slug}`} class="rel-row">
-                  {a.cover_url
-                    ? <img src={a.cover_url} alt="" loading="lazy" class="cover-thumb" />
-                    : <div class="cover-thumb" />}
-                  <div class="rel-info">
-                    <span class="rel-title">
-                      {a.release_type && <span class="type-chip">{releaseTypeLabel(a.release_type)}</span>}
-                      <span class="rel-sub-text">{a.album}</span>
-                      {a.year != null && <span class="year-chip">{a.year}</span>}
-                    </span>
-                    <span class="rel-sub">
-                      <span class="rel-artist">{a.artist}</span>
-                      {cc && <span class="added-cell tip-link" data-tip={a.country}> {cc.toUpperCase()}</span>}
-                    </span>
-                  </div>
-                  <div class="rel-right">
-                    <span class={`rating ${ratingClass(a.avg_rating)}`}>{a.avg_rating ?? '—'}</span>
-                    {sorted.length > 0 && (
-                      <div class="rel-tags">
-                        {sorted.map(s => <span class={`tag${s === 'Sketchy' ? ' tag-sketchy' : ''}`}>{s}</span>)}
-                      </div>
-                    )}
-                  </div>
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </section>
+        )}
+      </section>
+    </div>
   </div>
+</div>
 </Layout>
 
 <style>
@@ -501,38 +526,19 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     width: 100%;
   }
 
+  #album-right-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
   .also-logged {
-    margin-top: 0;
+    margin: 14px 0 24px 0; 
   }
 
   .related-section {
     margin-top: 0;
   }
-
-  .track-list-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-  }
-  .track-list-table thead th {
-    text-align: left;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    padding: 0 8px 6px;
-    border-bottom: 1px solid var(--border);
-  }
-  .track-list-table tbody tr:hover { background: var(--bg-hover); }
-  .track-list-table td {
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text);
-  }
-  .tl-pos  { width: 32px; color: var(--text-muted); text-align: right; }
-  .tl-len  { width: 52px; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
-  .tl-rating { width: 56px; text-align: right; }
-  .tl-no-rating { color: var(--text-muted); }
 
   .also-logged-item .rating { margin: 0 15px; }
 
@@ -566,6 +572,12 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     font-size: 11px;
     padding: 3px 0;
     justify-content: space-between;
+  }
+
+  .album-hero > .also-logged { grid-column: 2; }
+
+  @media (max-width: 640px) {
+    .album-hero > .also-logged { grid-column: 1 / -1; }
   }
 
   .album-upper-wrapper {

@@ -949,7 +949,7 @@ tr[data-href] { cursor: pointer; }
 .rel-row:last-child { border-bottom: none; }
 .rel-row:hover { background: var(--bg-hover); }
 .rel-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
-.rel-title { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rel-title { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; flex-direction: row; gap: 6px; }
 .rel-artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rel-sub { display: flex; align-items: baseline; gap: 6px; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; }
 .rel-sub-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
