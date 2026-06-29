@@ -37,9 +37,10 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
         subgenre_counts    = COALESCE((SELECT json_group_object(subgenre, cnt)    FROM (SELECT subgenre,    COUNT(*) as cnt FROM user_album_subgenres  WHERE album_id = ? GROUP BY subgenre)),    '{}'),
         descriptor_counts  = COALESCE((SELECT json_group_object(descriptor, cnt) FROM (SELECT descriptor,  COUNT(*) as cnt FROM user_album_descriptors WHERE album_id = ? GROUP BY descriptor)),  '{}'),
         avg_rating         = (SELECT AVG(rating)   FROM user_albums WHERE album_id = ? AND rating IS NOT NULL),
-        rating_count       = (SELECT COUNT(rating) FROM user_albums WHERE album_id = ? AND rating IS NOT NULL)
+        rating_count       = (SELECT COUNT(rating) FROM user_albums WHERE album_id = ? AND rating IS NOT NULL),
+        public_entry_count = (SELECT COUNT(*) FROM user_albums ua JOIN users u ON u.id = ua.user_id AND u.is_private = 0 WHERE ua.album_id = ? AND ua.is_hidden = 0)
       WHERE id = ?
-    `).bind(id, id, id, id, id, id, id, id, id).run();
+    `).bind(id, id, id, id, id, id, id, id, id, id).run();
   }
 
   await invalidateLibraryOverview(env.GENRE_CACHE, userId);

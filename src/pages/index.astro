@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
 import { getGenreCache } from '../lib/genre-cache';
+import { getCommunityStats, getCommunityCountries, EMPTY_STATS, type CommunityStats } from '../lib/community-stats-cache';
 import { countryCode } from '../lib/utils';
 
 const TYPE_LABELS: Record<string, string> = { lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other' };
@@ -98,13 +99,9 @@ type RecentEntry = {
 type TopEntry = {
   slug: string; artist: string; album: string; year: number | null;
   cover_url: string | null; release_type: string | null; avg_rating: number; rating_count: number;
-  country: string | null; genre_counts: string; user_profile_url: string;
+  country: string | null; genre_counts: string; user_profile_url?: string;
 };
-type GlobalStats = {
-  total_albums: number; total_users: number; total_seconds: number; public_genres: string;
-  avg_rating: number | null; artist_count: number; country_count: number;
-  recommended_count: number; total_ratings: number;
-};
+type GlobalStats = CommunityStats;
 type FeaturedAlbum = {
   slug: string; artist: string; album: string; year: number | null;
   country: string | null; cover_url: string | null;
@@ -125,7 +122,7 @@ const optQuery = (table: 'subgenres' | 'descriptors', where: string) => db.prepa
 `);
 const emptyOpts = Promise.resolve({ results: [] as { value: string }[] });
 
-const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes] = await Promise.all([
+const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countryList] = await Promise.all([
   db.prepare(`
     SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type,
            ua.rating, ua.recommended, ua.added_at, ua.genre,
@@ -139,17 +136,25 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
     ORDER BY ua.added_at DESC LIMIT 15
   `).bind(...recentParams).all<RecentEntry>(),
 
-  db.prepare(`
-    SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type,
-           ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts,
-           MIN(u.profile_url) as user_profile_url
-    FROM albums a
-    JOIN user_albums ua ON ua.album_id = a.id
-    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-    WHERE ${topWhere}
-    GROUP BY a.id
-    ORDER BY a.avg_rating DESC, a.rating_count DESC LIMIT 15
-  `).bind(...topParams).all<TopEntry>(),
+  !hasFilter
+    ? db.prepare(`
+        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type,
+               ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts
+        FROM albums a
+        WHERE a.public_entry_count > 0
+        ORDER BY a.avg_rating DESC, a.rating_count DESC LIMIT 15
+      `).all<TopEntry>()
+    : db.prepare(`
+        SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type,
+               ROUND(a.avg_rating, 1) as avg_rating, a.rating_count, a.genre_counts,
+               MIN(u.profile_url) as user_profile_url
+        FROM albums a
+        JOIN user_albums ua ON ua.album_id = a.id
+        JOIN users u ON u.id = ua.user_id AND u.is_private = 0
+        WHERE ${topWhere}
+        GROUP BY a.id
+        ORDER BY a.avg_rating DESC, a.rating_count DESC LIMIT 15
+      `).bind(...topParams).all<TopEntry>(),
 
   hasFilter
     ? db.prepare(`
@@ -170,20 +175,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
         JOIN users u ON u.id = ua.user_id
         WHERE ${recentWhere}
       `).bind(...recentParams).first<GlobalStats>()
-    : db.prepare(`
-        SELECT
-          (SELECT COUNT(*) FROM albums) as total_albums,
-          (SELECT COUNT(*) FROM users WHERE is_private = 0) as total_users,
-          (SELECT COALESCE(SUM(total_seconds), 0) FROM users WHERE is_private = 0) as total_seconds,
-          (SELECT ROUND(AVG(rating), 1) FROM user_albums WHERE rating IS NOT NULL AND is_hidden = 0) as avg_rating,
-          (SELECT COUNT(DISTINCT artist) FROM albums) as artist_count,
-          (SELECT COUNT(DISTINCT country) FROM albums WHERE country IS NOT NULL AND country != '') as country_count,
-          (SELECT COUNT(*) FROM user_albums WHERE recommended = 1 AND is_hidden = 0) as recommended_count,
-          (SELECT COUNT(*) FROM user_albums WHERE rating IS NOT NULL AND is_hidden = 0) as total_ratings,
-          (SELECT json_group_array(DISTINCT key)
-           FROM albums, json_each(genre_counts)
-           WHERE genre_counts != '{}') as public_genres
-      `).first<GlobalStats>(),
+    : getCommunityStats(kv, db),
 
   genre ? optQuery('subgenres',   optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
   genre ? optQuery('descriptors', optWhere).bind(...optParams).all<{ value: string }>() : emptyOpts,
@@ -203,14 +195,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countriesRes]
     GROUP BY a.id
   `).first<FeaturedAlbum>(),
 
-  isMobile ? Promise.resolve({ results: [] as { country: string }[] }) : db.prepare(`
-    SELECT DISTINCT a.country
-    FROM albums a
-    JOIN user_albums ua ON ua.album_id = a.id
-    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-    WHERE a.country IS NOT NULL AND a.country != '' AND ua.is_hidden = 0 AND ua.rating IS NOT NULL
-    ORDER BY a.country
-  `).all<{ country: string }>(),
+  isMobile ? Promise.resolve([] as string[]) : getCommunityCountries(kv, db),
 ]);
 
 const recentAlbums = recentRes.results;
@@ -219,7 +204,7 @@ const topAlbums    = topRes.results.map(a => ({
   topGenre: (Object.entries(JSON.parse(a.genre_counts || '{}') as Record<string, number>)
     .sort((x, y) => y[1] - x[1])[0]?.[0]) ?? '',
 }));
-const stats               = statsRes ?? { total_albums: 0, total_users: 0, total_seconds: 0, avg_rating: null, artist_count: 0, country_count: 0, recommended_count: 0, total_ratings: 0, public_genres: '[]' };
+const stats               = statsRes ?? EMPTY_STATS;
 const availableSubgenres  = subgRes.results.map(r => r.value);
 const availableDescriptors = descRes.results.map(r => r.value);
 
@@ -228,7 +213,6 @@ const featuredGenres: string[]      = featured ? Object.entries(JSON.parse(featu
 const featuredSubgenres: string[]   = featured ? JSON.parse(featured.all_subgenres  || '[]') : [];
 const featuredDescriptors: string[] = featured ? JSON.parse(featured.all_descriptors || '[]') : [];
 
-const countryList    = countriesRes.results.map(r => r.country);
 const groupedCountries = countryList.length > 0 ? [{ group: '', options: countryList }] : [];
 
 const pubGenreSet = new Set(JSON.parse(stats.public_genres ?? '[]') as string[]);

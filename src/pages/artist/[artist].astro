@@ -11,12 +11,7 @@ if (!artistSlug) return new Response(null, { status: 404 });
 const db = env.DB;
 
 const { results: allArtists } = await db.prepare(`
-  SELECT DISTINCT a.artist FROM albums a
-  WHERE a.id IN (
-    SELECT DISTINCT ua.album_id FROM user_albums ua
-    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-    WHERE ua.is_hidden = 0
-  )
+  SELECT DISTINCT a.artist FROM albums a WHERE a.public_entry_count > 0
 `).all<{ artist: string }>();
 
 let artistName: string | undefined;
@@ -37,11 +32,7 @@ const { results: albums } = await db.prepare(`
     OR a.artist LIKE '% / ' || ?
     OR a.artist LIKE '% / ' || ? || ' / %'
   )
-  AND a.id IN (
-    SELECT DISTINCT ua.album_id FROM user_albums ua
-    JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-    WHERE ua.is_hidden = 0
-  )
+  AND a.public_entry_count > 0
   ORDER BY a.year ASC NULLS LAST
 `).bind(artistName, artistName, artistName, artistName).all<{
   id: number; slug: string; artist: string; album: string; country: string;

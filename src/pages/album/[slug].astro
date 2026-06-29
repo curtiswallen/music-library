@@ -57,11 +57,7 @@ const [
       OR a.artist LIKE '% / ' || ? || ' / %'
     )
     AND a.id != ?
-    AND a.id IN (
-      SELECT DISTINCT ua.album_id FROM user_albums ua
-      JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-      WHERE ua.is_hidden = 0
-    )
+    AND a.public_entry_count > 0
     ORDER BY a.year ASC NULLS LAST
   `).bind(album.artist, album.artist, album.artist, album.artist, album.id).all<{
     id: number; slug: string; artist: string; album: string;
@@ -74,11 +70,7 @@ const [
            ROUND(a.avg_rating, 1) as avg_rating, a.rating_count
     FROM albums a
     WHERE LOWER(a.artist) = LOWER(?) AND LOWER(a.album) = LOWER(?) AND a.id != ?
-    AND a.id IN (
-      SELECT DISTINCT ua.album_id FROM user_albums ua
-      JOIN users u ON u.id = ua.user_id AND u.is_private = 0
-      WHERE ua.is_hidden = 0
-    )
+    AND a.public_entry_count > 0
     ORDER BY a.year ASC NULLS LAST
   `).bind(album.artist, album.album, album.id).all<{
     id: number; slug: string; album: string; year: number | null; release_type: string | null;
