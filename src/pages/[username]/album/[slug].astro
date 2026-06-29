@@ -272,30 +272,41 @@ const libBase      = `/${profileUser.profile_url}`;
 const displayName  = profileUser.display_name || profileUser.username;
 const artistParts  = album.artist.split(' / ').map(s => s.trim()).filter(Boolean);
 
-const { results: artistAlbums } = await db.prepare(`
-  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
-         ua.subgenres, ua.rating, ua.recommended
-  FROM albums a
-  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-  WHERE a.artist = ? AND a.id != ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
-  ORDER BY a.year ASC NULLS LAST
-`).bind(profileUser.id, album.artist, album.id).all<{
-  id: number; slug: string; artist: string; album: string; country: string;
-  year: number | null; cover_url: string | null; release_type: string | null; subgenres: string; rating: number | null; recommended: boolean;
-}>();
-
 const albumCountry = countryCode(album.country);
-const { results: candidates } = await db.prepare(`
-  SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
-         ua.subgenres, ua.rating, ua.recommended, ua.descriptors
-  FROM albums a
-  JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
-  WHERE a.artist != ? AND ua.genre = ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
-`).bind(profileUser.id, album.artist, album.genre ?? '').all<{
-  id: number; slug: string; artist: string; album: string; country: string;
-  year: number | null; cover_url: string | null; release_type: string | null; subgenres: string; rating: number | null;
-  recommended: boolean; descriptors: string;
-}>();
+const [{ results: artistAlbums }, { results: userOtherEditions }, { results: candidates }] = await Promise.all([
+  db.prepare(`
+    SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
+           ua.subgenres, ua.rating, ua.recommended
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+    WHERE a.artist = ? AND a.id != ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
+    ORDER BY a.year ASC NULLS LAST
+  `).bind(profileUser.id, album.artist, album.id).all<{
+    id: number; slug: string; artist: string; album: string; country: string;
+    year: number | null; cover_url: string | null; release_type: string | null; subgenres: string; rating: number | null; recommended: boolean;
+  }>(),
+  db.prepare(`
+    SELECT a.slug, a.year, a.release_type, ua.rating
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+    WHERE LOWER(a.artist) = LOWER(?) AND LOWER(a.album) = LOWER(?) AND a.id != ?
+    ${isOwner ? '' : 'AND ua.is_hidden = 0'}
+    ORDER BY a.year ASC NULLS LAST
+  `).bind(profileUser.id, album.artist, album.album, album.id).all<{
+    slug: string; year: number | null; release_type: string | null; rating: number | null;
+  }>(),
+  db.prepare(`
+    SELECT a.id, a.slug, a.artist, a.album, a.country, a.year, a.cover_url, a.release_type,
+           ua.subgenres, ua.rating, ua.recommended, ua.descriptors
+    FROM albums a
+    JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+    WHERE a.artist != ? AND ua.genre = ? ${isOwner ? '' : 'AND ua.is_hidden = 0'}
+  `).bind(profileUser.id, album.artist, album.genre ?? '').all<{
+    id: number; slug: string; artist: string; album: string; country: string;
+    year: number | null; cover_url: string | null; release_type: string | null; subgenres: string; rating: number | null;
+    recommended: boolean; descriptors: string;
+  }>(),
+]);
 
 const similar = candidates
   .map(a => {
@@ -466,6 +477,24 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
               <p class="release-name">{album.release_title}</p>
             )}
           </div>
+        )}
+        {userOtherEditions.length > 0 && (
+          <section class="also-logged" style="margin-top:12px">
+            <p class="attr-label">Other Editions</p>
+            <div class="also-logged-list">
+              {userOtherEditions.map(e => (
+                <a href={`${libBase}/album/${e.slug}`} class="also-logged-item">
+                  <span class="also-logged-name">
+                    {e.year && <span class="year-chip">{e.year}</span>}
+                    {e.release_type && <span class="type-chip">{releaseTypeLabel(e.release_type)}</span>}
+                  </span>
+                  {e.rating != null && (
+                    <span class={`rating ${ratingClass(e.rating)}`}>{e.rating}</span>
+                  )}
+                </a>
+              ))}
+            </div>
+          </section>
         )}
         {otherLogs.length > 0 && (
           <section class="also-logged">

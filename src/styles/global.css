@@ -724,7 +724,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .edit-fields select:disabled,
 .edit-fields .combo-input:disabled { opacity: 0.5; background-color: var(--bg-card); cursor: default; }
 
-.album-meta { flex: 1; min-width: 0; }
+.album-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
 .album-mobile-header { display: none; margin-bottom: 8px; }
 .album-mobile-header .album-meta-title { font-size: 15px; margin-bottom: 4px; }
 .album-mobile-header .album-meta-artist { font-size: 11px; }
@@ -780,7 +780,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .album-notes code { font-family: monospace; font-size: 0.9em; background: var(--bg-hover); padding: 1px 4px; border-radius: 3px; }
 .album-notes blockquote { border-left: 3px solid var(--border); margin: 0 0 0.75em; padding-left: 0.75em; color: var(--text-muted); }
 .added-at {
-  font-size: 11px;
+  font-size: 9px;
   color: var(--text-muted);
   margin-top: 8px;
 }
@@ -814,7 +814,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 3px 10px;
-  font-size: 11px;
+  font-size: 10px;
 }
 .release-dl dt {
   color: var(--text-muted);
@@ -1030,7 +1030,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .tracks-table th, .tracks-table td {
   padding: 5px 8px;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 10px;
 }
 .tracks-table th {
   font-size: 10px;
@@ -1554,7 +1554,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .release-detail { width: auto; }
   .release-dl { grid-template-columns: 1fr; gap: 0; font-size: 10px; }
   .release-dl dd { margin-bottom: 5px; }
-  .added-at { font-size: 10px; }
+  .added-at { font-size: 9px; }
 
   /* Breadcrumb: only show "My Library" on mobile; artist/album go into album-meta instead */
   .breadcrumb h1:not(:first-child) { display: none; }

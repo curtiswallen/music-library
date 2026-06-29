@@ -312,12 +312,11 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
               {otherEditions.map(e => (
                 <a href={`/album/${e.slug}`} class="also-logged-item">
                   <span class="also-logged-name">
-                    {e.year && <span class="year-chip" style="margin-right:4px">{e.year}</span>}
-                    {e.release_type && <span class="type-chip" style="margin-right:4px">{releaseTypeLabel(e.release_type)}</span>}
-                    {e.album}
+                    {e.year && <span class="year-chip">{e.year}</span>}
+                    {e.release_type && <span class="type-chip">{releaseTypeLabel(e.release_type)}</span>}
                   </span>
                   {e.avg_rating != null && (
-                    <span class={`rating ${ratingClass(e.avg_rating)}`}>{e.avg_rating}</span>
+                    <span class={`rating ${ratingClass(e.avg_rating)}`}>{e.avg_rating.toFixed(1)}</span>
                   )}
                 </a>
               ))}
