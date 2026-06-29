@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import Combobox from '../components/Combobox.astro';
 import { env } from 'cloudflare:workers';
 
 const user = Astro.locals.user!;
@@ -66,12 +67,78 @@ if (Astro.request.method === 'POST') {
 }
 
 if (Astro.url.searchParams.get('saved') === '1') saved = true;
+
+const TIMEZONES: { label: string; value: string }[] = [
+  { label: 'UTC',                        value: 'UTC' },
+  { label: 'Eastern (New York)',         value: 'America/New_York' },
+  { label: 'Central (Chicago)',          value: 'America/Chicago' },
+  { label: 'Mountain (Denver)',          value: 'America/Denver' },
+  { label: 'Mountain no-DST (Phoenix)',  value: 'America/Phoenix' },
+  { label: 'Pacific (Los Angeles)',      value: 'America/Los_Angeles' },
+  { label: 'Alaska (Anchorage)',         value: 'America/Anchorage' },
+  { label: 'Hawaii (Honolulu)',          value: 'Pacific/Honolulu' },
+  { label: 'Atlantic (Halifax)',         value: 'America/Halifax' },
+  { label: 'Toronto',                    value: 'America/Toronto' },
+  { label: 'Vancouver',                  value: 'America/Vancouver' },
+  { label: 'Winnipeg',                   value: 'America/Winnipeg' },
+  { label: 'Mexico City',                value: 'America/Mexico_City' },
+  { label: 'Bogotá',                     value: 'America/Bogota' },
+  { label: 'Lima',                       value: 'America/Lima' },
+  { label: 'Caracas',                    value: 'America/Caracas' },
+  { label: 'Santiago',                   value: 'America/Santiago' },
+  { label: 'São Paulo',                  value: 'America/Sao_Paulo' },
+  { label: 'Buenos Aires',               value: 'America/Argentina/Buenos_Aires' },
+  { label: 'London',                     value: 'Europe/London' },
+  { label: 'Dublin',                     value: 'Europe/Dublin' },
+  { label: 'Lisbon',                     value: 'Europe/Lisbon' },
+  { label: 'Paris',                      value: 'Europe/Paris' },
+  { label: 'Berlin',                     value: 'Europe/Berlin' },
+  { label: 'Rome',                       value: 'Europe/Rome' },
+  { label: 'Madrid',                     value: 'Europe/Madrid' },
+  { label: 'Amsterdam',                  value: 'Europe/Amsterdam' },
+  { label: 'Brussels',                   value: 'Europe/Brussels' },
+  { label: 'Stockholm',                  value: 'Europe/Stockholm' },
+  { label: 'Oslo',                       value: 'Europe/Oslo' },
+  { label: 'Copenhagen',                 value: 'Europe/Copenhagen' },
+  { label: 'Helsinki',                   value: 'Europe/Helsinki' },
+  { label: 'Warsaw',                     value: 'Europe/Warsaw' },
+  { label: 'Prague',                     value: 'Europe/Prague' },
+  { label: 'Vienna',                     value: 'Europe/Vienna' },
+  { label: 'Zurich',                     value: 'Europe/Zurich' },
+  { label: 'Athens',                     value: 'Europe/Athens' },
+  { label: 'Istanbul',                   value: 'Europe/Istanbul' },
+  { label: 'Moscow',                     value: 'Europe/Moscow' },
+  { label: 'Kyiv',                       value: 'Europe/Kyiv' },
+  { label: 'Cairo',                      value: 'Africa/Cairo' },
+  { label: 'Johannesburg',               value: 'Africa/Johannesburg' },
+  { label: 'Lagos',                      value: 'Africa/Lagos' },
+  { label: 'Nairobi',                    value: 'Africa/Nairobi' },
+  { label: 'Dubai',                      value: 'Asia/Dubai' },
+  { label: 'Karachi',                    value: 'Asia/Karachi' },
+  { label: 'Kolkata / Mumbai',           value: 'Asia/Kolkata' },
+  { label: 'Dhaka',                      value: 'Asia/Dhaka' },
+  { label: 'Yangon',                     value: 'Asia/Yangon' },
+  { label: 'Bangkok',                    value: 'Asia/Bangkok' },
+  { label: 'Jakarta',                    value: 'Asia/Jakarta' },
+  { label: 'Singapore',                  value: 'Asia/Singapore' },
+  { label: 'Hong Kong',                  value: 'Asia/Hong_Kong' },
+  { label: 'Beijing / Shanghai',         value: 'Asia/Shanghai' },
+  { label: 'Taipei',                     value: 'Asia/Taipei' },
+  { label: 'Seoul',                      value: 'Asia/Seoul' },
+  { label: 'Tokyo',                      value: 'Asia/Tokyo' },
+  { label: 'Perth',                      value: 'Australia/Perth' },
+  { label: 'Darwin',                     value: 'Australia/Darwin' },
+  { label: 'Brisbane',                   value: 'Australia/Brisbane' },
+  { label: 'Adelaide',                   value: 'Australia/Adelaide' },
+  { label: 'Sydney / Melbourne',         value: 'Australia/Sydney' },
+  { label: 'Auckland',                   value: 'Pacific/Auckland' },
+  { label: 'Fiji',                       value: 'Pacific/Fiji' },
+];
 ---
 
 <Layout title="Settings">
   <div class="page-header" slot="header">
-    <h1>Settings</h1>
-    <a href={`/${user.profile_url}`} class="btn">← Dashboard</a>
+    <h1><a href="/">Music Library</a></h1>
   </div>
 
   {saved && <p class="flash-ok">Settings saved.</p>}
@@ -132,90 +199,17 @@ if (Astro.url.searchParams.get('saved') === '1') saved = true;
 
       <div class="form-group">
         <label for="timezone">Timezone</label>
-        <select id="timezone" name="timezone">
-          <option value="UTC"                              selected={formTimezone === 'UTC'}>UTC</option>
-          <optgroup label="North America">
-            <option value="America/New_York"    selected={formTimezone === 'America/New_York'}>Eastern (New York)</option>
-            <option value="America/Chicago"     selected={formTimezone === 'America/Chicago'}>Central (Chicago)</option>
-            <option value="America/Denver"      selected={formTimezone === 'America/Denver'}>Mountain (Denver)</option>
-            <option value="America/Phoenix"     selected={formTimezone === 'America/Phoenix'}>Mountain no-DST (Phoenix)</option>
-            <option value="America/Los_Angeles" selected={formTimezone === 'America/Los_Angeles'}>Pacific (Los Angeles)</option>
-            <option value="America/Anchorage"   selected={formTimezone === 'America/Anchorage'}>Alaska (Anchorage)</option>
-            <option value="Pacific/Honolulu"    selected={formTimezone === 'Pacific/Honolulu'}>Hawaii (Honolulu)</option>
-            <option value="America/Halifax"     selected={formTimezone === 'America/Halifax'}>Atlantic (Halifax)</option>
-            <option value="America/Toronto"     selected={formTimezone === 'America/Toronto'}>Toronto</option>
-            <option value="America/Vancouver"   selected={formTimezone === 'America/Vancouver'}>Vancouver</option>
-            <option value="America/Winnipeg"    selected={formTimezone === 'America/Winnipeg'}>Winnipeg</option>
-            <option value="America/Mexico_City" selected={formTimezone === 'America/Mexico_City'}>Mexico City</option>
-          </optgroup>
-          <optgroup label="South America">
-            <option value="America/Bogota"       selected={formTimezone === 'America/Bogota'}>Bogotá</option>
-            <option value="America/Lima"         selected={formTimezone === 'America/Lima'}>Lima</option>
-            <option value="America/Caracas"      selected={formTimezone === 'America/Caracas'}>Caracas</option>
-            <option value="America/Santiago"     selected={formTimezone === 'America/Santiago'}>Santiago</option>
-            <option value="America/Sao_Paulo"    selected={formTimezone === 'America/Sao_Paulo'}>São Paulo</option>
-            <option value="America/Argentina/Buenos_Aires" selected={formTimezone === 'America/Argentina/Buenos_Aires'}>Buenos Aires</option>
-          </optgroup>
-          <optgroup label="Europe">
-            <option value="Europe/London"    selected={formTimezone === 'Europe/London'}>London</option>
-            <option value="Europe/Dublin"    selected={formTimezone === 'Europe/Dublin'}>Dublin</option>
-            <option value="Europe/Lisbon"    selected={formTimezone === 'Europe/Lisbon'}>Lisbon</option>
-            <option value="Europe/Paris"     selected={formTimezone === 'Europe/Paris'}>Paris</option>
-            <option value="Europe/Berlin"    selected={formTimezone === 'Europe/Berlin'}>Berlin</option>
-            <option value="Europe/Rome"      selected={formTimezone === 'Europe/Rome'}>Rome</option>
-            <option value="Europe/Madrid"    selected={formTimezone === 'Europe/Madrid'}>Madrid</option>
-            <option value="Europe/Amsterdam" selected={formTimezone === 'Europe/Amsterdam'}>Amsterdam</option>
-            <option value="Europe/Brussels"  selected={formTimezone === 'Europe/Brussels'}>Brussels</option>
-            <option value="Europe/Stockholm" selected={formTimezone === 'Europe/Stockholm'}>Stockholm</option>
-            <option value="Europe/Oslo"      selected={formTimezone === 'Europe/Oslo'}>Oslo</option>
-            <option value="Europe/Copenhagen" selected={formTimezone === 'Europe/Copenhagen'}>Copenhagen</option>
-            <option value="Europe/Helsinki"  selected={formTimezone === 'Europe/Helsinki'}>Helsinki</option>
-            <option value="Europe/Warsaw"    selected={formTimezone === 'Europe/Warsaw'}>Warsaw</option>
-            <option value="Europe/Prague"    selected={formTimezone === 'Europe/Prague'}>Prague</option>
-            <option value="Europe/Vienna"    selected={formTimezone === 'Europe/Vienna'}>Vienna</option>
-            <option value="Europe/Zurich"    selected={formTimezone === 'Europe/Zurich'}>Zurich</option>
-            <option value="Europe/Athens"    selected={formTimezone === 'Europe/Athens'}>Athens</option>
-            <option value="Europe/Istanbul"  selected={formTimezone === 'Europe/Istanbul'}>Istanbul</option>
-            <option value="Europe/Moscow"    selected={formTimezone === 'Europe/Moscow'}>Moscow</option>
-            <option value="Europe/Kyiv"      selected={formTimezone === 'Europe/Kyiv'}>Kyiv</option>
-          </optgroup>
-          <optgroup label="Africa">
-            <option value="Africa/Cairo"         selected={formTimezone === 'Africa/Cairo'}>Cairo</option>
-            <option value="Africa/Johannesburg"  selected={formTimezone === 'Africa/Johannesburg'}>Johannesburg</option>
-            <option value="Africa/Lagos"         selected={formTimezone === 'Africa/Lagos'}>Lagos</option>
-            <option value="Africa/Nairobi"       selected={formTimezone === 'Africa/Nairobi'}>Nairobi</option>
-          </optgroup>
-          <optgroup label="Asia">
-            <option value="Asia/Dubai"      selected={formTimezone === 'Asia/Dubai'}>Dubai</option>
-            <option value="Asia/Karachi"    selected={formTimezone === 'Asia/Karachi'}>Karachi</option>
-            <option value="Asia/Kolkata"    selected={formTimezone === 'Asia/Kolkata'}>Kolkata / Mumbai</option>
-            <option value="Asia/Dhaka"      selected={formTimezone === 'Asia/Dhaka'}>Dhaka</option>
-            <option value="Asia/Yangon"     selected={formTimezone === 'Asia/Yangon'}>Yangon</option>
-            <option value="Asia/Bangkok"    selected={formTimezone === 'Asia/Bangkok'}>Bangkok</option>
-            <option value="Asia/Jakarta"    selected={formTimezone === 'Asia/Jakarta'}>Jakarta</option>
-            <option value="Asia/Singapore"  selected={formTimezone === 'Asia/Singapore'}>Singapore</option>
-            <option value="Asia/Hong_Kong"  selected={formTimezone === 'Asia/Hong_Kong'}>Hong Kong</option>
-            <option value="Asia/Shanghai"   selected={formTimezone === 'Asia/Shanghai'}>Beijing / Shanghai</option>
-            <option value="Asia/Taipei"     selected={formTimezone === 'Asia/Taipei'}>Taipei</option>
-            <option value="Asia/Seoul"      selected={formTimezone === 'Asia/Seoul'}>Seoul</option>
-            <option value="Asia/Tokyo"      selected={formTimezone === 'Asia/Tokyo'}>Tokyo</option>
-          </optgroup>
-          <optgroup label="Australia / Pacific">
-            <option value="Australia/Perth"      selected={formTimezone === 'Australia/Perth'}>Perth</option>
-            <option value="Australia/Darwin"     selected={formTimezone === 'Australia/Darwin'}>Darwin</option>
-            <option value="Australia/Brisbane"   selected={formTimezone === 'Australia/Brisbane'}>Brisbane</option>
-            <option value="Australia/Adelaide"   selected={formTimezone === 'Australia/Adelaide'}>Adelaide</option>
-            <option value="Australia/Sydney"     selected={formTimezone === 'Australia/Sydney'}>Sydney / Melbourne</option>
-            <option value="Pacific/Auckland"     selected={formTimezone === 'Pacific/Auckland'}>Auckland</option>
-            <option value="Pacific/Fiji"         selected={formTimezone === 'Pacific/Fiji'}>Fiji</option>
-          </optgroup>
-        </select>
+        <Combobox id="timezone" name="timezone"
+          labeledOptions={TIMEZONES}
+          value={formTimezone}
+          placeholder="Search timezones…" />
         <span class="field-hint">Used for grouping your album activity by local date on your dashboard.</span>
       </div>
     </div>
 
     <div class="settings-footer">
-      <button type="submit" class="btn btn-primary">Save Settings</button>
+      <button type="submit" class="btn">Save Settings</button>
+      <a href="javascript:history.back()" class="btn">Done</a>
     </div>
   </form>
 </Layout>

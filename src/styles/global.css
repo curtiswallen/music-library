@@ -185,6 +185,25 @@ nav {
 }
 .nav-user-btn:hover { background: var(--text-hi); }
 
+.nav-user-dropdown-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--border);
+}
+.nav-user-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: inherit;
+}
+.nav-user-action-btn:first-child { border-right: 1px solid var(--border); }
+.nav-user-action-btn:hover { background: var(--bg-hover); color: var(--text); }
+
 /* ── Hamburger nav ── */
 .nav-hamburger { display: none; position: relative; }
 .nav-hamburger-menu {
@@ -196,7 +215,6 @@ nav {
   border: 1px solid var(--border);
   border-radius: 3px;
   z-index: 200;
-  overflow: hidden;
 }
 .nav-hamburger-header {
   display: flex;

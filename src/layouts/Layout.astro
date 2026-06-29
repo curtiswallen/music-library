@@ -48,13 +48,21 @@ const user = Astro.locals.user;
                     <span>{user.display_name || user.username}</span>
                   </div>
                   <a href="/" class="nav-hamburger-item">Community</a>
-                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">My Dashboard</a>
-                  <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">My Library</a>
+                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">Dashboard</a>
+                  <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">Library</a>
                   {user.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
                   <a href="/settings" class="nav-hamburger-item">Settings</a>
                   <form method="post" action="/auth/logout" style="margin:0">
                     <button type="submit" class="nav-hamburger-item">Sign out</button>
                   </form>
+                  <div class="nav-user-dropdown-actions">
+                    <button type="button" class="nav-user-action-btn" id="nav-user-queue-btn" data-tip="Queue Album">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    </button>
+                    <button type="button" class="nav-user-action-btn" id="nav-user-log-btn" data-tip="Log Album">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                  </div>
                 </div>
               </div>
               <div class="nav-hamburger" id="nav-hamburger">
@@ -65,14 +73,21 @@ const user = Astro.locals.user;
                     <span>{user.display_name || user.username}</span>
                   </div>
                   <a href="/" class="nav-hamburger-item">Community</a>
-                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">Dashboard</a>
+                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">My Dashboard</a>
                   <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">My Library</a>
-                  <a href="/add" class="nav-hamburger-item">Add Album</a>
                   {user.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
                   <a href="/settings" class="nav-hamburger-item">Settings</a>
                   <form method="post" action="/auth/logout" style="margin:0">
                     <button type="submit" class="nav-hamburger-item">Sign out</button>
                   </form>
+                  <div class="nav-user-dropdown-actions">
+                    <button type="button" class="nav-user-action-btn" id="nav-hb-queue-btn" data-tip="Queue Album">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    </button>
+                    <button type="button" class="nav-user-action-btn" id="nav-hb-log-btn" data-tip="Log Album">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
@@ -124,6 +139,33 @@ const user = Astro.locals.user;
         }
         initDropdown('nav-hamburger-btn', 'nav-hamburger-menu', 'nav-hamburger');
         initDropdown('nav-user-btn', 'nav-user-dropdown', 'nav-user-menu');
+
+        function closeMenu(menuId, btnId) {
+          var menu = document.getElementById(menuId);
+          var btn  = document.getElementById(btnId);
+          if (menu) menu.hidden = true;
+          if (btn)  btn.setAttribute('aria-expanded', 'false');
+        }
+        [
+          ['nav-user-queue-btn', 'nav-user-dropdown', 'nav-user-btn'],
+          ['nav-hb-queue-btn',   'nav-hamburger-menu', 'nav-hamburger-btn'],
+        ].forEach(function (ids) {
+          var el = document.getElementById(ids[0]);
+          if (el) el.addEventListener('click', function () {
+            closeMenu(ids[1], ids[2]);
+            if (window.showQueueAdd) window.showQueueAdd();
+          });
+        });
+        [
+          ['nav-user-log-btn', 'nav-user-dropdown', 'nav-user-btn'],
+          ['nav-hb-log-btn',   'nav-hamburger-menu', 'nav-hamburger-btn'],
+        ].forEach(function (ids) {
+          var el = document.getElementById(ids[0]);
+          if (el) el.addEventListener('click', function () {
+            closeMenu(ids[1], ids[2]);
+            if (window.showAlbumPick) window.showAlbumPick();
+          });
+        });
       })();
     </script>
 
