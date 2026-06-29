@@ -389,32 +389,39 @@ if (!hasFilter) {
               </div>
               <div class="gf-wrap">
                 <div class="gf-year-wrap">
-                  <select name="year_from" class="gf-select gf-auto-submit">
-                    <option value="">From</option>
-                    {yearOptions.map(y => <option value={y} selected={yearFrom === String(y)}>{y}</option>)}
-                  </select>
+                  <input type="number" name="year_from" class="gf-select gf-auto-submit"
+                         placeholder="From" min="1950" max={currentYear} value={yearFrom || ''} />
                   <span class="gf-sep">–</span>
-                  <select name="year_to" class="gf-select gf-auto-submit">
-                    <option value="">To</option>
-                    {[...yearOptions].reverse().map(y => <option value={y} selected={yearTo === String(y)}>{y}</option>)}
-                  </select>
+                  <input type="number" name="year_to" class="gf-select gf-auto-submit"
+                         placeholder="To" min="1950" max={currentYear} value={yearTo || ''} />
                 </div>
                 <div class="stat-lbl">Year</div>
               </div>
               <div class="gf-wrap">
-                <select name="release_type" class="gf-select gf-auto-submit">
-                  <option value="">All types</option>
-                  {(['lp','ep','single','compilation','demo','other'] as const).map(t => (
-                    <option value={t} selected={releaseType === t}>{TYPE_LABELS[t]}</option>
-                  ))}
-                </select>
+                <Combobox id="fp-type" name="release_type"
+                  labeledOptions={[
+                    { label: 'LP',          value: 'lp'          },
+                    { label: 'EP',          value: 'ep'          },
+                    { label: 'Single',      value: 'single'      },
+                    { label: 'Compilation', value: 'compilation' },
+                    { label: 'Demo',        value: 'demo'        },
+                    { label: 'Other',       value: 'other'       },
+                  ]}
+                  value={releaseType}
+                  placeholder="All types" />
                 <div class="stat-lbl">Type</div>
               </div>
               <div class="gf-wrap">
-                <select name="rating_min" class="gf-select gf-auto-submit">
-                  <option value="">Any</option>
-                  {[50,60,70,80,90].map(v => <option value={v} selected={ratingMin === String(v)}>{v}+</option>)}
-                </select>
+                <Combobox id="fp-rating" name="rating_min"
+                  labeledOptions={[
+                    { label: '50+', value: '50' },
+                    { label: '60+', value: '60' },
+                    { label: '70+', value: '70' },
+                    { label: '80+', value: '80' },
+                    { label: '90+', value: '90' },
+                  ]}
+                  value={ratingMin}
+                  placeholder="Any" />
                 <div class="stat-lbl">Min Rating</div>
               </div>
               {hasFilter && <a href="/" class="gf-clear" title="Clear filters">×</a>}
@@ -575,7 +582,7 @@ h1 { padding-top: 4px; }
 .stat-cards { display: flex; flex-wrap: wrap; justify-content: space-between; }
 .stat-card  { display: flex; flex-direction: column; gap: 5px; }
 .stat-val   { display: block; font-size: 22px; font-weight: 600; color: var(--text-hi); font-variant-numeric: tabular-nums; line-height: 1.2; height: 27px; }
-.stat-lbl   { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+.stat-lbl   { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
 
 /* ── Filter form ─────────────────────────────────────────────────────────── */
 .gf-form { display: flex; flex-direction: column; gap: 8px; }
@@ -679,7 +686,7 @@ h1 { padding-top: 4px; }
 .dash-cover { width: 36px; height: 36px; flex-shrink: 0; object-fit: cover; border-radius: 2px; border: 1px solid var(--border); }
 .dash-cover-empty { background: var(--bg-hover); }
 .dash-info { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 5px; }
-.dash-album     { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-album     { font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-artist-name { display: flex; align-items: baseline; gap: 6px; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; }
 .dash-artist-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 

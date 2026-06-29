@@ -266,7 +266,7 @@ textarea {
   color: var(--text);
   border-radius: 3px;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: 11px;
   font-family: inherit;
   width: 100%;
   transition: border-color 0.12s;
@@ -407,7 +407,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 .dash-artist-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .dash-artist-wrap .dash-artist { flex: 0 1 auto; min-width: 0; }
-.dash-cc { font-size: 10px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
+.dash-cc { font-size: 9px; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
 .dash-rating-row { display: flex; align-items: center; gap: 4px; }
 .dash-genre { font-size: 9px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; background: var(--bg-card); border: 1px solid var(--border); padding: 2px 5px 0 5px; border-radius: 3px; }
 
@@ -490,12 +490,14 @@ tr:hover td { background: var(--bg-hover); }
   border-radius: 3px;
   max-height: 220px;
   overflow-y: auto;
+  scrollbar-width: none;
   z-index: 200;
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
+.combo-dropdown::-webkit-scrollbar { display: none; }
 .combo-opt {
   padding: 7px 12px;
-  font-size: 13px;
+  font-size: 11px;
   cursor: pointer;
   color: var(--text);
 }
@@ -508,7 +510,8 @@ tr:hover td { background: var(--bg-hover); }
   border-top: 1px solid var(--border); margin-top: 2px; pointer-events: none;
 }
 .combo-group-header:first-child { border-top: none; margin-top: 0; }
-#fp-country, #fp-genre, #fp-rated, #fp-desc-input {padding-top: 5px; padding-bottom: 5px; background: var(--bg);}
+#fp-country, #fp-genre, #fp-rated, #fp-desc-input, #fp-type, .search-input {padding-top: 5px !important; padding-bottom: 5px !important; background: var(--bg);}
+#fp-toggle, .filter-bar a { height: 26px; }
 
 /* ── MusicBrainz search ── */
 .mb-wrap { position: relative; max-width: 480px; margin-bottom: 32px; }
@@ -525,8 +528,10 @@ tr:hover td { background: var(--bg-hover); }
   z-index: 200;
   max-height: 300px;
   overflow-y: auto;
+  scrollbar-width: none;
   display: none;
 }
+.mb-results::-webkit-scrollbar { display: none; }
 .mb-results.open { display: block; }
 
 .mb-item {
@@ -1389,13 +1394,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   border-radius: 3px;
   max-height: 180px;
   overflow-y: auto;
+  scrollbar-width: none;
   z-index: 200;
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
+.descriptor-dropdown::-webkit-scrollbar { display: none; }
 .descriptor-dropdown.open { display: block; }
 .descriptor-opt {
   padding: 7px 12px;
-  font-size: 13px;
+  font-size: 11px;
   cursor: pointer;
   color: var(--text);
 }
