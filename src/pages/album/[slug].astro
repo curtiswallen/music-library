@@ -35,7 +35,7 @@ const [
   { results: trackRatingRows },
 ] = await Promise.all([
   db.prepare(`
-    SELECT u.display_name, u.profile_url, u.avatar_url, ua.rating, ua.genre, ua.added_at
+    SELECT u.display_name, u.profile_url, u.avatar_url, ua.rating, ua.genre, ua.added_at, ua.notes
     FROM user_albums ua
     JOIN users u ON u.id = ua.user_id AND u.is_private = 0
     WHERE ua.album_id = ? AND ua.is_hidden = 0 AND (ua.is_queued = 0 OR ua.is_queued IS NULL)
@@ -43,7 +43,7 @@ const [
     LIMIT 10
   `).bind(album.id).all<{
     display_name: string | null; profile_url: string; avatar_url: string | null;
-    rating: number | null; genre: string; added_at: string;
+    rating: number | null; genre: string; added_at: string; notes: string | null;
   }>(),
 
   db.prepare(`
@@ -422,6 +422,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
             {l.rating != null && (
                 <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
             )}
+            {l.notes && <span class="also-logged-note">{l.notes}</span>}
             </a>
         ))}
         </div>
@@ -520,7 +521,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
   .track-list-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 11px;
   }
   .track-list-table thead th {
     text-align: left;
@@ -542,15 +543,25 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
   .tl-rating { width: 56px; text-align: right; }
   .tl-no-rating { color: var(--text-muted); }
 
+  .also-logged-item .rating { margin: 0 15px; }
+
   .also-logged-date {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-muted);
     font-weight: 400;
   }
 
   .also-logged-name {
     flex: none;
-    margin-right: 20px;
+    margin-right: 4px;
+  }
+
+  .also-logged-note {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text-muted);
   }
 
   .album-upper-wrapper {
