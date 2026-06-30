@@ -81,7 +81,7 @@ a:hover { color: var(--text-hi); }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: calc(28px + env(safe-area-inset-top)) 28px 28px;
+  padding: calc(28px + env(safe-area-inset-top)) 28px 14px;
 }
 
 /* ── Nav ── */
