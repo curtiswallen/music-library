@@ -432,7 +432,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
               {l.rating != null && (
                   <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
               )}
-              {l.notes && <span class="also-logged-note" set:html={mdInline(l.notes)} />}
+              {l.notes && <span class="also-logged-note" set:html={mdInline(l.notes.split('\n')[0])} />}
               </a>
           ))}
           </div>
