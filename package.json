@@ -9,7 +9,10 @@
     "preview": "astro preview",
     "astro": "astro",
     "db:migrate:local": "wrangler d1 execute music-library --local --file=./schema.sql",
-    "db:migrate:remote": "wrangler d1 execute music-library --remote --file=./schema.sql"
+    "db:migrate:remote": "wrangler d1 execute music-library --remote --file=./schema.sql",
+    "generate:world-map": "node scripts/generate-world-map.mjs",
+    "backfill:country-counts": "node scripts/backfill-country-counts.mjs",
+    "backfill:country-counts:remote": "node scripts/backfill-country-counts.mjs --remote"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.9",
@@ -21,6 +24,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2",
     "wrangler": "^4.100.0"
   }
 }

@@ -9,6 +9,7 @@ import { syncArtistData, syncAllArtistsForAlbum } from '../../../lib/artist-cach
 import { getGenreCache } from '../../../lib/genre-cache';
 import { getDescriptorCache } from '../../../lib/descriptor-cache';
 import { invalidateLibraryOverview } from '../../../lib/library-cache';
+import { recomputeCountryCounts } from '../../../lib/country-counts';
 
 const { username, slug: slugParam } = Astro.params;
 if (!username || !slugParam) return new Response(null, { status: 404 });
@@ -174,6 +175,7 @@ if (Astro.request.method === 'POST') {
   `).bind(existing.id, existing.id, existing.id, existing.id, existing.id, existing.id, existing.id, existing.id, existing.id).run();
 
   await invalidateLibraryOverview(env.GENRE_CACHE, profileUser.id);
+  await recomputeCountryCounts(db, profileUser.id);
 
   const editedRgMbid     = (data.get('mbid') as string) || null;
   const editedArtistMbid = (data.get('artist_mbid') as string) || null;

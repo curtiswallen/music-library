@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import { invalidateLibraryOverview } from '../../../lib/library-cache';
+import { recomputeCountryCounts } from '../../../lib/country-counts';
 
 export const DELETE: APIRoute = async ({ params, locals }) => {
   const id     = parseInt(params.id ?? '');
@@ -44,6 +45,7 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   }
 
   await invalidateLibraryOverview(env.GENRE_CACHE, userId);
+  await recomputeCountryCounts(env.DB, userId);
 
   return new Response(null, { status: 204 });
 };

@@ -1,9 +1,10 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
-import { countryCode } from '../../lib/utils';
 import { md } from '../../lib/markdown';
 import { PLATFORM_MAP, platformUrl, parseSocialLinks } from '../../lib/social-platforms';
+import { COUNTRY_PATHS } from '../../generated/world-map-paths';
+import { countryCode, countryName } from '../../lib/utils';
 
 const { username } = Astro.params;
 if (!username) return Astro.redirect('/');
@@ -11,19 +12,35 @@ if (!username) return Astro.redirect('/');
 const db = env.DB;
 
 const profileUser = await db.prepare(`
-  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url, bio, social_links
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url, bio, social_links, country_counts
   FROM users WHERE profile_url = ?
 `).bind(username).first<{
   id: number; username: string; display_name: string | null;
   profile_url: string; is_private: number; hide_added_at: number;
   timezone: string; avatar_url: string | null; bio: string | null;
-  social_links: string | null;
+  social_links: string | null; country_counts: string | null;
 }>();
 
 if (!profileUser) return new Response(null, { status: 404 });
 
 const bioHtml     = profileUser.bio ? md.parse(profileUser.bio) as string : '';
 const socialLinks = parseSocialLinks(profileUser.social_links);
+
+// Choropleth: ISO alpha-2 → count + raw DB value (for click-through URL)
+const countMap:   Record<string, number> = {};
+const isoToRaw:   Record<string, string> = {};
+if (profileUser.country_counts) {
+  try {
+    const cc = JSON.parse(profileUser.country_counts) as Record<string, number>;
+    for (const [rawCountry, count] of Object.entries(cc)) {
+      const iso = countryCode(rawCountry);
+      if (!iso) continue;
+      countMap[iso] = (countMap[iso] ?? 0) + count;
+      isoToRaw[iso] = rawCountry;
+    }
+  } catch {}
+}
+const hasMapData = Object.keys(countMap).length > 0;
 
 const loggedInUser = Astro.locals.user;
 
@@ -334,6 +351,38 @@ if (!isOwner && !profileUser.is_private) {
             ))}
           </div>
         )}
+
+        {/* ── World map ─────────────────────────────────────────────────────── */}
+        {hasMapData && (
+          <div class="wm-wrap">
+            <svg id="world-map-svg" viewBox="-2 6 373 140" class="wm-svg" aria-hidden="true">
+              <rect x="-2" y="6" width="373" height="140" class="wm-ocean" />
+              {Object.entries(COUNTRY_PATHS).map(([iso, d]) => {
+                const count = countMap[iso] ?? 0;
+                const v = count === 0 ? '0' : count >= 30 ? '4' : count >= 10 ? '3' : count >= 3 ? '2' : '1';
+                const raw = isoToRaw[iso] ?? '';
+                return (
+                  <path
+                    d={d}
+                    class="wm-country"
+                    data-v={v}
+                    data-iso={iso}
+                    data-count={String(count)}
+                    data-name={countryName(iso) || iso}
+                    data-country={raw}
+                  />
+                );
+              })}
+            </svg>
+            <button id="wm-expand" class="wm-expand-btn" aria-label="Expand map" title="Expand map">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
+            <div id="wm-tip" aria-hidden="true"></div>
+          </div>
+        )}
       </div>
 
       {/* ── Dashboard panels ──────────────────────────────────────────────── */}
@@ -418,6 +467,29 @@ if (!isOwner && !profileUser.is_private) {
     </>
   )}
 </Layout>
+
+{hasMapData && (
+  <div id="wm-modal" class="wm-modal" style="display:none" aria-modal="true" role="dialog">
+    <div class="wm-modal-inner">
+      <button id="wm-close" class="wm-close-btn" aria-label="Close map">×</button>
+      <div class="wm-modal-body">
+        <div class="wm-modal-table-wrap">
+          <table id="wm-modal-table">
+            <thead>
+              <tr>
+                <th class="wm-th" data-sort="name">Country</th>
+                <th class="wm-th" data-sort="count">Albums</th>
+              </tr>
+            </thead>
+            <tbody id="wm-modal-tbody"></tbody>
+          </table>
+        </div>
+        <div id="wm-modal-map"></div>
+      </div>
+      <div id="wm-modal-tip" class="wm-tip" aria-hidden="true"></div>
+    </div>
+  </div>
+)}
 
 <style>
 #dashboard-wrapper { display: flex; flex-direction: row; gap: 28px; width: 100%; }
@@ -518,10 +590,10 @@ if (!isOwner && !profileUser.is_private) {
   cursor: default;
 }
 .hm-cell[data-future] { opacity: 0.25; }
-.hm-cell[data-v="1"] { background: color-mix(in srgb, var(--green) 30%, var(--bg-hover)); }
-.hm-cell[data-v="2"] { background: color-mix(in srgb, var(--green) 55%, var(--bg-hover)); }
-.hm-cell[data-v="3"] { background: color-mix(in srgb, var(--green) 80%, var(--bg-hover)); }
-.hm-cell[data-v="4"] { background: var(--green); }
+.hm-cell[data-v="1"] { background: color-mix(in srgb, var(--mapping) 30%, var(--bg-hover)); }
+.hm-cell[data-v="2"] { background: color-mix(in srgb, var(--mapping) 55%, var(--bg-hover)); }
+.hm-cell[data-v="3"] { background: color-mix(in srgb, var(--mapping) 80%, var(--bg-hover)); }
+.hm-cell[data-v="4"] { background: var(--mapping); }
 
 #hm-tip {
   display: none;
@@ -585,6 +657,168 @@ if (!isOwner && !profileUser.is_private) {
   .dash-grid { margin-bottom: 150px; }
   :global(.dash-row) { padding: 8px 0; }
   :global(.dash-row:hover) { background: none; }
+}
+
+/* ── World map ───────────────────────────────────────────────────────────── */
+.wm-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  /* padding controls visual margin around the map; viewBox is trimmed to content */
+  padding: 6px;
+}
+.wm-svg {
+  width: 100%;
+  max-width: 320px;
+  display: block;
+}
+.wm-ocean { fill: var(--bg); }
+:global(.wm-country)          { fill: var(--bg-hover); stroke: var(--bg); stroke-width: 0.3; }
+:global(.wm-country[data-v="0"]) { fill: var(--bg-hover); cursor: default; pointer-events: none; }
+:global(.wm-country[data-v="1"]) { fill: color-mix(in srgb, var(--mapping) 25%, var(--bg-card)); cursor: pointer; }
+:global(.wm-country[data-v="2"]) { fill: color-mix(in srgb, var(--mapping) 50%, var(--bg-card)); cursor: pointer; }
+:global(.wm-country[data-v="3"]) { fill: color-mix(in srgb, var(--mapping) 75%, var(--bg-card)); cursor: pointer; }
+:global(.wm-country[data-v="4"]) { fill: var(--mapping); cursor: pointer; }
+:global(.wm-country:not([data-v="0"]):hover) { filter: brightness(0.9); }
+
+.wm-expand-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  padding: 3px 5px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.wm-expand-btn:hover { color: var(--text); }
+
+#wm-tip {
+  display: none;
+  position: fixed;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px 6px;
+  pointer-events: none;
+  z-index: 500;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text);
+  flex-direction: row;
+  gap: 10px;
+}
+:global(.wm-tip-country) { font-weight: 600; }
+:global(.wm-tip-count)   { font-size: 10px; color: var(--text-muted); }
+
+/* Modal */
+.wm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wm-modal-inner {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  width: 85vw;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 25px;
+}
+.wm-modal-body {
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+.wm-modal-table-wrap {
+  width: 210px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  font-size: 10px;
+}
+#wm-modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  cursor: pointer;
+}
+#wm-modal-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.wm-th {
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.wm-th:hover { color: var(--text); }
+.wm-th.wm-th-active { color: var(--text); }
+.wm-th.wm-th-active[data-dir="desc"]::after { content: ' ↓'; }
+.wm-th.wm-th-active[data-dir="asc"]::after  { content: ' ↑'; }
+:global(.wm-tr) { cursor: pointer; border-bottom: none; }
+:global(.wm-tr:hover), :global(.wm-tr.wm-row-hl) { background: var(--bg-hover); }
+:global(.wm-tr td) { padding: 4px 8px; font-size: 10px; border-bottom: none; }
+:global(.wm-td-count) { text-align: right; color: var(--text-muted); width: 36px; }
+:global(.wm-country.wm-path-hl) { filter: brightness(0.9); }
+#wm-modal-map {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 50px 25px 50px 15px;
+}
+:global(#wm-modal-map svg) {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.wm-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 1;
+  z-index: 2;
+}
+.wm-close-btn:hover { color: var(--text); }
+#wm-modal-tip {
+  display: none;
+  position: fixed;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  pointer-events: none;
+  z-index: 1001;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text);
+  flex-direction: row;
+  gap: 10px;
 }
 </style>
 
@@ -683,6 +917,194 @@ if (!isOwner && !profileUser.is_private) {
           attachDashQueueRemove(row.querySelector('.dash-queue-remove'));
         });
       });
+    });
+  })();
+</script>
+
+<script is:inline define:vars={{ libBase, hasMapData, isoToRaw }}>
+  (function () {
+    if (!hasMapData) return;
+    var svg      = document.getElementById('world-map-svg');
+    var tip      = document.getElementById('wm-tip');
+    var modal    = document.getElementById('wm-modal');
+    var modalMap = document.getElementById('wm-modal-map');
+    var modalTip = document.getElementById('wm-modal-tip');
+    var expandBtn = document.getElementById('wm-expand');
+    var closeBtn  = document.getElementById('wm-close');
+    if (!svg || !tip || !modal) return;
+
+    function posTip(e, el) {
+      var x = e.clientX + 14, y = e.clientY + 14;
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      var r = el.getBoundingClientRect();
+      if (r.right  > window.innerWidth  - 8) el.style.left = (e.clientX - r.width  - 8) + 'px';
+      if (r.bottom > window.innerHeight - 8) el.style.top  = (e.clientY - r.height - 8) + 'px';
+    }
+
+    // Mini dashboard map — tooltip + click only, no table cross-link
+    function attachCountries(svgEl, tipEl) {
+      svgEl.querySelectorAll('.wm-country[data-v]:not([data-v="0"])').forEach(function (path) {
+        path.addEventListener('mouseenter', function (e) {
+          var name  = path.getAttribute('data-name')  || '';
+          var count = path.getAttribute('data-count') || '0';
+          tipEl.innerHTML =
+            '<span class="wm-tip-country">' + name + '</span>' +
+            '<span class="wm-tip-count">'   + count + '</span>';
+          tipEl.style.display = 'flex';
+          posTip(e, tipEl);
+        });
+        path.addEventListener('mousemove', function (e) { posTip(e, tipEl); });
+        path.addEventListener('mouseleave', function () { tipEl.style.display = 'none'; });
+        path.addEventListener('click', function () {
+          var raw = path.getAttribute('data-country') || '';
+          if (raw) window.location.href = libBase + '?country=' + encodeURIComponent(raw);
+        });
+      });
+    }
+
+    // Modal map — tooltip + click + table row cross-highlight
+    function attachCountriesModal(svgEl, tipEl) {
+      svgEl.querySelectorAll('.wm-country[data-v]:not([data-v="0"])').forEach(function (path) {
+        var iso = path.getAttribute('data-iso') || '';
+        path.addEventListener('mouseenter', function (e) {
+          var name  = path.getAttribute('data-name')  || '';
+          var count = path.getAttribute('data-count') || '0';
+          tipEl.innerHTML =
+            '<span class="wm-tip-country">' + name + '</span>' +
+            '<span class="wm-tip-count">'   + count + '</span>';
+          tipEl.style.display = 'flex';
+          posTip(e, tipEl);
+          var row = document.querySelector('#wm-modal-tbody tr[data-iso="' + iso + '"]');
+          if (row) { row.classList.add('wm-row-hl'); row.scrollIntoView({ block: 'nearest' }); }
+        });
+        path.addEventListener('mousemove', function (e) { posTip(e, tipEl); });
+        path.addEventListener('mouseleave', function () {
+          tipEl.style.display = 'none';
+          var row = document.querySelector('#wm-modal-tbody tr[data-iso="' + iso + '"]');
+          if (row) row.classList.remove('wm-row-hl');
+        });
+        path.addEventListener('click', function () {
+          var raw = path.getAttribute('data-country') || '';
+          if (raw) window.location.href = libBase + '?country=' + encodeURIComponent(raw);
+        });
+      });
+    }
+
+    function buildModalTable(modalSvg) {
+      var tbody = document.getElementById('wm-modal-tbody');
+      var ths   = document.querySelectorAll('#wm-modal-table .wm-th');
+      if (!tbody) return;
+
+      var countries = [];
+      svg.querySelectorAll('.wm-country[data-v]:not([data-v="0"])').forEach(function (path) {
+        countries.push({
+          iso:   path.getAttribute('data-iso')     || '',
+          name:  path.getAttribute('data-name')    || '',
+          count: parseInt(path.getAttribute('data-count') || '0', 10),
+          raw:   path.getAttribute('data-country') || ''
+        });
+      });
+
+      var sortKey = 'count';
+      var sortDir = 'desc';
+
+      function syncHeaders() {
+        ths.forEach(function (th) {
+          var k = th.getAttribute('data-sort');
+          var active = k === sortKey;
+          th.classList.toggle('wm-th-active', active);
+          if (active) th.setAttribute('data-dir', sortDir);
+          else th.removeAttribute('data-dir');
+        });
+      }
+
+      function renderRows() {
+        var sorted = countries.slice().sort(function (a, b) {
+          if (sortKey === 'name') {
+            var cmp = a.name.localeCompare(b.name);
+            return sortDir === 'asc' ? cmp : -cmp;
+          }
+          return sortDir === 'asc' ? a.count - b.count : b.count - a.count;
+        });
+        tbody.innerHTML = '';
+        sorted.forEach(function (c) {
+          var tr = document.createElement('tr');
+          tr.className = 'wm-tr';
+          tr.setAttribute('data-iso', c.iso);
+          var tdName = document.createElement('td');
+          tdName.textContent = c.name;
+          var tdCount = document.createElement('td');
+          tdCount.className = 'wm-td-count';
+          tdCount.textContent = String(c.count);
+          tr.appendChild(tdName);
+          tr.appendChild(tdCount);
+
+          tr.addEventListener('mouseenter', function () {
+            modalSvg.querySelectorAll('.wm-country[data-iso="' + c.iso + '"]').forEach(function (p) {
+              p.classList.add('wm-path-hl');
+            });
+          });
+          tr.addEventListener('mouseleave', function () {
+            modalSvg.querySelectorAll('.wm-country.wm-path-hl').forEach(function (p) {
+              p.classList.remove('wm-path-hl');
+            });
+          });
+          tr.addEventListener('click', function () {
+            if (c.raw) window.location.href = libBase + '?country=' + encodeURIComponent(c.raw);
+          });
+
+          tbody.appendChild(tr);
+        });
+      }
+
+      ths.forEach(function (th) {
+        th.addEventListener('click', function () {
+          var k = th.getAttribute('data-sort');
+          if (k === sortKey) {
+            sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortKey = k;
+            sortDir = k === 'count' ? 'desc' : 'asc';
+          }
+          syncHeaders();
+          renderRows();
+        });
+      });
+
+      syncHeaders();
+      renderRows();
+    }
+
+    attachCountries(svg, tip);
+
+    if (expandBtn) {
+      expandBtn.addEventListener('click', function () {
+        if (!modalMap) return;
+        if (!modalMap.firstChild) {
+          var clone = svg.cloneNode(true);
+          clone.removeAttribute('id');
+          clone.style.maxWidth = 'none';
+          clone.style.width = '100%';
+          modalMap.appendChild(clone);
+          var modalSvg = modalMap.querySelector('svg');
+          attachCountriesModal(modalSvg, modalTip);
+          buildModalTable(modalSvg);
+        }
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+      });
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      document.body.style.overflow = '';
+      if (modalTip) modalTip.style.display = 'none';
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && modal.style.display !== 'none') closeModal();
     });
   })();
 </script>

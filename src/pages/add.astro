@@ -7,6 +7,7 @@ import { syncArtistData, syncAllArtistsForAlbum } from '../lib/artist-cache';
 import { getGenreCache } from '../lib/genre-cache';
 import { getDescriptorCache } from '../lib/descriptor-cache';
 import { invalidateLibraryOverview } from '../lib/library-cache';
+import { recomputeCountryCounts } from '../lib/country-counts';
 
 const user = Astro.locals.user!;
 const db   = env.DB;
@@ -184,6 +185,7 @@ if (Astro.request.method === 'POST') {
   `).bind(albumId, albumId, albumId, albumId, albumId, albumId, albumId, albumId, albumId, albumId).run();
 
   await invalidateLibraryOverview(kv, user.id);
+  await recomputeCountryCounts(db, user.id);
 
   if (artist.includes(' / ') && mbid) {
     Astro.locals.cfContext.waitUntil(syncAllArtistsForAlbum(db, mbid));

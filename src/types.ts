@@ -99,6 +99,7 @@ export interface User {
   created_at: string;
   bio: string | null;
   social_links: string | null;
+  country_counts: string | null;
 }
 
 export interface SessionRow {
