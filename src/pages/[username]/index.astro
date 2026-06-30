@@ -2,6 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
 import { countryCode } from '../../lib/utils';
+import { md } from '../../lib/markdown';
 
 const { username } = Astro.params;
 if (!username) return Astro.redirect('/');
@@ -9,15 +10,17 @@ if (!username) return Astro.redirect('/');
 const db = env.DB;
 
 const profileUser = await db.prepare(`
-  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url, bio
   FROM users WHERE profile_url = ?
 `).bind(username).first<{
   id: number; username: string; display_name: string | null;
   profile_url: string; is_private: number; hide_added_at: number;
-  timezone: string; avatar_url: string | null;
+  timezone: string; avatar_url: string | null; bio: string | null;
 }>();
 
 if (!profileUser) return new Response(null, { status: 404 });
+
+const bioHtml = profileUser.bio ? md.parse(profileUser.bio) as string : '';
 
 const loggedInUser = Astro.locals.user;
 
@@ -254,7 +257,6 @@ if (!isOwner && !profileUser.is_private) {
     <div id="dashboard-wrapper" data-user-base={userBase} data-tz={tz}>
       {/* ── Activity section ──────────────────────────────────────────────── */}
       <div class="activity-section">
-        <div class="dash-title dash-section-header">Overall Stats</div>
         <div class="stat-cards">
           <div class="stat-card">
             <span class="stat-val">{stats.total_albums}</span>
@@ -276,11 +278,12 @@ if (!isOwner && !profileUser.is_private) {
           )}
         </div>
 
+        {bioHtml && <div class="user-bio album-notes" set:html={bioHtml} />}
+
         {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
           <div id="hm-tip" aria-hidden="true"></div>
         )}
         {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
-          <div class="dash-title dash-section-header hm-header">Monthly Heatmap</div>
           <div class="hm-grid">
             {monthBlocks.map(block => (
               <div class="hm-block">
@@ -401,13 +404,16 @@ if (!isOwner && !profileUser.is_private) {
 .nav-sep        { color: var(--border); user-select: none; }
 
 /* ── Activity section ────────────────────────────────────────────────────── */
-.activity-section { margin-bottom: 28px; display: flex; flex-direction: column; }
+.activity-section { margin-bottom: 28px; display: flex; flex-direction: column; gap: 20px; margin-top: 12px; }
 
 .stat-cards {
   display: flex;
   gap: 20px;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+}
+.user-bio {
+  max-width: 480px;
+  margin-bottom: 0 !important;
 }
 .stat-card {
   padding: 0;

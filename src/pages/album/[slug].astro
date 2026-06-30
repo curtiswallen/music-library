@@ -2,6 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
 import { slugify, countryCode } from '../../lib/utils';
+import { mdInline } from '../../lib/markdown';
 
 const { slug: slugParam } = Astro.params;
 if (!slugParam) return new Response(null, { status: 404 });
@@ -431,7 +432,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
               {l.rating != null && (
                   <span class={`rating ${ratingClass(l.rating)}`}>{l.rating}</span>
               )}
-              {l.notes && <span class="also-logged-note">{l.notes}</span>}
+              {l.notes && <span class="also-logged-note" set:html={mdInline(l.notes)} />}
               </a>
           ))}
           </div>
@@ -533,7 +534,8 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
   }
 
   .also-logged {
-    margin: 14px 0 24px 0; 
+    margin: 14px 0 24px 0;
+    min-width: 0;
   }
 
   .related-section {
