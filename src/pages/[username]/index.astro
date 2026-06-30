@@ -281,8 +281,8 @@ if (!isOwner && !profileUser.is_private) {
           )}
         </div>
 
-        <div id="bio-wrapper">
-          {bioHtml && <div class="user-bio album-notes" set:html={bioHtml} />}
+        {bioHtml && (<div id="bio-wrapper">
+           <div class="user-bio album-notes" set:html={bioHtml} />
 
           {socialLinks.length > 0 && (
             <div class="social-links-row">
@@ -301,7 +301,7 @@ if (!isOwner && !profileUser.is_private) {
               })}
             </div>
           )}
-        </div>
+        </div>)}
 
         {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
           <div id="hm-tip" aria-hidden="true"></div>
