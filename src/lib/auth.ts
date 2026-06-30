@@ -45,7 +45,7 @@ export async function validateSession(db: D1Database, token: string): Promise<Us
   const row = await db.prepare(`
     SELECT u.id, u.google_id, u.email, u.username,
            u.display_name, u.profile_url, u.is_private, u.hide_added_at,
-           u.timezone, u.avatar_url, u.is_admin, u.created_at, u.bio
+           u.timezone, u.avatar_url, u.is_admin, u.created_at, u.bio, u.social_links
     FROM user_sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.id = ? AND s.expires_at > ?

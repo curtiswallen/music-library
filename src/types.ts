@@ -98,6 +98,7 @@ export interface User {
   is_admin: number;     // 0 | 1
   created_at: string;
   bio: string | null;
+  social_links: string | null;
 }
 
 export interface SessionRow {

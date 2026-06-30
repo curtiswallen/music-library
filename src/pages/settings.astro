@@ -2,6 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import Combobox from '../components/Combobox.astro';
 import { env } from 'cloudflare:workers';
+import { SOCIAL_PLATFORMS, parseSocialLinks, type SocialLink } from '../lib/social-platforms';
 
 const user = Astro.locals.user!;
 const db   = env.DB;
@@ -19,6 +20,7 @@ let formIsPrivate    = user.is_private;
 let formHideAddedAt  = user.hide_added_at ?? 0;
 let formTimezone     = user.timezone || 'UTC';
 let formBio          = user.bio ?? '';
+let formSocialLinks: SocialLink[] = parseSocialLinks(user.social_links);
 
 if (Astro.request.method === 'POST') {
   const data = await Astro.request.formData();
@@ -29,6 +31,11 @@ if (Astro.request.method === 'POST') {
   formHideAddedAt = data.get('hide_added_at') === '1' ? 1 : 0;
   formTimezone    = ((data.get('timezone') as string) ?? 'UTC').trim() || 'UTC';
   formBio         = ((data.get('bio') as string) ?? '').trim().slice(0, 1000);
+
+  const rawSocialLinks = (data.get('social_links') as string) ?? '[]';
+  const parsed = parseSocialLinks(rawSocialLinks);
+  const validIds = new Set(SOCIAL_PLATFORMS.map(p => p.id));
+  formSocialLinks = parsed.filter(l => validIds.has(l.platform)).slice(0, 10);
 
   // Validate display_name
   if (formDisplayName.length > 50) {
@@ -53,7 +60,7 @@ if (Astro.request.method === 'POST') {
   if (Object.keys(errors).length === 0) {
     await db.prepare(`
       UPDATE users
-      SET display_name = ?, profile_url = ?, is_private = ?, hide_added_at = ?, timezone = ?, bio = ?
+      SET display_name = ?, profile_url = ?, is_private = ?, hide_added_at = ?, timezone = ?, bio = ?, social_links = ?
       WHERE id = ?
     `).bind(
       formDisplayName || null,
@@ -62,6 +69,7 @@ if (Astro.request.method === 'POST') {
       formHideAddedAt,
       formTimezone,
       formBio || null,
+      formSocialLinks.length > 0 ? JSON.stringify(formSocialLinks) : null,
       user.id,
     ).run();
 
@@ -214,11 +222,47 @@ const TIMEZONES: { label: string; value: string }[] = [
                   placeholder="Write a short bio…">{formBio}</textarea>
         <span class="field-hint">Shown on your public dashboard. Markdown supported (links, bold, etc.). Max 1000 characters.</span>
       </div>
+
+      <div class="form-group">
+        <label>Social Links</label>
+        <div id="slk-list" style={formSocialLinks.length === 0 ? 'display:none' : undefined}>
+          {formSocialLinks.map(link => {
+            const p = SOCIAL_PLATFORMS.find(pl => pl.id === link.platform);
+            return (
+              <div class="slk-item" data-platform={link.platform} data-username={link.username}>
+                <span class="slk-label">{p?.label ?? link.platform}</span>
+                <span class="slk-username">{link.username}</span>
+                <button type="button" class="slk-remove" aria-label="Remove">×</button>
+              </div>
+            );
+          })}
+        </div>
+        <div id="slk-add-row" style={formSocialLinks.length >= 10 ? 'display:none' : undefined}>
+          <button type="button" id="slk-add-btn" class="btn">+ Add Link</button>
+        </div>
+        <div id="slk-add-form">
+          <select id="slk-platform-sel">
+            <option value="">Choose platform…</option>
+            {SOCIAL_PLATFORMS.map(p => <option value={p.id}>{p.label}</option>)}
+          </select>
+          <div class="slk-username-wrap">
+            <span id="slk-prefix-lbl" class="slk-affix"></span>
+            <input type="text" id="slk-username-inp" placeholder="username" autocomplete="off" spellcheck="false" />
+            <span id="slk-suffix-lbl" class="slk-affix"></span>
+          </div>
+          <div class="slk-add-actions">
+            <button type="button" id="slk-confirm-btn" class="btn">Add</button>
+            <button type="button" id="slk-cancel-btn" class="btn">Cancel</button>
+          </div>
+        </div>
+        <input type="hidden" name="social_links" id="slk-json"
+               value={JSON.stringify(formSocialLinks)} />
+        <span class="field-hint">Up to 10 links, shown as icons on your public profile.</span>
+      </div>
     </div>
 
     <div class="settings-footer">
       <button type="submit" class="btn">Save settings</button>
-      <a href="javascript:history.back()" class="btn">Go back</a>
     </div>
   </form>
 </Layout>
@@ -320,4 +364,165 @@ const TIMEZONES: { label: string; value: string }[] = [
   font-size: 11px;
   margin-bottom: 12px;
 }
+#slk-list { display: flex; flex-direction: column; gap: 4px; align-self: flex-start; }
+:global(.slk-item) {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+:global(.slk-item.slk-new) { opacity: 0.6; }
+:global(.slk-label) { font-weight: 500; min-width: 90px; }
+:global(.slk-username) { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:global(.slk-remove) {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 14px; line-height: 1; padding: 0 2px;
+}
+:global(.slk-remove:hover) { color: var(--text); }
+#slk-add-form {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+#slk-add-form select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+#slk-add-form select:focus { outline: none; border-color: var(--accent); }
+.slk-username-wrap {
+  display: none;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 11px;
+}
+.slk-username-wrap:focus-within { border-color: var(--accent); }
+.slk-affix {
+  padding: 5px 6px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  background: var(--bg-card);
+  font-size: 11px;
+}
+#slk-prefix-lbl { border-right: 1px solid var(--border); }
+#slk-suffix-lbl { border-left: 1px solid var(--border); }
+#slk-username-inp {
+  flex: 1; border: none !important; border-radius: 0 !important;
+  background: var(--bg); color: var(--text);
+  padding: 5px 8px; font-size: 11px; font-family: inherit; min-width: 0;
+}
+#slk-username-inp:focus { outline: none; }
+.slk-add-actions { display: flex; gap: 6px; }
 </style>
+
+<script is:inline define:vars={{ platformData: SOCIAL_PLATFORMS.map(p => ({ id: p.id, label: p.label, urlPrefix: p.urlPrefix, urlSuffix: p.urlSuffix ?? '', inputPlaceholder: p.inputPlaceholder })) }}>
+(function () {
+  const list        = document.getElementById('slk-list');
+  const addRow      = document.getElementById('slk-add-row');
+  const addBtn      = document.getElementById('slk-add-btn');
+  const addForm     = document.getElementById('slk-add-form');
+  const platformSel = document.getElementById('slk-platform-sel');
+  const usernameInp  = document.getElementById('slk-username-inp');
+  const usernameWrap = document.getElementById('slk-username-inp').closest('.slk-username-wrap');
+  const prefixLbl    = document.getElementById('slk-prefix-lbl');
+  const suffixLbl    = document.getElementById('slk-suffix-lbl');
+  const confirmBtn  = document.getElementById('slk-confirm-btn');
+  const cancelBtn   = document.getElementById('slk-cancel-btn');
+  const hiddenInp   = document.getElementById('slk-json');
+
+  const byId = Object.fromEntries(platformData.map(p => [p.id, p]));
+
+  function serialize() {
+    const items = [...list.querySelectorAll('.slk-item')];
+    hiddenInp.value = JSON.stringify(items.map(el => ({
+      platform: el.dataset.platform,
+      username: el.dataset.username,
+    })));
+    const count = items.length;
+    list.style.display = count === 0 ? 'none' : 'flex';
+    addRow.style.display = count >= 10 ? 'none' : '';
+  }
+
+  function makeItem(platform, username) {
+    const el = document.createElement('div');
+    el.className = 'slk-item slk-new';
+    el.dataset.platform = platform;
+    el.dataset.username = username;
+    const label = byId[platform]?.label ?? platform;
+    el.innerHTML = `
+      <span class="slk-label">${label}</span>
+      <span class="slk-username">${username}</span>
+      <button type="button" class="slk-remove" aria-label="Remove">×</button>
+    `;
+    return el;
+  }
+
+  list.addEventListener('click', e => {
+    if (e.target.classList.contains('slk-remove')) {
+      e.target.closest('.slk-item').remove();
+      serialize();
+    }
+  });
+
+  addBtn.addEventListener('click', () => {
+    addForm.style.display = 'flex';
+    addRow.style.display = 'none';
+    platformSel.focus();
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    addForm.style.display = 'none';
+    const count = list.querySelectorAll('.slk-item').length;
+    addRow.style.display = count >= 10 ? 'none' : '';
+    platformSel.value = '';
+    usernameInp.value = '';
+    usernameInp.placeholder = 'username';
+    prefixLbl.textContent = '';
+    suffixLbl.textContent = '';
+    suffixLbl.style.display = 'none';
+    usernameWrap.style.display = 'none';
+  });
+
+  platformSel.addEventListener('change', () => {
+    const p = byId[platformSel.value];
+    if (!p) { usernameWrap.style.display = 'none'; return; }
+    prefixLbl.textContent = p.urlPrefix;
+    suffixLbl.textContent = p.urlSuffix ?? '';
+    suffixLbl.style.display = p.urlSuffix ? '' : 'none';
+    usernameInp.placeholder = p.inputPlaceholder;
+    usernameInp.value = '';
+    usernameWrap.style.display = 'flex';
+    usernameInp.focus();
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    const platform = platformSel.value;
+    const username = usernameInp.value.trim();
+    if (!platform || !username) { usernameInp.focus(); return; }
+    if (list.querySelectorAll('.slk-item').length >= 10) return;
+    list.appendChild(makeItem(platform, username));
+    serialize();
+    cancelBtn.click();
+  });
+
+  usernameInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmBtn.click(); }
+    if (e.key === 'Escape') cancelBtn.click();
+  });
+})();
+</script>

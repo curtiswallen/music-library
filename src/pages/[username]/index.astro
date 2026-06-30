@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import { env } from 'cloudflare:workers';
 import { countryCode } from '../../lib/utils';
 import { md } from '../../lib/markdown';
+import { PLATFORM_MAP, platformUrl, parseSocialLinks } from '../../lib/social-platforms';
 
 const { username } = Astro.params;
 if (!username) return Astro.redirect('/');
@@ -10,17 +11,19 @@ if (!username) return Astro.redirect('/');
 const db = env.DB;
 
 const profileUser = await db.prepare(`
-  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url, bio
+  SELECT id, username, display_name, profile_url, is_private, hide_added_at, timezone, avatar_url, bio, social_links
   FROM users WHERE profile_url = ?
 `).bind(username).first<{
   id: number; username: string; display_name: string | null;
   profile_url: string; is_private: number; hide_added_at: number;
   timezone: string; avatar_url: string | null; bio: string | null;
+  social_links: string | null;
 }>();
 
 if (!profileUser) return new Response(null, { status: 404 });
 
-const bioHtml = profileUser.bio ? md.parse(profileUser.bio) as string : '';
+const bioHtml     = profileUser.bio ? md.parse(profileUser.bio) as string : '';
+const socialLinks = parseSocialLinks(profileUser.social_links);
 
 const loggedInUser = Astro.locals.user;
 
@@ -278,7 +281,27 @@ if (!isOwner && !profileUser.is_private) {
           )}
         </div>
 
-        {bioHtml && <div class="user-bio album-notes" set:html={bioHtml} />}
+        <div id="bio-wrapper">
+          {bioHtml && <div class="user-bio album-notes" set:html={bioHtml} />}
+
+          {socialLinks.length > 0 && (
+            <div class="social-links-row">
+              {socialLinks.map(link => {
+                const p = PLATFORM_MAP.get(link.platform);
+                if (!p) return null;
+                return (
+                  <a href={platformUrl(p, link.username)} target="_blank" rel="noopener noreferrer"
+                    class="social-link-icon" title={p.label}
+                    style={`--brand: ${p.color}`}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                      <path d={p.svgPath} />
+                    </svg>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
           <div id="hm-tip" aria-hidden="true"></div>
@@ -410,11 +433,32 @@ if (!isOwner && !profileUser.is_private) {
   display: flex;
   gap: 20px;
   flex-wrap: wrap;
+  justify-content: space-between;
 }
+
+#bio-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .user-bio {
   max-width: 480px;
   margin-bottom: 0 !important;
 }
+.social-links-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.social-link-icon {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+.social-link-icon:hover { color: var(--brand, var(--text)); }
 .stat-card {
   padding: 0;
 }
