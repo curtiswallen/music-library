@@ -738,6 +738,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   column-gap: 28px;
   align-items: start;
   width: 100%;
+  padding-top: 26px;
 }
 .album-hero > .cover-col { grid-column: 1; grid-row: 1 / span 10; }
 .album-hero > .album-meta,
