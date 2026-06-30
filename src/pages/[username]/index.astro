@@ -26,10 +26,16 @@ if (!profileUser) return new Response(null, { status: 404 });
 const bioHtml     = profileUser.bio ? md.parse(profileUser.bio) as string : '';
 const socialLinks = parseSocialLinks(profileUser.social_links);
 
+const loggedInUser = Astro.locals.user;
+
+const cfDevice = Astro.request.headers.get('CF-Device-Type') ?? '';
+const ua       = Astro.request.headers.get('User-Agent') ?? '';
+const isMobile = cfDevice === 'mobile' || (!cfDevice && /Mobi|Android|iPhone/i.test(ua));
+
 // Choropleth: ISO alpha-2 → count + raw DB value (for click-through URL)
 const countMap:   Record<string, number> = {};
 const isoToRaw:   Record<string, string> = {};
-if (profileUser.country_counts) {
+if (!isMobile && profileUser.country_counts) {
   try {
     const cc = JSON.parse(profileUser.country_counts) as Record<string, number>;
     for (const [rawCountry, count] of Object.entries(cc)) {
@@ -40,13 +46,7 @@ if (profileUser.country_counts) {
     }
   } catch {}
 }
-const hasMapData = Object.keys(countMap).length > 0;
-
-const loggedInUser = Astro.locals.user;
-
-const cfDevice = Astro.request.headers.get('CF-Device-Type') ?? '';
-const ua       = Astro.request.headers.get('User-Agent') ?? '';
-const isMobile = cfDevice === 'mobile' || (!cfDevice && /Mobi|Android|iPhone/i.test(ua));
+const hasMapData = !isMobile && Object.keys(countMap).length > 0;
 const isOwner      = loggedInUser?.id === profileUser.id;
 const displayName  = profileUser.display_name || profileUser.username;
 const userBase     = `/${username}`;

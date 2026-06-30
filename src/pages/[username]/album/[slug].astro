@@ -453,6 +453,10 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
           )}
         </div>
 
+        <div class="album-actions">
+          <a href={`/album/${slugParam}`} class="btn">← Community entry</a>
+        </div>
+
         {!isOwner && loggedInUser && (
           <div class="album-actions">
             {viewerEntry === 'none' && (
@@ -583,12 +587,9 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
             <div class="album-notes prose" set:html={notesHtml} />
           </div>
         )}
-        <p class="added-at">
-          {addedAt && (isOwner || !profileUser.hide_added_at)
-            ? <>{album.rating == null ? 'Queued on ' : 'Logged on '} {addedAt} · <a href={`/album/${slugParam}`} class="global-entry-link">Community entry</a></>
-            : <a href={`/album/${slugParam}`} class="global-entry-link">Community entry</a>
-          }
-        </p>
+        {addedAt && (isOwner || !profileUser.hide_added_at) && (
+          <p class="added-at">{album.rating == null ? 'Queued on ' : 'Logged on '} {addedAt}</p>
+        )}
       </div>
 
     {albumTracks.length > 0 && (
