@@ -326,7 +326,6 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
         )}
       </div>
 
-    <div id="album-right-wrapper">
       <div class="album-meta">
         <div class="album-mobile-header">
           <p class="album-meta-artist">
@@ -371,50 +370,49 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
           </div>
 
         </div>
-      </div>
-
-      {tracks.length > 0 && (
-        <div class="tracks-wrap">
-          <table class="tracks-table">
-            <thead>
-              <tr>
-                <th class="track-num">#</th>
-                <th>Title</th>
-                <th class="track-len">Length</th>
-                {hasTrackRatings && <th class="track-rating-cell">Avg</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {tracks.map(t => {
-                const key = String(t.pos);
-                const tr  = trackRatings[key];
-                return (
-                  <tr>
-                    <td class="track-num">{t.pos}</td>
-                    <td>{t.title}</td>
-                    <td class="track-len">{fmtLen(t.length)}</td>
-                    {hasTrackRatings && (
-                      <td class="track-rating-cell">
-                        {tr ? <span class={`rating ${ratingClass(tr.avg)}`}>{tr.avg.toFixed(1)}</span> : <span style="color:var(--text-muted)">—</span>}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-            {totalAlbumLen && (
-              <tfoot>
-                <tr class="tracks-total-row">
-                  <td class="track-num"></td>
-                  <td></td>
-                  <td class="track-len tracks-total">{totalAlbumLen}</td>
-                  {hasTrackRatings && <td></td>}
+        {tracks.length > 0 && (
+          <div class="tracks-wrap">
+            <table class="tracks-table">
+              <thead>
+                <tr>
+                  <th class="track-num">#</th>
+                  <th>Title</th>
+                  <th class="track-len">Length</th>
+                  {hasTrackRatings && <th class="track-rating-cell">Avg</th>}
                 </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {tracks.map(t => {
+                  const key = String(t.pos);
+                  const tr  = trackRatings[key];
+                  return (
+                    <tr>
+                      <td class="track-num">{t.pos}</td>
+                      <td>{t.title}</td>
+                      <td class="track-len">{fmtLen(t.length)}</td>
+                      {hasTrackRatings && (
+                        <td class="track-rating-cell">
+                          {tr ? <span class={`rating ${ratingClass(tr.avg)}`}>{tr.avg.toFixed(1)}</span> : <span style="color:var(--text-muted)">—</span>}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {totalAlbumLen && (
+                <tfoot>
+                  <tr class="tracks-total-row">
+                    <td class="track-num"></td>
+                    <td></td>
+                    <td class="track-len tracks-total">{totalAlbumLen}</td>
+                    {hasTrackRatings && <td></td>}
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
+      </div>
 
       <section class="also-logged">
           <p class="attr-label">Logged By</p>
@@ -514,7 +512,6 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
         )}
       </section>
     </div>
-  </div>
 </div>
 </Layout>
 
@@ -525,13 +522,6 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     flex-direction: column;
     gap: 36px;
     width: 100%;
-  }
-
-  #album-right-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    min-width: 0;
   }
 
   .also-logged {
@@ -578,11 +568,6 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     justify-content: space-between;
   }
 
-  .album-hero > .also-logged { grid-column: 2; }
-
-  @media (max-width: 640px) {
-    .album-hero > .also-logged { grid-column: 1 / -1; }
-  }
 
   .album-upper-wrapper {
     flex-direction: column;

@@ -1,6 +1,7 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import AlbumForm from '../../../components/AlbumForm.astro';
+import Combobox from '../../../components/Combobox.astro';
 import { env } from 'cloudflare:workers';
 import type { Album, UserAlbum, Track } from '../../../types';
 import { slugify, generateUniqueSlug, countryCode, normalizeSearch } from '../../../lib/utils';
@@ -36,7 +37,112 @@ if (profileUser.is_private && !isOwner) return Astro.redirect(`/${username}`);
 if (Astro.request.method === 'POST') {
   if (!isOwner) return new Response('Forbidden', { status: 403 });
 
-  const data      = await Astro.request.formData();
+  const data   = await Astro.request.formData();
+  const action = (data.get('action') as string) || '';
+
+  // ── Relog action ────────────────────────────────────────────────────────────
+  if (action === 'relog') {
+    const existing = await db.prepare(`
+      SELECT a.id, ua.rating, ua.genre, ua.subgenres, ua.descriptors, ua.notes, ua.recommended, ua.logged_at, ua.track_seconds, ua.tracks_data
+      FROM albums a
+      JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
+      WHERE a.slug = ?
+    `).bind(profileUser.id, slugParam).first<{
+      id: number; rating: number | null; genre: string; subgenres: string; descriptors: string;
+      notes: string; recommended: number; logged_at: string | null; track_seconds: number; tracks_data: string;
+    }>();
+    if (!existing) return Astro.redirect(`/${profileUser.profile_url}`);
+
+    const archiveLoggedAt = existing.logged_at ?? new Date().toISOString();
+    await db.prepare(`
+      INSERT INTO user_album_logs (user_id, album_id, rating, genre, subgenres, descriptors, notes, recommended, logged_at, tracks_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      profileUser.id, existing.id,
+      existing.rating, existing.genre, existing.subgenres, existing.descriptors,
+      existing.notes, existing.recommended, archiveLoggedAt, existing.tracks_data,
+    ).run();
+
+    const newRating = data.get('rating') ? parseInt(data.get('rating') as string) : null;
+
+    const canonicalDescriptors2 = await getDescriptorCache(kv, db);
+    const canonicalSet2 = new Set(canonicalDescriptors2.map(d => d.toLowerCase()));
+    let relogDescriptors: string[] = [];
+    try { relogDescriptors = JSON.parse((data.get('descriptors') as string) || '[]'); } catch {}
+    const filteredDescriptors = relogDescriptors.map(d => d.trim().toLowerCase()).filter(d => canonicalSet2.has(d));
+    const relogDescriptorsJson = JSON.stringify(filteredDescriptors);
+
+    const subgenresList2 = ((data.get('subgenres') as string) ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    const relogSubgenres = JSON.stringify(subgenresList2);
+
+    let relogTrackAnnotations: Array<{pos: number; rating: number | null; notable: boolean; note: string}> = [];
+    try { relogTrackAnnotations = JSON.parse((data.get('relog_tracks') as string) || '[]'); } catch {}
+    const relogTracksData = JSON.stringify(relogTrackAnnotations.map(t => ({
+      pos: t.pos, rating: t.rating ?? null, notable: !!t.notable, note: t.note ?? '',
+    })));
+
+    await db.prepare(`
+      UPDATE user_albums SET
+        rating = ?, genre = ?, subgenres = ?, descriptors = ?, notes = ?, recommended = ?,
+        tracks_data = ?, logged_at = CURRENT_TIMESTAMP, is_queued = 0
+      WHERE album_id = ? AND user_id = ?
+    `).bind(
+      newRating,
+      (data.get('genre') as string) || '',
+      relogSubgenres,
+      relogDescriptorsJson,
+      (data.get('notes') as string) || '',
+      data.get('recommended') === 'on' ? 1 : 0,
+      relogTracksData,
+      existing.id, profileUser.id,
+    ).run();
+
+    const trackRatingInserts2 = relogTrackAnnotations
+      .filter(t => t.rating != null)
+      .map(t => db.prepare(
+        'INSERT INTO track_ratings (album_id, user_id, track_pos, rating) VALUES (?, ?, ?, ?)'
+      ).bind(existing.id, profileUser.id, String(t.pos), Number(t.rating)));
+    await db.batch([
+      db.prepare('DELETE FROM track_ratings WHERE album_id = ? AND user_id = ?').bind(existing.id, profileUser.id),
+      ...trackRatingInserts2,
+    ]);
+
+    const oldEffective = existing.rating != null ? existing.track_seconds : 0;
+    const newEffective = newRating != null ? existing.track_seconds : 0;
+    if (oldEffective !== newEffective) {
+      await db.prepare('UPDATE users SET total_seconds = total_seconds - ? + ? WHERE id = ?')
+        .bind(oldEffective, newEffective, profileUser.id).run();
+    }
+
+    await db.batch([
+      db.prepare('DELETE FROM user_album_subgenres WHERE album_id = ? AND user_id = ?').bind(existing.id, profileUser.id),
+      db.prepare('DELETE FROM user_album_descriptors WHERE album_id = ? AND user_id = ?').bind(existing.id, profileUser.id),
+      ...subgenresList2.map(s =>
+        db.prepare('INSERT OR IGNORE INTO user_album_subgenres (album_id, user_id, subgenre) VALUES (?, ?, ?)').bind(existing.id, profileUser.id, s)
+      ),
+      ...filteredDescriptors.map(d =>
+        db.prepare('INSERT OR IGNORE INTO user_album_descriptors (album_id, user_id, descriptor) VALUES (?, ?, ?)').bind(existing.id, profileUser.id, d)
+      ),
+    ]);
+
+    await db.prepare(`
+      UPDATE albums SET
+        all_subgenres     = COALESCE((SELECT json_group_array(subgenre)   FROM (SELECT DISTINCT subgenre   FROM user_album_subgenres  WHERE album_id = ?)), '[]'),
+        all_descriptors   = COALESCE((SELECT json_group_array(descriptor) FROM (SELECT DISTINCT descriptor FROM user_album_descriptors WHERE album_id = ?)), '[]'),
+        genre_counts      = COALESCE((SELECT json_group_object(genre, cnt) FROM (SELECT genre, COUNT(*) as cnt FROM user_albums WHERE album_id = ? AND genre != '' GROUP BY genre)), '{}'),
+        subgenre_counts   = COALESCE((SELECT json_group_object(subgenre, cnt)   FROM (SELECT subgenre,   COUNT(*) as cnt FROM user_album_subgenres  WHERE album_id = ? GROUP BY subgenre)),   '{}'),
+        descriptor_counts = COALESCE((SELECT json_group_object(descriptor, cnt) FROM (SELECT descriptor, COUNT(*) as cnt FROM user_album_descriptors WHERE album_id = ? GROUP BY descriptor)), '{}'),
+        avg_rating        = (SELECT AVG(rating)   FROM user_albums WHERE album_id = ? AND rating IS NOT NULL),
+        rating_count      = (SELECT COUNT(rating) FROM user_albums WHERE album_id = ? AND rating IS NOT NULL)
+      WHERE id = ?
+    `).bind(existing.id, existing.id, existing.id, existing.id, existing.id, existing.id, existing.id, existing.id).run();
+
+    await invalidateLibraryOverview(env.GENRE_CACHE, profileUser.id);
+    await recomputeCountryCounts(db, profileUser.id);
+
+    return Astro.redirect(`/${profileUser.profile_url}/album/${slugParam}`);
+  }
+
   const artist    = (data.getAll('artist') as string[]).map(s => s.trim()).filter(Boolean).join(' / ') || '';
   const albumName = (data.get('album') as string) || '';
 
@@ -113,7 +219,7 @@ if (Astro.request.method === 'POST') {
       genre = ?, subgenres = ?, rating = ?, notes = ?,
       tracks_data = ?, recommended = ?, is_hidden = ?,
       release_mbid = ?, release_title = ?, release_data = ?, descriptors = ?,
-      track_seconds = ?, is_queued = 0${isFirstRating ? ', added_at = CURRENT_TIMESTAMP' : ''}
+      track_seconds = ?, is_queued = 0${isFirstRating ? ', added_at = CURRENT_TIMESTAMP, logged_at = CURRENT_TIMESTAMP' : ''}
     WHERE album_id = ? AND user_id = ?
   `).bind(
     (data.get('genre') as string) || '',
@@ -196,12 +302,12 @@ const row = await db.prepare(`
     a.logged_by_user_ids, a.all_subgenres, a.all_descriptors,
     a.artist_mbid, a.release_type,
     ua.id as ua_id, ua.genre, ua.subgenres, ua.rating, ua.notes,
-    ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at,
+    ua.tracks_data, ua.recommended, ua.is_hidden, ua.added_at, ua.logged_at,
     ua.release_mbid, ua.release_title, ua.release_data, ua.descriptors
   FROM albums a
   JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
   WHERE a.slug = ?
-`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string }>();
+`).bind(profileUser.id, slugParam).first<Album & UserAlbum & { tracks_data: string; is_hidden: number; added_at: string; logged_at: string | null }>();
 
 if (!row) return new Response(null, { status: 404 });
 if (row.is_hidden && !isOwner) return new Response(null, { status: 404 });
@@ -342,7 +448,8 @@ function fmtLoggedAt(dateStr: string | null, tz = 'UTC'): string {
   return `${get('month')}/${get('day')}/${get('year')} ${get('hour')}:${get('minute')}`;
 }
 
-const addedAt = album.added_at ? fmtLoggedAt(album.added_at, profileUser.timezone || 'UTC') : null;
+const addedAt    = album.added_at    ? fmtLoggedAt(album.added_at,    profileUser.timezone || 'UTC') : null;
+const loggedAt   = album.logged_at   ? fmtLoggedAt(album.logged_at,   profileUser.timezone || 'UTC') : null;
 
 // Only owners see the edit form — skip genre/descriptor lookup for public visitors
 let genreMap: Record<string, string[]> = {};
@@ -394,6 +501,44 @@ if (!isOwner && !profileUser.is_private) {
   Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 }
 
+let relogHistory: Array<{ id: number; rating: number | null; genre: string; subgenres: string; descriptors: string; tracks_data: string; notes: string; recommended: number; logged_at: string; logged_at_fmt: string }> = [];
+if (isOwner && album.rating != null) {
+  const { results: logRows } = await db.prepare(`
+    SELECT id, rating, genre, subgenres, descriptors, tracks_data, notes, recommended, logged_at
+    FROM user_album_logs
+    WHERE user_id = ? AND album_id = ?
+    ORDER BY logged_at DESC
+  `).bind(profileUser.id, album.id).all<{ id: number; rating: number | null; genre: string; subgenres: string; descriptors: string; tracks_data: string; notes: string; recommended: number; logged_at: string }>();
+  relogHistory = logRows.map(r => ({ ...r, logged_at_fmt: fmtLoggedAt(r.logged_at, profileUser.timezone || 'UTC') }));
+}
+
+const relogHistoryJson = relogHistory.length > 0
+  ? JSON.stringify(relogHistory.map(r => ({
+      logged_at_fmt: r.logged_at_fmt,
+      rating: r.rating,
+      recommended: r.recommended,
+      genre: r.genre,
+      subgenres: (JSON.parse(r.subgenres || '[]') as string[]),
+      descriptors: (JSON.parse(r.descriptors || '[]') as string[]),
+      notes: r.notes,
+      tracks: (JSON.parse(r.tracks_data || '[]') as AnnoTrack[]),
+    }))).replace(/</g, '\\u003c')
+  : '[]';
+
+const currentLogJson = relogHistory.length > 0
+  ? JSON.stringify({
+      year: album.year,
+      releaseTypeLabel: releaseTypeLabel(album.release_type),
+      rating: album.rating,
+      genre: album.genre,
+      subgenres,
+      descriptors,
+      recommended: album.recommended,
+      notes: album.notes,
+      tracks: albumTracks.map(t => ({ pos: t.pos, rating: t.rating ?? null, notable: !!t.notable, note: t.note ?? '' })),
+    }).replace(/</g, '\\u003c')
+  : '{}';
+
 const navRef     = Astro.url.searchParams.get('ref') ?? '';
 const fromLib    = navRef === 'l';
 const refForward = fromLib ? '?ref=l' : '';
@@ -402,6 +547,8 @@ const logAlbumParams = new URLSearchParams();
 logAlbumParams.set('dbId', String(album.id));
 if (album.mbid) logAlbumParams.set('mbid', album.mbid);
 const logAlbumHref = `/add?${logAlbumParams.toString()}`;
+
+const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100];
 ---
 
 <Layout title={`${album.artist} — ${album.album}`}>
@@ -455,6 +602,9 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 
         <div class="album-actions">
           <a href={`/album/${slugParam}`} class="btn">← Community entry</a>
+          {isOwner && album.rating != null && (
+            <button id="relog-btn" class="btn" type="button">&#8635; Relog</button>
+          )}
         </div>
 
         {!isOwner && loggedInUser && (
@@ -539,7 +689,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
           </p>
           <p class="album-meta-title">{album.album}</p>
         </div>
-        <div class="album-upper-wrapper">
+        <div class="album-upper-wrapper" id="log-main-attrs">
           <div class="album-header">
             <div class="album-attrs">
               {album.year && <span>{album.year}</span>}
@@ -582,58 +732,95 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
         </div>
   
         {notesHtml && (
-          <div>
+          <div id="log-main-notes">
             <p class="attr-label">Notes</p>
             <div class="album-notes prose" set:html={notesHtml} />
           </div>
         )}
-        {addedAt && (isOwner || !profileUser.hide_added_at) && (
-          <p class="added-at">{album.rating == null ? 'Queued on ' : 'Logged on '} {addedAt}</p>
+        <div id="log-hist-wrap" style="display:none" class="log-hist-wrap"></div>
+        {albumTracks.length > 0 && (
+          <div class="tracks-wrap">
+            <table class="tracks-table">
+              <thead>
+                <tr>
+                  <th class="track-num">#</th>
+                  <th class="track-title">Title</th>
+                  <th class="track-len">Length</th>
+                  <th class="track-rating-cell">Rating</th>
+                  <th class="track-note-cell">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {albumTracks.map(t => (
+                  <tr>
+                    <td class="track-num">{t.pos}</td>
+                    <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
+                    <td class="track-len">{fmtLen(t.length)}</td>
+                    <td class="track-rating-cell">
+                      {t.rating != null
+                        ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
+                        : <span style="color:var(--text-muted)">—</span>
+                      }
+                    </td>
+                    <td class="track-note-cell">
+                      {t.note}
+                      {t.note && <span class="track-note-tip">{t.note}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {totalAlbumLen && (
+                <tfoot>
+                  <tr class="tracks-total-row">
+                    <td class="track-num"></td><td></td>
+                    <td class="track-len tracks-total">{totalAlbumLen}</td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         )}
       </div>
 
-    {albumTracks.length > 0 && (
-      <div class="tracks-wrap" style="margin-top:16px">
-        <table class="tracks-table">
-          <thead>
-            <tr>
-              <th class="track-num">#</th>
-              <th class="track-title">Title</th>
-              <th class="track-len">Length</th>
-              <th class="track-rating-cell">Rating</th>
-              <th class="track-note-cell">Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {albumTracks.map(t => (
-              <tr>
-                <td class="track-num">{t.pos}</td>
-                <td>{t.notable && <span class="rec-star" title="Notable track">★ </span>}{t.title}</td>
-                <td class="track-len">{fmtLen(t.length)}</td>
-                <td class="track-rating-cell">
-                  {t.rating != null
-                    ? <span class={`rating ${ratingClass(t.rating)}`}>{t.rating}</span>
-                    : <span style="color:var(--text-muted)">—</span>
-                  }
-                </td>
-                <td class="track-note-cell">
-                  {t.note}
-                  {t.note && <span class="track-note-tip">{t.note}</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          {totalAlbumLen && (
-            <tfoot>
-              <tr class="tracks-total-row">
-                <td class="track-num"></td><td></td>
-                <td class="track-len tracks-total">{totalAlbumLen}</td>
-                <td colspan="2"></td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </div>
+    <div class="log-date-row">
+      {(loggedAt ?? addedAt) && (isOwner || !profileUser.hide_added_at) && (
+        <p class="added-at" id="view-log-date-text">{album.rating == null ? 'Queued on ' : 'Logged on '}{loggedAt ?? addedAt}</p>
+      )}
+      {relogHistory.length > 0 && (
+        <>
+          —
+          <div class="prev-logs-wrap">
+            <button type="button" id="prev-logs-btn" class="prev-logs-btn">
+              Previous logs ({relogHistory.length})<span class="prev-logs-caret"> ▾</span>
+            </button>
+            <div id="prev-logs-panel" class="prev-logs-panel" style="display:none">
+              <table class="prev-logs-table">
+                <tbody>
+                  {relogHistory.map((r, i) => (
+                    <tr class="prev-log-row" data-idx={String(i)}>
+                      <td class="plr-date">{r.logged_at_fmt}</td>
+                      <td class="plr-rating">
+                        {r.rating != null && <span class={`rating ${ratingClass(r.rating)}`}>{r.rating}</span>}
+                      </td>
+                      <td class="plr-note">
+                        {r.notes ? (r.notes.length > 60 ? r.notes.slice(0, 60) + '…' : r.notes) : <span class="plr-empty">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" id="hist-back-btn" class="prev-logs-btn" style="display:none">↩ Current log</button>
+          </div>
+        </>
+      )}
+    </div>
+    {relogHistory.length > 0 && (
+      <>
+        <script type="application/json" id="relog-history-data" is:inline set:html={relogHistoryJson}></script>
+        <script type="application/json" id="current-log-data"  is:inline set:html={currentLogJson}></script>
+      </>
     )}
 
     <section class="related-section">
@@ -749,6 +936,153 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
       />
     </div>
   )}
+
+  <!-- ── Relog modal (owner only) ── -->
+  {isOwner && album.rating != null && (
+    <div id="relog-modal" class="relog-overlay" aria-modal="true" role="dialog">
+      <div class="relog-modal">
+        <div class="relog-modal-header">
+          <div>
+          <span class="relog-modal-title">Relog — {album.artist} · {album.album}</span>
+          <p class="relog-subhead">Your current entry will be archived. Enter your updated thoughts below.</p>
+          </div>
+          <button id="relog-close" class="btn icon-btn" type="button" aria-label="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        
+        
+        <form method="POST" id="relog-form" class="relog-form">
+          <input type="hidden" name="action" value="relog" />
+          <input type="hidden" name="relog_tracks" id="rl-f-tracks"
+            value={JSON.stringify(albumTracks.map(t => ({pos: t.pos, rating: t.rating ?? null, notable: !!t.notable, note: t.note ?? ''})))} />
+
+          <div class="relog-columns"> 
+
+            <!-- Left: subjective fields -->
+            <div class="relog-left">
+
+              <div class="relog-field">
+                <label class="relog-label">Rating</label>
+                <div class="rating-slider-wrap">
+                  <div class="rating-slider-top">
+                    <span class="rating-current" id="rl-rating-val">{album.rating}</span>
+                    <span class="rating-desc" id="rl-rating-desc"></span>
+                  </div>
+                  <input type="range" id="rl-rating-slider" min="0" max="100" step="5"
+                    list="rl-rating-ticks" value={album.rating ?? 50} />
+                  <datalist id="rl-rating-ticks">
+                    {Array.from({length: 21}, (_, i) => i * 5).map(v => <option value={v} />)}
+                  </datalist>
+                  <div class="rating-labels">
+                    {[0,10,20,30,40,50,60,70,80,90,100].map(v => <span>{v}</span>)}
+                  </div>
+                  <input type="hidden" name="rating" id="rl-f-rating" value={String(album.rating ?? '')} />
+                </div>
+              </div>
+
+              <div class="relog-field relog-check-row">
+                <button type="button"
+                  class={`icon-toggle-btn star-btn${album.recommended ? ' active' : ''}`}
+                  id="rl-rec-btn"
+                  title={album.recommended ? 'Recommended' : 'Mark as recommended'}>
+                  <svg class="icon-inactive" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
+                  <svg class="icon-active"   viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
+                </button>
+                <input name="recommended" type="checkbox" id="rl-f-recommended" style="display:none" checked={!!album.recommended} />
+              </div>
+
+              <div class="relog-field">
+                <label class="relog-label" for="rl-genre">Genre</label>
+                <Combobox id="rl-genre" name="genre" groupedOptions={groupedGenres}
+                  value={album.genre ?? ''} placeholder="Search genre..." />
+              </div>
+
+              <div class="relog-field">
+                <label class="relog-label">Subgenres</label>
+                <div class="subgenre-chips" id="rl-subgenre-chips"></div>
+                <input type="hidden" name="subgenres" id="rl-f-subgenres" value={subgenres.join(', ')} />
+              </div>
+
+              <div class="relog-field">
+                <label class="relog-label">Descriptors</label>
+                <div class="descriptor-widget">
+                  <div id="rl-descriptor-chips" class="descriptor-chips">
+                    {descriptors.map(d => (
+                      <span class="descriptor-chip" data-tag={d.toLowerCase()}>
+                        <span>{d}</span>
+                        <button type="button" class="descriptor-chip-remove">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div class="descriptor-input-wrap">
+                    <input type="text" id="rl-descriptor-input" class="descriptor-input"
+                      placeholder="Type to search…" autocomplete="off" />
+                    <div class="descriptor-dropdown" id="rl-descriptor-dropdown"></div>
+                  </div>
+                </div>
+                <input type="hidden" name="descriptors" id="rl-f-descriptors"
+                  value={JSON.stringify(descriptors)} />
+              </div>
+
+              <div class="relog-field">
+                <label class="relog-label" for="rl-notes">Notes</label>
+                <textarea id="rl-notes" name="notes" class="relog-textarea" rows="5">{album.notes}</textarea>
+                <span class="field-hint-inline">**bold**, *italic*, [link](url), - list</span>
+              </div>
+
+              <div class="relog-actions">
+                <button type="submit" class="btn btn-primary">Save Relog</button>
+                <button type="button" id="relog-cancel" class="btn">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Right: track annotations -->
+            {albumTracks.length > 0 && (
+              <div class="relog-right">
+                <label class="relog-label" style="display:block;margin-bottom:8px">Tracks</label>
+                <table class="tracks-table rl-tracks-table">
+                  <thead>
+                    <tr>
+                      <th class="track-num">#</th>
+                      <th>Title</th>
+                      <th class="track-rating-cell">Rating</th>
+                      <th class="track-notable-cell" title="Notable track">★</th>
+                      <th>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rl-tracks-tbody">
+                    {albumTracks.map(t => (
+                      <tr>
+                        <td class="track-num">{t.pos}</td>
+                        <td class="rl-track-title">{t.title}</td>
+                        <td class="track-rating-cell">
+                          <select class="track-rating-input" data-pos={String(t.pos)} data-f="rating">
+                            <option value="">—</option>
+                            {RATING_OPTS.map(v => <option value={String(v)} selected={t.rating === v}>{v}</option>)}
+                          </select>
+                        </td>
+                        <td class="track-notable-cell">
+                          <button type="button" class={`track-notable-btn${t.notable ? ' btn-active' : ''}`}
+                            data-pos={String(t.pos)} title={t.notable ? 'Notable track' : 'Mark as notable'}>★</button>
+                        </td>
+                        <td>
+                          <input class="track-note-input" type="text" value={t.note ?? ''}
+                            placeholder="Note..." data-pos={String(t.pos)} data-f="note" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+          </div><!-- end relog-columns -->
+        </form>
+      </div>
+    </div>
+  )}
 </Layout>
 
 <script>
@@ -861,6 +1195,441 @@ if (new URLSearchParams(location.search).get('edit') === '1') {
   history.replaceState(null, '', location.pathname);
 }
 
+// ── Relog: subgenre chip widget ──────────────────────────────────────────────
+function initRelogSubgenres() {
+  const genreInput = document.getElementById('rl-genre') as HTMLInputElement | null;
+  const chipsEl    = document.getElementById('rl-subgenre-chips') as HTMLElement | null;
+  const hiddenEl   = document.getElementById('rl-f-subgenres') as HTMLInputElement | null;
+  if (!genreInput || !chipsEl || !hiddenEl) return;
+
+  let selectedSubs = hiddenEl.value.split(',').map(s => s.trim()).filter(Boolean);
+
+  function _esc(s: string) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function renderSubs() {
+    let genreMap: Record<string, string[]> = {};
+    try { const el = document.getElementById('genre-map-data'); if (el?.textContent) genreMap = JSON.parse(el.textContent); } catch {}
+    const comboHidden = genreInput!.closest('.combo')?.querySelector<HTMLInputElement>('.combo-hidden');
+    const genre = comboHidden?.value ?? genreInput!.value;
+    const known = genreMap[genre] ?? [];
+    chipsEl!.innerHTML = known.map(s =>
+      `<button type="button" class="subgenre-chip${selectedSubs.includes(s) ? ' active' : ''}" data-sub="${_esc(s)}">${_esc(s)}</button>`
+    ).join('');
+    hiddenEl!.value = selectedSubs.join(', ');
+  }
+
+  chipsEl.addEventListener('click', e => {
+    const btn = (e.target as Element).closest<HTMLButtonElement>('.subgenre-chip');
+    if (!btn || !chipsEl.contains(btn)) return;
+    const s = btn.dataset.sub!;
+    selectedSubs = selectedSubs.includes(s) ? selectedSubs.filter(x => x !== s) : [...selectedSubs, s];
+    renderSubs();
+  });
+
+  genreInput.addEventListener('change', () => { selectedSubs = []; renderSubs(); });
+  renderSubs();
+}
+
+// ── Relog: descriptor tag widget ─────────────────────────────────────────────
+function initRelogDescriptors() {
+  const descInput  = document.getElementById('rl-descriptor-input')   as HTMLInputElement | null;
+  const descDrop   = document.getElementById('rl-descriptor-dropdown') as HTMLElement | null;
+  const descChips  = document.getElementById('rl-descriptor-chips')   as HTMLElement | null;
+  const descHidden = document.getElementById('rl-f-descriptors')      as HTMLInputElement | null;
+  if (!descInput || !descDrop || !descChips || !descHidden) return;
+
+  function _esc(s: string) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function syncDescriptors() {
+    const tags = Array.from(descChips!.querySelectorAll<HTMLElement>('[data-tag]'))
+      .map(el => (el.querySelector('span') as HTMLElement)?.textContent || '').filter(Boolean);
+    descHidden!.value = JSON.stringify(tags);
+  }
+
+  function makeChip(tag: string): HTMLElement {
+    const chip = document.createElement('span');
+    chip.className = 'descriptor-chip';
+    chip.dataset.tag = tag.toLowerCase();
+    const label = document.createElement('span'); label.textContent = tag;
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'descriptor-chip-remove'; btn.textContent = '×';
+    btn.addEventListener('click', () => { chip.remove(); syncDescriptors(); });
+    chip.appendChild(label); chip.appendChild(btn);
+    return chip;
+  }
+
+  // Wire remove buttons on server-rendered chips
+  descChips.querySelectorAll<HTMLElement>('.descriptor-chip').forEach(chip => {
+    chip.querySelector('.descriptor-chip-remove')?.addEventListener('click', () => { chip.remove(); syncDescriptors(); });
+  });
+  syncDescriptors();
+
+  let allDescriptors: string[] = [];
+  try { const el = document.getElementById('descriptor-list-data'); if (el?.textContent) allDescriptors = JSON.parse(el.textContent); } catch {}
+  let focusedIdx = -1;
+
+  function getExisting(): Set<string> {
+    return new Set(Array.from(descChips!.querySelectorAll<HTMLElement>('[data-tag]')).map(el => el.dataset.tag ?? ''));
+  }
+  function getOpts() { return Array.from(descDrop!.querySelectorAll<HTMLElement>('.descriptor-opt')); }
+  function setFocused(idx: number) {
+    const opts = getOpts(); focusedIdx = Math.max(-1, Math.min(opts.length - 1, idx));
+    opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+    if (focusedIdx >= 0) opts[focusedIdx].scrollIntoView({ block: 'nearest' });
+  }
+
+  function showDropdown(q: string) {
+    const existing = getExisting(); const lower = q.toLowerCase();
+    const opts = allDescriptors.filter(d => !existing.has(d.toLowerCase()) && (!lower || d.toLowerCase().includes(lower)));
+    focusedIdx = -1;
+    if (!opts.length) { descDrop!.innerHTML = ''; descDrop!.classList.remove('open'); return; }
+    descDrop!.innerHTML = opts.map(r => `<div class="descriptor-opt">${_esc(r)}</div>`).join('');
+    descDrop!.classList.add('open');
+    descDrop!.querySelectorAll<HTMLElement>('.descriptor-opt').forEach(el => {
+      el.addEventListener('mousedown', ev => { ev.preventDefault(); addTag(el.textContent ?? ''); });
+    });
+  }
+
+  function addTag(val: string) {
+    const tag = val.trim(); if (!tag || getExisting().has(tag.toLowerCase())) { descInput!.value = ''; return; }
+    descChips!.appendChild(makeChip(tag));
+    const all = Array.from(descChips!.querySelectorAll<HTMLElement>('.descriptor-chip'));
+    all.sort((a, b) => (a.dataset.tag ?? '').localeCompare(b.dataset.tag ?? '', undefined, { sensitivity: 'base' }));
+    all.forEach(c => descChips!.appendChild(c));
+    syncDescriptors(); descInput!.value = ''; showDropdown('');
+  }
+
+  descInput.addEventListener('focus', () => showDropdown(descInput!.value.trim()));
+  descInput.addEventListener('click', () => showDropdown(descInput!.value.trim()));
+  descInput.addEventListener('input', () => showDropdown(descInput!.value.trim()));
+  descInput.addEventListener('blur',  () => { setTimeout(() => { descDrop!.innerHTML = ''; descDrop!.classList.remove('open'); }, 150); });
+  descInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); descDrop!.classList.contains('open') ? setFocused(focusedIdx + 1) : showDropdown(descInput!.value.trim()); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setFocused(focusedIdx - 1); }
+    else if (e.key === 'Escape') { descDrop!.innerHTML = ''; descDrop!.classList.remove('open'); focusedIdx = -1; }
+    else if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault(); const opts = getOpts();
+      if (focusedIdx >= 0 && opts[focusedIdx]) addTag(opts[focusedIdx].textContent ?? '');
+      else if (opts.length === 1) addTag(opts[0].textContent ?? '');
+    }
+  });
+}
+
+initRelogSubgenres();
+initRelogDescriptors();
+
+const relogModal  = document.getElementById('relog-modal') as HTMLElement | null;
+const relogBtn    = document.getElementById('relog-btn')   as HTMLElement | null;
+const relogClose  = document.getElementById('relog-close') as HTMLElement | null;
+const relogCancel = document.getElementById('relog-cancel') as HTMLElement | null;
+
+function openRelog()  { if (relogModal) { relogModal.style.display = 'flex'; document.body.style.overflow = 'hidden'; } }
+function closeRelog() { if (relogModal) { relogModal.style.display = 'none';  document.body.style.overflow = ''; } }
+
+relogBtn?.addEventListener('click', openRelog);
+relogClose?.addEventListener('click', closeRelog);
+relogCancel?.addEventListener('click', closeRelog);
+let _relogDownOnOverlay = false;
+relogModal?.addEventListener('mousedown', e => { _relogDownOnOverlay = e.target === relogModal; });
+relogModal?.addEventListener('click',     e => { if (_relogDownOnOverlay && e.target === relogModal) closeRelog(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRelog(); });
+
+// ── Relog: rating slider with description ────────────────────────────────────
+const RL_RATING_SCALE: Record<number, string> = {
+  100: 'Masterpiece / Perfect', 90: 'Amazing / Fantastic', 80: 'Great / Excellent',
+   70: 'Very Good / Solid',     60: 'Good / Serviceable',  50: 'Decent / Mixed Opinion',
+   40: 'Acceptable / Unremarkable', 30: 'Mediocre / Poor', 20: 'Bad / Terrible',
+   10: 'Abysmal / Worthless',
+};
+function rlRatingDesc(v: number) { return RL_RATING_SCALE[v === 100 ? 100 : Math.floor(v / 10) * 10] ?? ''; }
+
+const rlSlider = document.getElementById('rl-rating-slider') as HTMLInputElement | null;
+const rlVal    = document.getElementById('rl-rating-val')    as HTMLElement | null;
+const rlDesc   = document.getElementById('rl-rating-desc')   as HTMLElement | null;
+const rlHidden = document.getElementById('rl-f-rating')      as HTMLInputElement | null;
+if (rlSlider && rlVal && rlDesc && rlHidden) {
+  if (rlHidden.value) rlDesc.textContent = rlRatingDesc(parseInt(rlHidden.value));
+  rlSlider.addEventListener('input', () => {
+    const v = parseInt(rlSlider.value);
+    rlVal.textContent   = String(v);
+    rlDesc.textContent  = rlRatingDesc(v);
+    rlHidden.value      = String(v);
+  });
+}
+
+// ── Relog: star toggle ───────────────────────────────────────────────────────
+const rlRecBtn = document.getElementById('rl-rec-btn')      as HTMLButtonElement | null;
+const rlRecCb  = document.getElementById('rl-f-recommended') as HTMLInputElement  | null;
+rlRecBtn?.addEventListener('click', () => {
+  if (!rlRecBtn || !rlRecCb) return;
+  const nowActive = !rlRecBtn.classList.contains('active');
+  rlRecBtn.classList.toggle('active', nowActive);
+  rlRecCb.checked = nowActive;
+  rlRecBtn.title = nowActive ? 'Recommended' : 'Mark as recommended';
+});
+
+// ── Relog: track annotations ─────────────────────────────────────────────────
+function initRelogTracks() {
+  const tbody  = document.getElementById('rl-tracks-tbody') as HTMLElement | null;
+  const hidden = document.getElementById('rl-f-tracks')     as HTMLInputElement | null;
+  if (!tbody || !hidden) return;
+
+  type TrackAnno = { pos: number; rating: number | null; notable: boolean; note: string };
+  const trackMap = new Map<number, TrackAnno>();
+  try {
+    for (const t of JSON.parse(hidden.value || '[]') as TrackAnno[]) trackMap.set(t.pos, t);
+  } catch {}
+
+  function save() { hidden!.value = JSON.stringify(Array.from(trackMap.values())); }
+
+  tbody.querySelectorAll<HTMLElement>('.track-rating-input').forEach(el => {
+    const sel = el as unknown as HTMLSelectElement;
+    sel.addEventListener('change', () => {
+      const pos = parseInt(sel.dataset.pos!);
+      const entry = trackMap.get(pos);
+      if (entry) { entry.rating = sel.value ? parseInt(sel.value) : null; save(); }
+    });
+  });
+
+  tbody.querySelectorAll<HTMLInputElement>('.track-note-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const pos = parseInt(inp.dataset.pos!);
+      const entry = trackMap.get(pos);
+      if (entry) { entry.note = inp.value; save(); }
+    });
+  });
+
+  tbody.querySelectorAll<HTMLButtonElement>('.track-notable-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pos = parseInt(btn.dataset.pos!);
+      const entry = trackMap.get(pos);
+      if (entry) {
+        entry.notable = !entry.notable;
+        btn.classList.toggle('btn-active', entry.notable);
+        btn.title = entry.notable ? 'Notable track' : 'Mark as notable';
+        save();
+      }
+    });
+  });
+}
+initRelogTracks();
+
+// ── Previous logs dropdown & history view ────────────────────────────────────
+const prevLogsBtn    = document.getElementById('prev-logs-btn')      as HTMLButtonElement | null;
+const prevLogsPanel  = document.getElementById('prev-logs-panel')   as HTMLElement | null;
+const histBackBtn    = document.getElementById('hist-back-btn')     as HTMLButtonElement | null;
+const viewLogDateEl  = document.getElementById('view-log-date-text') as HTMLElement | null;
+const logMainAttrs   = document.getElementById('log-main-attrs')    as HTMLElement | null;
+const logMainNotes   = document.getElementById('log-main-notes')    as HTMLElement | null;
+const logHistWrap    = document.getElementById('log-hist-wrap')     as HTMLElement | null;
+const tracksWrap      = document.querySelector<HTMLElement>('.tracks-wrap');
+const origLogDateText = viewLogDateEl?.textContent ?? '';
+
+let prevLogsOpen = false;
+
+function setPrevLogsOpen(open: boolean) {
+  prevLogsOpen = open;
+  if (prevLogsPanel) prevLogsPanel.style.display = open ? 'block' : 'none';
+  const caret = prevLogsBtn?.querySelector('.prev-logs-caret');
+  if (caret) caret.textContent = open ? ' ▴' : ' ▾';
+  prevLogsBtn?.setAttribute('aria-expanded', String(open));
+}
+
+prevLogsBtn?.addEventListener('click', e => { e.stopPropagation(); setPrevLogsOpen(!prevLogsOpen); });
+document.addEventListener('click', e => {
+  if (prevLogsOpen && !prevLogsPanel?.contains(e.target as Node)) setPrevLogsOpen(false);
+});
+
+function _escH(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function jsRatingClass(r: number | null) {
+  if (r == null) return '';
+  return r >= 70 ? 'rating-hi' : r >= 50 ? 'rating-mid' : 'rating-lo';
+}
+
+type HistEntry = {
+  logged_at_fmt: string; rating: number | null; recommended: number;
+  genre: string; subgenres: string[]; descriptors: string[]; notes: string;
+  tracks: Array<{pos: number; rating: number | null; notable: boolean; note: string}>;
+};
+type CurrentLog = {
+  year: number | null; releaseTypeLabel: string | null;
+  rating: number | null; genre: string; subgenres: string[]; descriptors: string[];
+  recommended: number; notes: string;
+  tracks: Array<{pos: number; rating: number | null; notable: boolean; note: string}>;
+};
+
+let histData: HistEntry[] = [];
+try {
+  const el = document.getElementById('relog-history-data');
+  if (el?.textContent) histData = JSON.parse(el.textContent);
+} catch {}
+
+let curr: CurrentLog | null = null;
+try {
+  const el = document.getElementById('current-log-data');
+  if (el?.textContent) curr = JSON.parse(el.textContent);
+} catch {}
+
+function viewHistEntry(idx: number) {
+  const e = histData[idx];
+  if (!e || !logHistWrap || !curr) return;
+
+  // Album facts — always shown at full opacity, never highlighted
+  const yearHtml = curr.year ? `<span>${curr.year}</span>` : '';
+  const typeHtml = curr.releaseTypeLabel ? `<span class="type-chip">${_escH(curr.releaseTypeLabel)}</span>` : '';
+
+  // Genre/rec: amber outline if changed (inline, minor fields)
+  const genreChanged = e.genre !== curr.genre;
+  const genreHtml = e.genre
+    ? `<span class="album-genre-label${genreChanged ? ' hist-changed' : ''}">${_escH(e.genre)}</span>`
+    : (curr.genre ? `<span class="album-genre-label hist-changed">${_escH(curr.genre)}</span>` : '');
+
+  const recChanged = !!e.recommended !== !!curr.recommended;
+  const recHtml = e.recommended
+    ? `<span class="rec-star${recChanged ? ' hist-changed' : ''}" title="Recommended">★</span>` : '';
+
+  // Rating: inline in attrs — single chip if same, side-by-side diff chips if changed
+  const ratingChanged = e.rating !== curr.rating;
+  const ratingAttrsHtml = !ratingChanged
+    ? (e.rating != null ? `<span class="rating ${jsRatingClass(e.rating)}">${e.rating}</span>` : '')
+    : `<span class="hist-diff-inline-wrapper"><span class="hist-diff-inline hist-diff-old"><span class="hist-diff-sign">−</span>${e.rating != null ? `<span class="rating ${jsRatingClass(e.rating)}">${e.rating}</span>` : '<span class="plr-empty">—</span>'}</span>` +
+      `<span class="hist-diff-inline hist-diff-new"><span class="hist-diff-sign">+</span>${curr.rating != null ? `<span class="rating ${jsRatingClass(curr.rating)}">${curr.rating}</span>` : '<span class="plr-empty">—</span>'}</span></span>`;
+
+  // Tags: git-diff two-row format (− old row / + current row)
+  function diffTags(hist: string[], cur: string[], baseClass: string): string {
+    if (!hist.length && !cur.length) return '';
+    const hSet = new Set(hist.map(s => s.toLowerCase()));
+    const cSet = new Set(cur.map(s => s.toLowerCase()));
+    const sortedH = [...hist].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const sortedC = [...cur].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const changed = sortedH.some(s => !cSet.has(s.toLowerCase())) || sortedC.some(s => !hSet.has(s.toLowerCase()));
+    if (!changed) {
+      const tags = sortedH.map(s => `<span class="${baseClass}">${_escH(s)}</span>`).join('');
+      return `<div class="album-tags">${tags}</div>`;
+    }
+    const oldTags = sortedH.map(s =>
+      `<span class="${baseClass}${!cSet.has(s.toLowerCase()) ? ' hist-removed' : ''}">${_escH(s)}</span>`
+    ).join('');
+    const newTags = sortedC.map(s =>
+      `<span class="${baseClass}${!hSet.has(s.toLowerCase()) ? ' hist-added' : ''}">${_escH(s)}</span>`
+    ).join('');
+    return `<div class="hist-diff-pair">
+      <div class="hist-diff-old"><span class="hist-diff-sign">−</span><div class="album-tags">${oldTags}</div></div>
+      <div class="hist-diff-new"><span class="hist-diff-sign">+</span><div class="album-tags">${newTags}</div></div>
+    </div>`;
+  }
+  const subsHtml  = diffTags(e.subgenres,   curr.subgenres,   'tag');
+  const descsHtml = diffTags(e.descriptors, curr.descriptors, 'tag descriptor-tag');
+
+  // Notes: git-diff block if changed, plain if same
+  const notesChanged = e.notes !== curr.notes;
+  const notesHtml = !(e.notes || curr.notes) ? '' : !notesChanged
+    ? `<div><p class="attr-label">Notes</p><p class="log-hist-notes">${_escH(e.notes)}</p></div>`
+    : `<div><p class="attr-label">Notes</p>
+        <div class="hist-diff-pair hist-diff-notes">
+          <div class="hist-diff-old"><span class="hist-diff-sign">−</span><p class="log-hist-notes">${_escH(e.notes || '')}</p></div>
+          <div class="hist-diff-new"><span class="hist-diff-sign">+</span><p class="log-hist-notes">${_escH(curr.notes || '')}</p></div>
+        </div>
+      </div>`;
+
+  logHistWrap.innerHTML = `
+    <div class="album-upper-wrapper">
+      <div class="album-header">
+        <div class="album-attrs">${yearHtml}${typeHtml}${genreHtml}${ratingAttrsHtml}${recHtml}</div>
+        ${subsHtml}${descsHtml}
+      </div>
+    </div>
+    ${notesHtml}
+  `;
+
+  if (logMainAttrs) logMainAttrs.style.display = 'none';
+  if (logMainNotes) logMainNotes.style.display = 'none';
+  logHistWrap.style.display = '';
+
+  // Track rows: amber per-cell if value changed
+  if (tracksWrap) {
+    const annoMap     = new Map((e.tracks      ?? []).map(t => [t.pos, t]));
+    const currAnnoMap = new Map((curr.tracks   ?? []).map(t => [t.pos, t]));
+    tracksWrap.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach(row => {
+      const pos = parseInt(row.querySelector('.track-num')?.textContent ?? '0');
+      if (!pos) return;
+      const anno      = annoMap.get(pos)     ?? { rating: null, notable: false, note: '' };
+      const currAnno  = currAnnoMap.get(pos) ?? { rating: null, notable: false, note: '' };
+
+      const ratingCell = row.querySelector<HTMLElement>('.track-rating-cell');
+      const noteCell   = row.querySelector<HTMLElement>('.track-note-cell');
+      const titleCell  = row.cells[1] as HTMLElement | undefined;
+
+      if (ratingCell) {
+        ratingCell.innerHTML = anno.rating != null
+          ? `<span class="rating ${jsRatingClass(anno.rating)}">${anno.rating}</span>`
+          : `<span style="color:var(--text-muted)">—</span>`;
+        if (anno.rating !== currAnno.rating) ratingCell.classList.add('hist-changed');
+      }
+      if (noteCell) {
+        const note = anno.note ?? '';
+        noteCell.innerHTML = note ? `${_escH(note)}<span class="track-note-tip">${_escH(note)}</span>` : '';
+        if (note !== (currAnno.note ?? '')) noteCell.classList.add('hist-changed');
+      }
+      if (titleCell) {
+        const titleText = titleCell.textContent?.replace(/^★\s*/, '') ?? '';
+        titleCell.innerHTML = anno.notable
+          ? `<span class="rec-star" title="Notable track">★ </span>${_escH(titleText)}`
+          : _escH(titleText);
+        if (!!anno.notable !== !!currAnno.notable) titleCell.classList.add('hist-changed');
+      }
+    });
+  }
+
+  if (viewLogDateEl) viewLogDateEl.textContent = `Viewing log from ${e.logged_at_fmt}`;
+  if (histBackBtn) histBackBtn.style.display = '';
+  setPrevLogsOpen(false);
+}
+
+function exitHistView() {
+  if (logMainAttrs) logMainAttrs.style.display = '';
+  if (logMainNotes) logMainNotes.style.display = '';
+  if (logHistWrap) { logHistWrap.style.display = 'none'; logHistWrap.innerHTML = ''; }
+  // Rebuild track cells from current log data rather than storing/restoring originals
+  if (tracksWrap && curr) {
+    const currAnnoMap = new Map((curr.tracks ?? []).map(t => [t.pos, t]));
+    tracksWrap.querySelectorAll<HTMLTableRowElement>('tbody tr').forEach(row => {
+      const pos = parseInt(row.querySelector('.track-num')?.textContent ?? '0');
+      if (!pos) return;
+      const a = currAnnoMap.get(pos) ?? { rating: null, notable: false, note: '' };
+      const ratingCell = row.querySelector<HTMLElement>('.track-rating-cell');
+      const noteCell   = row.querySelector<HTMLElement>('.track-note-cell');
+      const titleCell  = row.cells[1] as HTMLElement | undefined;
+      if (ratingCell) {
+        ratingCell.innerHTML = a.rating != null
+          ? `<span class="rating ${jsRatingClass(a.rating)}">${a.rating}</span>`
+          : `<span style="color:var(--text-muted)">—</span>`;
+        ratingCell.classList.remove('hist-changed');
+      }
+      if (noteCell) {
+        const note = a.note ?? '';
+        noteCell.innerHTML = note ? `${_escH(note)}<span class="track-note-tip">${_escH(note)}</span>` : '';
+        noteCell.classList.remove('hist-changed');
+      }
+      if (titleCell) {
+        const titleText = titleCell.textContent?.replace(/^★\s*/, '') ?? '';
+        titleCell.innerHTML = a.notable
+          ? `<span class="rec-star" title="Notable track">★ </span>${_escH(titleText)}`
+          : _escH(titleText);
+        titleCell.classList.remove('hist-changed');
+      }
+    });
+  }
+  if (viewLogDateEl) viewLogDateEl.textContent = origLogDateText;
+  if (histBackBtn) histBackBtn.style.display = 'none';
+}
+
+prevLogsPanel?.querySelectorAll<HTMLTableRowElement>('.prev-log-row').forEach(row => {
+  row.addEventListener('click', () => viewHistEntry(parseInt(row.dataset.idx ?? '0')));
+});
+histBackBtn?.addEventListener('click', exitHistView);
+
 const queueBtn = document.getElementById('queue-btn') as HTMLButtonElement | null;
 if (queueBtn) {
   const qAlbumId = Number(queueBtn.dataset.albumId);
@@ -894,3 +1663,351 @@ if (queueBtn) {
   });
 }
 </script>
+
+<style>
+  /* ── Modal overlay ── */
+  .relog-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 500;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .relog-modal {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .relog-columns {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .relog-left {
+    flex: 0 0 350px;
+    min-width: 350px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .relog-right {
+    flex: 1;
+    min-width: 280px;
+    overflow-x: auto;
+  }
+
+  .rl-tracks-table {
+    font-size: 12px;
+  }
+
+  .rl-track-title {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .relog-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .relog-modal-title {
+    font-weight: 600;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .relog-subhead {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  /* ── Form ── */
+  .relog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .relog-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .relog-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .relog-textarea {
+    background: var(--bg-input, var(--bg-secondary));
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    resize: vertical;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .relog-descriptors {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px 10px;
+    max-height: 160px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .relog-desc-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 0;
+  }
+
+  .relog-check-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .relog-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 2px;
+  }
+
+  /* ── Previous logs dropdown ── */
+  .log-date-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    width: 100%;
+    color: var(--text-muted);
+  }
+
+  @media (max-width: 640px) {
+    .log-date-row {
+      flex-wrap: wrap;
+      gap: 6px;
+      position: relative; /* become containing block so panel aligns to row width */
+    }
+    .prev-logs-wrap {
+      position: static; /* release — panel now positions relative to log-date-row */
+    }
+    .prev-logs-panel {
+      left: 0;
+      right: 0;
+      min-width: 0;
+      max-width: none;
+    }
+    #hist-back-btn {
+      margin-left: 0;
+    }
+  }
+
+  .prev-logs-wrap {
+    position: relative;
+  }
+
+  .prev-logs-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-size: 9px;
+    color: var(--text-muted);
+    font-family: inherit;
+    white-space: nowrap;
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+  }
+  #hist-back-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 5px;
+    margin-left: 10px;
+  }
+  .prev-logs-btn:hover { color: var(--text); }
+
+  .prev-logs-caret {
+    font-size: 13px;
+  }
+
+  .prev-logs-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 100;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    min-width: 280px;
+    max-width: 400px;
+    overflow: hidden;
+  }
+
+  .prev-logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9px;
+  }
+
+  .prev-log-row {
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .prev-log-row:last-child { border-bottom: none; }
+  .prev-log-row:hover { background: var(--bg-secondary, var(--bg-hover)); }
+
+  .prev-log-row td {
+    padding: 7px 10px;
+    vertical-align: middle;
+  }
+
+  .plr-date {
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 9px;
+  }
+
+  .plr-rating {
+    white-space: nowrap;
+    width: 36px;
+  }
+
+  .plr-note {
+    color: var(--text-muted);
+    font-size: 9px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .plr-empty {
+    color: var(--border);
+  }
+
+  /* ── Historical log view ── */
+  .log-hist-notes {
+    font-size: 13px;
+    color: var(--text);
+    white-space: pre-wrap;
+    margin: 4px 0 0;
+  }
+
+  /* Git-diff–style change indicators
+     Must be :global() — these classes are applied to JS-injected HTML
+     that doesn't carry Astro's scoping attribute                         */
+  :global(#log-hist-wrap) {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  :global(.hist-removed) {
+    background: rgba(239, 68, 68, 0.18) !important;
+    color: #f87171 !important;
+    text-decoration: line-through;
+    text-decoration-color: rgba(239, 68, 68, 0.5);
+  }
+  :global(.hist-added) {
+    background: rgba(34, 197, 94, 0.15) !important;
+    color: #4ade80 !important;
+  }
+  :global(.hist-changed) {
+    outline: 2px solid rgba(251, 191, 36, 0.7);
+    outline-offset: 1px;
+    border-radius: 3px;
+  }
+  :global(td.hist-changed) {
+    outline: none;
+    background: rgba(251, 191, 36, 0.12);
+  }
+  /* Git-diff block layout (tags, notes) */
+  :global(.hist-diff-pair) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 4px 0;
+  }
+  :global(.hist-diff-old),
+  :global(.hist-diff-new) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  :global(.hist-diff-old) {
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid rgba(239, 68, 68, 0.45);
+  }
+  :global(.hist-diff-new) {
+    background: rgba(34, 197, 94, 0.1);
+    border-left: 3px solid rgba(34, 197, 94, 0.4);
+  }
+  /* Inline diff chips (rating in attrs row) */
+  :global(.hist-diff-inline) {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  :global(.hist-diff-inline-wrapper) {
+    display: inline-flex;
+    gap: 3px;
+  }
+  :global(.hist-diff-inline.hist-diff-old) { border-left: none; }
+  :global(.hist-diff-inline.hist-diff-new) { border-left: none; }
+  :global(.hist-diff-sign) {
+    font-family: monospace;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+    line-height: 1.6;
+  }
+  :global(.hist-diff-old .hist-diff-sign) { color: #f87171; }
+  :global(.hist-diff-new .hist-diff-sign) { color: #4ade80; }
+  :global(.hist-diff-notes .log-hist-notes) { margin: 0; }
+</style>

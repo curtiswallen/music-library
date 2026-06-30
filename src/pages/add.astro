@@ -124,16 +124,17 @@ if (Astro.request.method === 'POST') {
     return Astro.redirect(`/${user.profile_url}/album/${albumSlug}`);
   }
 
+  const hasRating = !!data.get('rating');
   await db.prepare(`
     INSERT OR IGNORE INTO user_albums
-      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, release_data, descriptors, track_seconds)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (user_id, album_id, genre, subgenres, rating, notes, tracks_data, recommended, is_hidden, release_mbid, release_title, release_data, descriptors, track_seconds, logged_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${hasRating ? 'CURRENT_TIMESTAMP' : 'NULL'})
   `).bind(
     user.id,
     albumId,
     (data.get('genre') as string) || '',
     subgenres,
-    data.get('rating') ? parseInt(data.get('rating') as string) : null,
+    hasRating ? parseInt(data.get('rating') as string) : null,
     (data.get('notes') as string) || '',
     tracksData,
     data.get('recommended') === 'on' ? 1 : 0,
@@ -210,7 +211,7 @@ const [{ genreMap, groupedGenres }, canonicalDescriptors] = await Promise.all([
   </div>
 
   <div id="add-wrapper" data-profile-url={user.profile_url}>
-    <AlbumForm includeDbAlbumId submitLabel="Save Album" cancelHref={`/${user.profile_url}`} genreMap={genreMap} groupedGenres={groupedGenres} canonicalDescriptors={canonicalDescriptors}>
+    <AlbumForm includeDbAlbumId submitLabel="Log Album" cancelHref={`/${user.profile_url}`} genreMap={genreMap} groupedGenres={groupedGenres} canonicalDescriptors={canonicalDescriptors}>
       <button slot="extra-actions" id="add-to-queue-btn" class="btn" type="button"
               style="display:none;margin-left:auto" title="Add to queue without rating">
         Add to Queue

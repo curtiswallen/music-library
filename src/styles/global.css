@@ -667,7 +667,7 @@ tr:hover td { background: var(--bg-hover); }
   margin-bottom: 6px;
 }
 .subgenre-chip {
-  padding: 3px 10px;
+  padding: 3px 6px;
   border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--bg-card);
@@ -676,7 +676,6 @@ tr:hover td { background: var(--bg-hover); }
   font-size: 11px;
   font-family: inherit;
   transition: border-color 0.12s, background 0.12s, color 0.12s;
-  height: 33px;
 }
 .subgenre-chip:hover { border-color: var(--border-hover); color: var(--text); }
 .subgenre-chip.active { border-color: var(--accent); background: var(--accent); color: #fff; }
@@ -746,6 +745,8 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .album-hero > .cover-col { grid-column: 1; grid-row: 1 / span 10; }
 .album-hero > .album-meta,
 .album-hero > .tracks-wrap,
+.album-hero > .also-logged,
+.album-hero > .log-date-row,
 .album-hero > .related-section { grid-column: 2; }
 .cover-box-lg {
   width: 200px;
@@ -759,7 +760,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .cover-box-lg img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 .album-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-direction: row; }
-.album-actions .btn { flex: 1; justify-content: center; font-size: 10px; padding: 3px 6px; height: auto; }
+.album-actions .btn { display: block; flex: 1; min-width: 0; text-align: center; font-size: 10px; padding: 3px 6px; height: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 
 .canonical-note { font-size: 10px; color: var(--text-muted); margin-bottom: 14px; }
 .edit-fields input[readonly],
@@ -767,11 +768,14 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .edit-fields .combo-input:disabled { opacity: 0.5; background-color: var(--bg-card); cursor: default; }
 
 .album-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-.album-mobile-header { display: none; margin-bottom: 8px; }
+.album-mobile-header { display: none; }
 .album-mobile-header .album-meta-title { font-size: 15px; margin-bottom: 4px; }
 .album-mobile-header .album-meta-artist { font-size: 11px; }
 @media (max-width: 640px) {
   .album-mobile-header { display: block; }
+  .album-meta { gap: 5px; }
+  #log-main-notes { margin-top: 15px; }
+  .album-actions { flex-direction: column; gap: 5px; }
 }
 .album-meta-artist {
   font-size: 11px;
@@ -791,6 +795,11 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   flex-direction: row;
   gap: 26px;
 }
+.album-header {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
 .album-attrs {
   display: flex;
   flex-wrap: wrap;
@@ -804,7 +813,7 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
   color: var(--text);
   font-weight: 500;
 }
-.album-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.album-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .album-notes {
   color: var(--text);
   font-size: 11px;
@@ -1586,9 +1595,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .form-grid { grid-template-columns: 1fr; }
 
   /* Album detail: cover stays on left, album-header to its right */
-  .album-hero { grid-template-columns: 110px 1fr; column-gap: 12px; }
+  .album-hero { grid-template-columns: 110px 1fr; column-gap: 20px; }
   .album-hero > .cover-col { grid-row: 1; }
-  .album-hero > .tracks-wrap,
+  .album-hero > .also-logged,
+  .album-hero > .log-date-row,
   .album-hero > .related-section { grid-column: 1 / -1; }
   .cover-box-lg { width: 110px; height: 110px; }
   .edit-fields .cover-box-lg { width: 200px; height: 200px; }

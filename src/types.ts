@@ -55,10 +55,25 @@ export interface UserAlbum {
   recommended: number;    // 0 | 1
   is_hidden: number;      // 0 | 1
   added_at: string;
+  logged_at: string | null;
   release_mbid: string | null;
   release_title: string | null;
   release_data: string | null;  // JSON: ReleaseData
   descriptors: string;          // JSON: string[]
+}
+
+/** Archived log entry created when a user relogs an album */
+export interface UserAlbumLog {
+  id: number;
+  user_id: number;
+  album_id: number;
+  rating: number | null;
+  genre: string;
+  subgenres: string;   // JSON: string[]
+  descriptors: string; // JSON: string[]
+  notes: string;
+  recommended: number;
+  logged_at: string;
 }
 
 /** Flat JOIN result used in most queries */
