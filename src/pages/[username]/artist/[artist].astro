@@ -165,6 +165,10 @@ function sortedSubs(subs: string[]) {
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{artistName} {albums[0].country && <span class="breadcrumb-tag tip-link" data-tip={albums[0].country}>{countryCode(albums[0].country) ? countryCode(albums[0].country).toUpperCase() : albums[0].country}</span>}</span></h1>
       <span class="count" style="margin-left:4px">({albums.length} album{albums.length !== 1 ? 's' : ''})</span>
+      <div class="artist-view-toggle">
+        <span class="avc-active">mine</span>
+        <a href={`/artist/${artistSlug}`}>community</a>
+      </div>
     </div>
   </div>
 

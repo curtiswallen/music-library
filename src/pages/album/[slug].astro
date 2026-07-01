@@ -257,6 +257,12 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
+      {loggedInUser && myEntry === 'logged' && (
+        <div class="artist-view-toggle">
+          <a href={`/${loggedInUser.profile_url}/album/${slugParam}`}>mine</a>
+          <span class="avc-active">community</span>
+        </div>
+      )}
     </div>
     <div style="display:flex;gap:8px"></div>
   </div>
@@ -270,7 +276,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
           )}
         </div>
 
-        {loggedInUser && (
+        {loggedInUser && myEntry !== 'logged' && (
           <div class="album-actions">
             <div class="queue-log-wrapper">
               {myEntry === 'none' && (
@@ -279,15 +285,10 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
               {myEntry === 'queued' && (
                 <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn queue-btn">✓ In Queue</a>
               )}
-              {myEntry !== 'logged' && (
-                <a href={myEntry === 'queued'
-                  ? `/${loggedInUser.profile_url}/album/${slugParam}?edit=1`
-                  : logAlbumHref} class="btn log-btn">Log Album</a>
-              )}
+              <a href={myEntry === 'queued'
+                ? `/${loggedInUser.profile_url}/album/${slugParam}?edit=1`
+                : logAlbumHref} class="btn log-btn">Log Album</a>
             </div>
-            {myEntry === 'logged' && (
-              <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">→ My entry</a>
-            )}
           </div>
         )}
 

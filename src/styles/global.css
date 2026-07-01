@@ -763,11 +763,6 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .album-actions { display: flex; gap: 0; flex-wrap: wrap; flex-direction: column; }
 .album-actions .btn { display: block; flex: 1; min-width: 0; text-align: center; font-size: 10px; padding: 3px 6px; height: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .album-actions .btn:hover { border-color: var(--border); }
-.com-entry-btn { border-radius: 3px 3px 0 0; }
-.album-actions > .btn.com-entry-btn:only-child { border-radius: 3px; }
-.com-pair { display: flex; }
-.com-pair-l { flex: 2; border-radius: 3px 0 0 3px; }
-.com-pair-r { flex: 1; border-radius: 0 3px 3px 0; border-left: 0; }
 .queue-log-wrapper { display: flex; flex-direction: row; gap: 0; }
 .queue-btn { border-radius: 0 0 0 3px; border-top: 0; }
 .log-btn { border-radius: 0 0 3px 0; border-top: 0; border-left: 0; }
@@ -930,6 +925,24 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .breadcrumb-tag { padding: 0 5px; font-size: 10px; color: var(--text-muted);}
 .breadcrumb-current { color: var(--text); }
 .breadcrumb h1, .breadcrumb h1 * { display: flex; flex-direction: row; align-items: center; gap: 5px;}
+
+.artist-view-toggle { display: inline-flex; margin-left: 8px; flex-shrink: 0; }
+.artist-view-toggle a,
+.artist-view-toggle .avc-active {
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.artist-view-toggle a:first-child,
+.artist-view-toggle .avc-active:first-child { border-radius: 3px 0 0 3px; }
+.artist-view-toggle a:last-child,
+.artist-view-toggle .avc-active:last-child  { border-radius: 0 3px 3px 0; }
+.artist-view-toggle a + .avc-active,
+.artist-view-toggle .avc-active + a { border-left: 0; }
+.artist-view-toggle a:hover { color: var(--text-hi); background: var(--bg-hover); }
+.artist-view-toggle .avc-active { color: var(--text); text-decoration: underline; cursor: default; }
 
 /* ── Filter chip remove ── */
 .chip-remove { color: var(--text-muted); font-size: 14px; line-height: 1; text-decoration: none; padding: 0 2px; }

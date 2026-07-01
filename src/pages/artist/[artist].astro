@@ -115,6 +115,21 @@ const artistDateStr = artistRow
 
 const loggedInUser = Astro.locals.user;
 
+let userHasArtist = false;
+if (loggedInUser) {
+  const check = await db.prepare(`
+    SELECT 1 FROM user_albums ua
+    JOIN albums a ON a.id = ua.album_id
+    WHERE ua.user_id = ? AND (
+      a.artist = ?
+      OR a.artist LIKE ? || ' / %'
+      OR a.artist LIKE '% / ' || ?
+      OR a.artist LIKE '% / ' || ? || ' / %'
+    ) LIMIT 1
+  `).bind(loggedInUser.id, artistName, artistName, artistName, artistName).first();
+  userHasArtist = !!check;
+}
+
 const TYPE_LABELS: Record<string, string> = {
   lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other',
 };
@@ -152,6 +167,12 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
         )}
       </h1>
       <span class="count" style="margin-left:4px">({albums.length} album{albums.length !== 1 ? 's' : ''})</span>
+      {loggedInUser && userHasArtist && (
+        <div class="artist-view-toggle">
+          <a href={`/${loggedInUser.profile_url}/artist/${artistSlug}`}>mine</a>
+          <span class="avc-active">community</span>
+        </div>
+      )}
     </div>
   </div>
 

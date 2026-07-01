@@ -571,6 +571,10 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
+      <div class="artist-view-toggle">
+        <span class="avc-active">mine</span>
+        <a href={`/album/${slugParam}`}>community</a>
+      </div>
     </div>
     <div class="page-header-actions" style="display:flex;gap:8px">
       {isOwner && (
@@ -602,18 +606,8 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
         </div>
 
         <div class="album-actions">
-          {isOwner && album.rating != null ? (
-            <div class="com-pair">
-              <a href={`/album/${slugParam}`} class="btn com-pair-l">← Community entry</a>
-              <button id="relog-btn" class="btn com-pair-r" type="button">&#8635; Relog</button>
-            </div>
-          ) : !isOwner && loggedInUser && viewerEntry === 'logged' ? (
-            <div class="com-pair">
-              <a href={`/album/${slugParam}`} class="btn com-pair-l">← Community entry</a>
-              <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn com-pair-r">→ My Entry</a>
-            </div>
-          ) : (
-            <a href={`/album/${slugParam}`} class="btn com-entry-btn">← Community entry</a>
+          {isOwner && album.rating != null && (
+            <button id="relog-btn" class="btn" type="button">&#8635; Relog</button>
           )}
           {!isOwner && loggedInUser && viewerEntry !== 'logged' && (
             <div class="queue-log-wrapper">
