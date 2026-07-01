@@ -132,7 +132,7 @@ nav {
   transition: border-color 0.12s, background 0.12s, color 0.12s;
   white-space: nowrap;
 }
-.btn:hover { border-color: var(--border-hover); background: var(--bg-hover); color: var(--text-hi); }
+.btn:hover { background: var(--bg-hover); color: var(--text-hi); }
 
 .btn-primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 .btn-primary:hover { border-color: var(--accent-hi); background: var(--accent-hi); color: #fff; }
@@ -160,10 +160,11 @@ nav {
   color: var(--text);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.1s;
+  visibility: hidden;
+  transition: opacity 0.1s, visibility 0s 0.1s;
   z-index: 200;
 }
-[data-tip]:hover::after { opacity: 1; }
+[data-tip]:hover::after { opacity: 1; visibility: visible; transition: opacity 0.1s, visibility 0s; }
 
 .icon-btn { padding: 3px 6px; justify-content: center; }
 
@@ -759,8 +760,12 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 }
 .cover-box-lg img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
-.album-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-direction: row; }
+.album-actions { display: flex; gap: 0; flex-wrap: wrap; flex-direction: column; }
 .album-actions .btn { display: block; flex: 1; min-width: 0; text-align: center; font-size: 10px; padding: 3px 6px; height: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.album-actions .btn:hover { border-color: var(--border); }
+.com-entry-btn { border-radius: 3px 3px 0 0; }
+#relog-btn { border-radius: 0 0 3px 3px; border-top: 0; }
+.queue-log-wrapper { display: flex; flex-direction: row; gap: 0; }
 
 .canonical-note { font-size: 10px; color: var(--text-muted); margin-bottom: 14px; }
 .edit-fields input[readonly],
@@ -1301,7 +1306,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .user-artist-tbl th:nth-child(7) { width: 52px; }  /* rating */
 .global-artist-tbl th:nth-child(6) { width: 100px; }  /* avg rating */
 .global-artist-tbl th:nth-child(7) { width: 100px; }  /* # ratings */
-.user-artist-tbl td:nth-child(2) a { display: flex; flex-direction: row; overflow: hidden; text-overflow: ellipsis; width: 100%; align-items: center; gap: 6px; }
+.user-artist-tbl td:nth-child(2) a, .global-artist-tbl td:nth-child(2) a { display: flex; flex-direction: row; overflow: hidden; text-overflow: ellipsis; width: 100%; align-items: center; gap: 6px; }
 .artist-type-heading {
   font-size: 11px;
   font-weight: 600;

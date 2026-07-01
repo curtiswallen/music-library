@@ -602,7 +602,7 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
         </div>
 
         <div class="album-actions">
-          <a href={`/album/${slugParam}`} class="btn">← Community entry</a>
+          <a href={`/album/${slugParam}`} class="btn com-entry-btn">← Community entry</a>
           {isOwner && album.rating != null && (
             <button id="relog-btn" class="btn" type="button">&#8635; Relog</button>
           )}
@@ -610,19 +610,21 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
 
         {!isOwner && loggedInUser && (
           <div class="album-actions">
-            {viewerEntry === 'none' && (
-              <button id="queue-btn" class="btn" data-album-id={String(album.id)}>Add to Queue</button>
-            )}
-            {viewerEntry === 'queued' && (
-              <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">✓ In Queue</a>
-            )}
-            {viewerEntry !== 'logged' && (
-              <a href={viewerEntry === 'queued'
-                ? `/${loggedInUser.profile_url}/album/${album.slug}?edit=1`
-                : logAlbumHref} class="btn">Log Album</a>
-            )}
+            <div class="queue-log-wrapper">
+              {viewerEntry === 'none' && (
+                <button id="queue-btn" class="btn queue-btn" data-album-id={String(album.id)}>Add to Queue</button>
+              )}
+              {viewerEntry === 'queued' && (
+                <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn queue-btn">✓ In Queue</a>
+              )}
+              {viewerEntry !== 'logged' && (
+                <a href={viewerEntry === 'queued'
+                  ? `/${loggedInUser.profile_url}/album/${album.slug}?edit=1`
+                  : logAlbumHref} class="btn log-btn">Log Album</a>
+              )}
+            </div>
             {viewerEntry === 'logged' && (
-              <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn">→ My Entry</a>
+              <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn my-entry-btn">→ My Entry</a>
             )}
           </div>
         )}
