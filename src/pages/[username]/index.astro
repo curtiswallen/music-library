@@ -99,7 +99,7 @@ if (isOwner || !profileUser.is_private) {
         SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type, ua.rating, ua.recommended, ua.added_at, ua.genre
         FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
         WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
-        ORDER BY COALESCE(ua.logged_at, ua.added_at) DESC LIMIT 15
+        ORDER BY ua.added_at DESC LIMIT 15
       `).bind(profileUser.id).all<DashAlbum>()
     : Promise.resolve({ results: [] as DashAlbum[] });
 
@@ -277,29 +277,6 @@ if (!isOwner && !profileUser.is_private) {
     <div id="dashboard-wrapper" data-user-base={userBase} data-tz={tz}>
       {/* ── Activity section ──────────────────────────────────────────────── */}
       <div class="activity-section">
-
-              {bioHtml && (<div id="bio-wrapper">
-           <div class="user-bio album-notes" set:html={bioHtml} />
-
-          {socialLinks.length > 0 && (
-            <div class="social-links-row">
-              {socialLinks.map(link => {
-                const p = PLATFORM_MAP.get(link.platform);
-                if (!p) return null;
-                return (
-                  <a href={platformUrl(p, link.username)} target="_blank" rel="noopener noreferrer"
-                    class="social-link-icon" title={p.label}
-                    style={`--brand: ${p.color}`}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
-                      <path d={p.svgPath} />
-                    </svg>
-                  </a>
-                );
-              })}
-            </div>
-          )}
-      </div>)}
-
         <div class="stat-cards">
           <div class="stat-card">
             <span class="stat-val">{stats.total_albums}</span>
@@ -321,37 +298,27 @@ if (!isOwner && !profileUser.is_private) {
           )}
         </div>
 
-        {/* ── World map ─────────────────────────────────────────────────────── */}
-        {hasMapData && (
-          <div class="wm-wrap">
-            <svg id="world-map-svg" viewBox="-2 6 373 140" class="wm-svg" aria-hidden="true">
-              <rect x="-2" y="6" width="373" height="140" class="wm-ocean" />
-              {Object.entries(COUNTRY_PATHS).map(([iso, d]) => {
-                const count = countMap[iso] ?? 0;
-                const v = count === 0 ? '0' : count >= 30 ? '4' : count >= 10 ? '3' : count >= 3 ? '2' : '1';
-                const raw = isoToRaw[iso] ?? '';
+        {bioHtml && (<div id="bio-wrapper">
+           <div class="user-bio album-notes" set:html={bioHtml} />
+
+          {socialLinks.length > 0 && (
+            <div class="social-links-row">
+              {socialLinks.map(link => {
+                const p = PLATFORM_MAP.get(link.platform);
+                if (!p) return null;
                 return (
-                  <path
-                    d={d}
-                    class="wm-country"
-                    data-v={v}
-                    data-iso={iso}
-                    data-count={String(count)}
-                    data-name={countryName(iso) || iso}
-                    data-country={raw}
-                  />
+                  <a href={platformUrl(p, link.username)} target="_blank" rel="noopener noreferrer"
+                    class="social-link-icon" title={p.label}
+                    style={`--brand: ${p.color}`}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                      <path d={p.svgPath} />
+                    </svg>
+                  </a>
                 );
               })}
-            </svg>
-            <button id="wm-expand" class="wm-expand-btn" aria-label="Expand map" title="Expand map">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
-                <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
-              </svg>
-            </button>
-            <div id="wm-tip" aria-hidden="true"></div>
-          </div>
-        )}
+            </div>
+          )}
+        </div>)}
 
         {showRecentlyAdded && !isMobile && monthBlocks.length > 0 && (
           <div id="hm-tip" aria-hidden="true"></div>
@@ -382,6 +349,38 @@ if (!isOwner && !profileUser.is_private) {
                 ))}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── World map ─────────────────────────────────────────────────────── */}
+        {hasMapData && (
+          <div class="wm-wrap">
+            <svg id="world-map-svg" viewBox="-2 6 373 140" class="wm-svg" aria-hidden="true">
+              <rect x="-2" y="6" width="373" height="140" class="wm-ocean" />
+              {Object.entries(COUNTRY_PATHS).map(([iso, d]) => {
+                const count = countMap[iso] ?? 0;
+                const v = count === 0 ? '0' : count >= 30 ? '4' : count >= 10 ? '3' : count >= 3 ? '2' : '1';
+                const raw = isoToRaw[iso] ?? '';
+                return (
+                  <path
+                    d={d}
+                    class="wm-country"
+                    data-v={v}
+                    data-iso={iso}
+                    data-count={String(count)}
+                    data-name={countryName(iso) || iso}
+                    data-country={raw}
+                  />
+                );
+              })}
+            </svg>
+            <button id="wm-expand" class="wm-expand-btn" aria-label="Expand map" title="Expand map">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+                <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
+            <div id="wm-tip" aria-hidden="true"></div>
           </div>
         )}
 
