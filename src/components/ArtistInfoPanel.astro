@@ -1,5 +1,6 @@
 ---
 import type { ArtistRow, MembersData, AliasEntry } from '../lib/artist-cache';
+import { slugify } from '../lib/utils';
 
 interface Props {
   artistRow:     ArtistRow;
@@ -65,11 +66,15 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
           const formerly = artistAliases.filter(a => a.end && !a.begin);
           const nowKnown = artistAliases.filter(a => a.begin && !a.end);
           const also     = artistAliases.filter(a => (a.begin && a.end) || (!a.begin && !a.end));
+          const renderAlias = (a: AliasEntry) => a.mbid
+            ? <a href={`/artist/${slugify(a.name)}`}>{formatAlias(a)}</a>
+            : <>{formatAlias(a)}</>;
+          const joinAliases = (list: AliasEntry[]) => list.flatMap((a, i) => i === 0 ? [renderAlias(a)] : [', ', renderAlias(a)]);
           return (
             <>
-              {formerly.length > 0 && <p class="artist-info-aliases">Formerly known as: {formerly.map(formatAlias).join(', ')}</p>}
-              {nowKnown.length > 0 && <p class="artist-info-aliases">Now known as: {nowKnown.map(formatAlias).join(', ')}</p>}
-              {also.length > 0     && <p class="artist-info-aliases">Also known as: {also.map(formatAlias).join(', ')}</p>}
+              {formerly.length > 0 && <p class="artist-info-aliases">Formerly known as: {joinAliases(formerly)}</p>}
+              {nowKnown.length > 0 && <p class="artist-info-aliases">Now known as: {joinAliases(nowKnown)}</p>}
+              {also.length > 0     && <p class="artist-info-aliases">Also known as: {joinAliases(also)}</p>}
             </>
           );
         })()}

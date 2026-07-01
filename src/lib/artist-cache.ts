@@ -26,6 +26,7 @@ export interface AliasEntry {
   name:  string;
   begin: string | null;
   end:   string | null;
+  mbid?: string;
 }
 
 export interface ArtistRow {
@@ -170,8 +171,8 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
         if (rel.type === 'renamed into' && canonicalName && canonicalName !== officialName) {
           const renameDate = rel.begin?.slice(0, 4) ?? null;
           const synthetic: AliasEntry = rel.direction === 'forward'
-            ? { name: canonicalName, begin: renameDate, end: null }   // this → new name (now known as)
-            : { name: canonicalName, begin: null, end: renameDate };  // old name → this (formerly known as)
+            ? { name: canonicalName, mbid: personMbid, begin: renameDate, end: null }
+            : { name: canonicalName, mbid: personMbid, begin: null, end: renameDate };
           if (!mbAliases.some(a => a.name.toLowerCase() === canonicalName.toLowerCase())) {
             mbAliases.push(synthetic);
           }
