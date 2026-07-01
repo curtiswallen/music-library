@@ -130,6 +130,9 @@ if (loggedInUser) {
   userHasArtist = !!check;
 }
 
+const fromParam = (Astro.url.searchParams.get('from') ?? '').replace(/[^a-z0-9-_]/gi, '');
+const fromName  = (Astro.url.searchParams.get('fromName') ?? '').slice(0, 60);
+
 const TYPE_LABELS: Record<string, string> = {
   lp: 'LP', ep: 'EP', compilation: 'Compilation', demo: 'Demo', single: 'Single', other: 'Other',
 };
@@ -167,9 +170,12 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-
         )}
       </h1>
       <span class="count" style="margin-left:4px">({albums.length} album{albums.length !== 1 ? 's' : ''})</span>
-      {loggedInUser && userHasArtist && (
+      {(fromParam || (loggedInUser && userHasArtist)) && (
         <div class="artist-view-toggle">
-          <a href={`/${loggedInUser.profile_url}/artist/${artistSlug}`}>mine</a>
+          {fromParam && <a href={`/${fromParam}/artist/${artistSlug}`}>{fromName || fromParam}'s</a>}
+          {loggedInUser && userHasArtist && (
+            <a href={`/${loggedInUser.profile_url}/artist/${artistSlug}${fromParam ? `?from=${fromParam}&fromName=${encodeURIComponent(fromName || fromParam)}` : ''}`}>mine</a>
+          )}
           <span class="avc-active">community</span>
         </div>
       )}
