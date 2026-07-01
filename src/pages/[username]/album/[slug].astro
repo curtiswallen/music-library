@@ -574,7 +574,7 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
-      <div class="artist-view-toggle">
+      <div class="artist-view-toggle view-mode-btn">
         {fromParam && <a href={`/${fromParam}/album/${slugParam}`}>{fromName || fromParam}'s</a>}
         {isOwner
           ? <span class="avc-active">mine</span>

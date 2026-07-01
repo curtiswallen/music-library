@@ -61,7 +61,18 @@ const editInitMembers = isAdmin ? JSON.stringify(membersData)   : '{}';
     <div class="artist-info-meta">
       <div class="artist-disambiguation-wrapper">
         {artistRow.disambiguation && <p class="artist-info-disambiguation">{artistRow.disambiguation}</p>}
-        {showEntityAliases && <p class="artist-info-aliases">Also known as: {artistAliases.map(formatAlias).join(', ')}</p>}
+        {showEntityAliases && (() => {
+          const formerly = artistAliases.filter(a => a.end && !a.begin);
+          const nowKnown = artistAliases.filter(a => a.begin && !a.end);
+          const also     = artistAliases.filter(a => (a.begin && a.end) || (!a.begin && !a.end));
+          return (
+            <>
+              {formerly.length > 0 && <p class="artist-info-aliases">Formerly known as: {formerly.map(formatAlias).join(', ')}</p>}
+              {nowKnown.length > 0 && <p class="artist-info-aliases">Now known as: {nowKnown.map(formatAlias).join(', ')}</p>}
+              {also.length > 0     && <p class="artist-info-aliases">Also known as: {also.map(formatAlias).join(', ')}</p>}
+            </>
+          );
+        })()}
         {artistDateStr && <p class="artist-info-dates">{artistDateStr}</p>}
       </div>
       {memberSections.length > 0 && (

@@ -166,6 +166,16 @@ export async function syncArtistData(db: D1Database, mbid: string, fallbackName:
             isActive:  !mbData['life-span']?.ended,
           });
         }
+
+        if (rel.type === 'renamed into' && canonicalName && canonicalName !== officialName) {
+          const renameDate = rel.begin?.slice(0, 4) ?? null;
+          const synthetic: AliasEntry = rel.direction === 'forward'
+            ? { name: canonicalName, begin: renameDate, end: null }   // this → new name (now known as)
+            : { name: canonicalName, begin: null, end: renameDate };  // old name → this (formerly known as)
+          if (!mbAliases.some(a => a.name.toLowerCase() === canonicalName.toLowerCase())) {
+            mbAliases.push(synthetic);
+          }
+        }
       }
 
       if (rel['target-type'] === 'url') {
