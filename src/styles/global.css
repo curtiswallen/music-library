@@ -1041,6 +1041,10 @@ tr[data-href] { cursor: pointer; }
   padding-right: 50px;
 }
 
+@media (max-width: 640px) {
+  .also-logged-note { padding-right: 0; }
+}
+
 /* ── Rating slider ── */
 .rating-slider-wrap { display: flex; flex-direction: column; gap: 0; }
 .rating-slider-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
@@ -1651,6 +1655,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
   .edit-fields .cover-box-lg { width: 200px; height: 200px; }
   .edit-fields .cover-col { width: 100%; flex-direction: row; }
   .release-detail { width: auto; }
+  .release-select { font-size: 16px; }
   .release-dl { grid-template-columns: 1fr; gap: 0; font-size: 10px; }
   .release-dl dd { margin-bottom: 5px; }
   .added-at { font-size: 9px; }
