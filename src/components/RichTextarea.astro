@@ -1,0 +1,322 @@
+---
+interface Props {
+  id: string;
+  name: string;
+  rows?: number;
+  value?: string;
+  placeholder?: string;
+  class?: string;
+}
+const { id, name, rows = 5, value = '', placeholder = '', class: cls = '' } = Astro.props;
+---
+
+<div class="rnt-wrap">
+  <div class="rnt-toolbar" role="toolbar" aria-label="Formatting">
+    <button type="button" class="rnt-btn" data-rnt="bold"   title="Bold (Ctrl+B)"><b>B</b></button>
+    <button type="button" class="rnt-btn rnt-i" data-rnt="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+    <button type="button" class="rnt-btn rnt-link-btn" data-rnt="link" title="Link (Ctrl+K)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+    <button type="button" class="rnt-btn" data-rnt="bullet" title="Bullet list">• —</button>
+    <span class="rnt-tip">[[ to link an artist or album</span>
+  </div>
+  <textarea id={id} name={name} rows={rows} placeholder={placeholder} class={cls || undefined}>{value}</textarea>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.rnt-wrap:not([data-rnt-init])').forEach(wrap => {
+    wrap.dataset.rntInit = '1';
+    const ta = wrap.querySelector<HTMLTextAreaElement>('textarea');
+    if (!ta) return;
+
+    // popup appended to body so position:fixed works freely
+    const pop = document.createElement('div');
+    pop.className = 'rnt-pop';
+    pop.style.display = 'none';
+    document.body.appendChild(pop);
+
+    // toolbar clicks don't blur the textarea
+    const bar = wrap.querySelector<HTMLElement>('.rnt-toolbar')!;
+    bar.addEventListener('mousedown', e => e.preventDefault());
+    bar.addEventListener('click', e => {
+      const btn = (e.target as Element).closest<HTMLElement>('[data-rnt]');
+      if (btn) doAction(btn.dataset.rnt!, ta, pop);
+    });
+
+    // keyboard shortcuts + popup keyboard nav
+    ta.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (pop.style.display !== 'none') {
+        if (e.key === 'Escape')    { e.preventDefault(); closePop(pop); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); navPop(pop, 1); return; }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); navPop(pop, -1); return; }
+        if (e.key === 'Enter') {
+          const f = pop.querySelector<HTMLElement>('.rnt-item.rnt-active');
+          if (f) { e.preventDefault(); f.click(); return; }
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        if (e.key === 'b') { e.preventDefault(); doAction('bold',   ta, pop); }
+        if (e.key === 'i') { e.preventDefault(); doAction('italic', ta, pop); }
+        if (e.key === 'k') { e.preventDefault(); doAction('link',   ta, pop); }
+      }
+    });
+
+    // [[ mention
+    let _mt: ReturnType<typeof setTimeout> | undefined;
+    ta.addEventListener('input', () => {
+      const before = ta.value.slice(0, ta.selectionStart);
+      const m = before.match(/\[\[([^\][\n]{0,80})$/);
+      if (!m) { closePop(pop); return; }
+      const q = m[1];
+      if (q.length === 0) { renderHint(pop, ta); return; }
+      clearTimeout(_mt);
+      _mt = setTimeout(async () => {
+        try {
+          const r = await fetch(`/api/link-search?q=${encodeURIComponent(q)}`);
+          const items = await r.json() as { type: string; name: string; url: string }[];
+          renderMentions(items, ta, pop);
+        } catch {}
+      }, 200);
+    });
+
+    // close on outside click
+    document.addEventListener('pointerdown', e => {
+      if (!pop.contains(e.target as Node) && e.target !== ta) closePop(pop);
+    }, true);
+  });
+
+  // ── actions ────────────────────────────────────────────────────────
+
+  function doAction(action: string, ta: HTMLTextAreaElement, pop: HTMLElement) {
+    const s = ta.selectionStart, e = ta.selectionEnd, sel = ta.value.slice(s, e);
+    if (action === 'bold')   wrapSel(ta, '**', '**', sel || 'bold text');
+    if (action === 'italic') wrapSel(ta, '*',  '*',  sel || 'italic text');
+    if (action === 'bullet') toggleBullet(ta);
+    if (action === 'link')   showLinkPop(ta, pop, s, e, sel);
+  }
+
+  function wrapSel(ta: HTMLTextAreaElement, open: string, close: string, text: string) {
+    const s = ta.selectionStart, e = ta.selectionEnd, hadSel = s !== e;
+    ta.setRangeText(open + text + close, s, e, 'end');
+    if (!hadSel) ta.setSelectionRange(s + open.length, s + open.length + text.length);
+    ta.focus();
+  }
+
+  function toggleBullet(ta: HTMLTextAreaElement) {
+    const v = ta.value, s = ta.selectionStart;
+    const ls = v.lastIndexOf('\n', s - 1) + 1;
+    if (v.slice(ls, ls + 2) === '- ') ta.setRangeText('', ls, ls + 2, 'end');
+    else ta.setRangeText('- ', ls, ls, 'end');
+    ta.focus();
+  }
+
+  function showLinkPop(ta: HTMLTextAreaElement, pop: HTMLElement, s: number, e: number, sel: string) {
+    pop.innerHTML = `<div class="rnt-link-row">
+      <span class="rnt-label">URL</span>
+      <input class="rnt-linkinput" type="url" placeholder="https://" spellcheck="false" autocomplete="off" />
+      <button type="button" class="rnt-linkbtn">Insert</button>
+    </div>`;
+    placePop(ta, pop);
+    const inp = pop.querySelector<HTMLInputElement>('.rnt-linkinput')!;
+    const btn = pop.querySelector<HTMLButtonElement>('.rnt-linkbtn')!;
+    inp.focus();
+    // stop the outside-click handler from immediately closing
+    inp.addEventListener('pointerdown', ev => ev.stopPropagation());
+    btn.addEventListener('pointerdown', ev => ev.stopPropagation());
+    const go = () => {
+      const url = inp.value.trim();
+      closePop(pop); ta.focus();
+      if (!url) return;
+      ta.setSelectionRange(s, e);
+      ta.setRangeText(`[${sel || url}](${url})`, s, e, 'end');
+    };
+    btn.addEventListener('click', go);
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter')  { ev.preventDefault(); go(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); closePop(pop); ta.focus(); }
+    });
+  }
+
+  function renderHint(pop: HTMLElement, ta: HTMLTextAreaElement) {
+    pop.innerHTML = '<div class="rnt-hint">Search for artist/album...</div>';
+    pop.dataset.activeIdx = '-1';
+    placePop(ta, pop);
+  }
+
+  function renderMentions(items: { type: string; name: string; url: string }[], ta: HTMLTextAreaElement, pop: HTMLElement) {
+    pop.dataset.activeIdx = '-1';
+    pop.innerHTML = items.length
+      ? items.map(it => `<div class="rnt-item" role="option" data-url="${x(it.url)}" data-name="${x(it.name)}">
+          <span class="rnt-badge">${x(it.type)}</span><span class="rnt-iname">${x(it.name)}</span>
+        </div>`).join('')
+      : '<div class="rnt-empty">No results</div>';
+
+    pop.querySelectorAll<HTMLElement>('.rnt-item').forEach(el => {
+      el.addEventListener('mousedown', ev => ev.preventDefault());
+      el.addEventListener('click', () => {
+        const before = ta.value.slice(0, ta.selectionStart);
+        const m = before.match(/\[\[([^\][\n]{0,80})$/);
+        if (m) {
+          const start = ta.selectionStart - m[0].length;
+          ta.setRangeText(`[${el.dataset.name}](${el.dataset.url})`, start, ta.selectionStart, 'end');
+        }
+        closePop(pop); ta.focus();
+      });
+    });
+    const first = pop.querySelector<HTMLElement>('.rnt-item');
+    if (first) { first.classList.add('rnt-active'); pop.dataset.activeIdx = '0'; }
+    placePop(ta, pop);
+  }
+
+  // Position popup below the approximate caret line
+  function placePop(ta: HTMLTextAreaElement, pop: HTMLElement) {
+    const r   = ta.getBoundingClientRect();
+    const cs  = window.getComputedStyle(ta);
+    const lh  = parseFloat(cs.lineHeight) || 16;
+    const pt  = parseFloat(cs.paddingTop)  || 0;
+    const lines = ta.value.slice(0, ta.selectionStart).split('\n').length;
+    const relY  = pt + lines * lh - ta.scrollTop;
+    const top   = Math.max(r.top + lh, Math.min(r.bottom, r.top + relY)) + 4;
+    const left  = Math.max(r.left, Math.min(r.left + r.width - 260, r.left + 8));
+    Object.assign(pop.style, { display: 'block', top: top + 'px', left: left + 'px' });
+  }
+
+  function closePop(pop: HTMLElement) { pop.style.display = 'none'; pop.innerHTML = ''; pop.dataset.activeIdx = '-1'; }
+
+  function navPop(pop: HTMLElement, dir: number) {
+    const items = [...pop.querySelectorAll<HTMLElement>('.rnt-item')];
+    if (!items.length) return;
+    items.forEach(el => el.classList.remove('rnt-active'));
+    const cur = parseInt(pop.dataset.activeIdx ?? '-1');
+    const next = Math.max(0, Math.min(items.length - 1, cur + dir));
+    pop.dataset.activeIdx = String(next);
+    items[next].classList.add('rnt-active');
+    items[next].scrollIntoView({ block: 'nearest' });
+  }
+
+  function x(s: string) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+</script>
+
+<style>
+  .rnt-wrap { display: flex; flex-direction: column; }
+
+  .rnt-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding: 2px 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 3px 3px 0 0;
+    flex-shrink: 0;
+  }
+
+  .rnt-wrap textarea { border-radius: 0 0 3px 3px; }
+
+  .rnt-btn {
+    padding: 1px 6px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: inherit;
+    color: var(--text-muted);
+    line-height: 1.5;
+    transition: border-color 0.1s, color 0.1s, background 0.1s;
+  }
+  .rnt-btn:hover { border-color: var(--border); background: var(--bg-hover); color: var(--text); }
+  .rnt-i { font-style: italic; }
+  .rnt-link-btn { line-height: 0; padding: 3px 6px; }
+
+  .rnt-tip {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.55;
+    white-space: nowrap;
+    padding-right: 2px;
+  }
+
+  /* popup lives on <body> so these must be global */
+  :global(.rnt-pop) {
+    position: fixed;
+    z-index: 999;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    min-width: 230px;
+    max-width: 340px;
+    max-height: 220px;
+    overflow-y: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    font-family: "Google Sans Code", monospace;
+    font-size: 11px;
+    color: var(--text);
+  }
+  :global(.rnt-item) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    outline: none;
+  }
+  :global(.rnt-item:hover), :global(.rnt-item:focus), :global(.rnt-item.rnt-active) {
+    background: var(--bg-hover);
+    color: var(--text-hi);
+  }
+  :global(.rnt-badge) {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+    width: 38px;
+  }
+  :global(.rnt-iname) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.rnt-empty), :global(.rnt-hint) {
+    padding: 8px 10px;
+    color: var(--text-muted);
+  }
+  :global(.rnt-link-row) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+  }
+  :global(.rnt-label) {
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  :global(.rnt-linkinput) {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 11px;
+    font-family: "Google Sans Code", monospace;
+    padding: 3px 6px;
+  }
+  :global(.rnt-linkbtn) {
+    padding: 3px 8px;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    color: #fff;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  :global(.rnt-linkbtn:hover) { background: var(--accent-hi); border-color: var(--accent-hi); }
+</style>

@@ -2,6 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import AlbumForm from '../../../components/AlbumForm.astro';
 import Combobox from '../../../components/Combobox.astro';
+import RichTextarea from '../../../components/RichTextarea.astro';
 import { env } from 'cloudflare:workers';
 import type { Album, UserAlbum, Track } from '../../../types';
 import { slugify, generateUniqueSlug, countryCode, normalizeSearch } from '../../../lib/utils';
@@ -1028,8 +1029,8 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
 
               <div class="relog-field">
                 <label class="relog-label" for="rl-notes">Notes</label>
-                <textarea id="rl-notes" name="notes" class="relog-textarea" rows="5">{album.notes}</textarea>
-                <span class="field-hint-inline">**bold**, *italic*, [link](url), - list</span>
+                <RichTextarea id="rl-notes" name="notes" class="relog-textarea" rows={5}
+                  value={album.notes ?? ''} />
               </div>
 
               <div class="relog-actions">
@@ -1765,7 +1766,7 @@ if (queueBtn) {
     letter-spacing: 0.04em;
   }
 
-  .relog-textarea {
+  :global(.relog-textarea) {
     background: var(--bg-input, var(--bg-secondary));
     border: 1px solid var(--border);
     border-radius: 6px;

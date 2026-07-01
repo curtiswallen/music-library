@@ -1,5 +1,6 @@
 ---
 import Combobox from './Combobox.astro';
+import RichTextarea from './RichTextarea.astro';
 import { COUNTRIES, countryCode } from '../lib/utils';
 import { md } from '../lib/markdown';
 
@@ -265,9 +266,9 @@ try { if (values.release_data) releaseInfo = JSON.parse(values.release_data); } 
 
       <div class="form-group" style="margin-top:4px">
         <label for="f-notes">Notes</label>
-        <textarea id="f-notes" name="notes" rows="8"
-                  placeholder="Your thoughts... (Markdown supported)">{values.notes ?? ''}</textarea>
-        <span class="field-hint-inline">**bold**, *italic*, [link](url), - list</span>
+        <RichTextarea id="f-notes" name="notes" rows={8}
+          placeholder="Your thoughts..."
+          value={values.notes ?? ''} />
       </div>
 
       <!-- Mobile-only slot: tracks move here on narrow screens -->
