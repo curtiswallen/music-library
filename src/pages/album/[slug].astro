@@ -84,7 +84,7 @@ const [
     JOIN users u ON u.id = ua.user_id AND u.is_private = 0
     WHERE ua.album_id = ? AND ua.is_hidden = 0 AND ua.release_mbid IS NOT NULL
     GROUP BY ua.release_mbid
-    LIMIT 2
+    LIMIT 20
   `).bind(album.id).all<{
     release_mbid: string; release_title: string | null; release_data: string | null;
   }>(),
@@ -110,6 +110,14 @@ if (singleRelease?.release_data) {
   try { releaseInfo = JSON.parse(singleRelease.release_data) as ReleaseInfo; } catch {}
 }
 const releaseTitle = singleRelease?.release_title ?? null;
+
+interface ReleaseOption { mbid: string; label: string; }
+const releaseOptions: ReleaseOption[] = releaseRows.map(r => {
+  let info: ReleaseInfo | null = null;
+  if (r.release_data) { try { info = JSON.parse(r.release_data) as ReleaseInfo; } catch {} }
+  const parts = [info?.format, info?.date?.slice(0, 4), info?.country, info?.disambiguation].filter(Boolean);
+  return { mbid: r.release_mbid, label: parts.length > 0 ? parts.join(' · ') : (r.release_title ?? 'Unknown release') };
+});
 
 // Similar albums based on global subgenres/descriptors
 const genreCountsObj: Record<string, number> = (() => {
@@ -292,7 +300,15 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
           </div>
         )}
 
-        {(releaseInfo || releaseTitle) && (
+        {releaseRows.length > 1 ? (
+          <div class="release-detail">
+            <select id="release-select" class="release-select" data-album-id={album.id}>
+              <option value="">All releases</option>
+              {releaseOptions.map(o => <option value={o.mbid}>{o.label}</option>)}
+            </select>
+            <dl id="release-info-dl" class="release-dl" style="display:none"></dl>
+          </div>
+        ) : (releaseInfo || releaseTitle) ? (
           <div class="release-detail">
             {releaseInfo ? (
               <dl class="release-dl">
@@ -307,7 +323,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
               <p class="release-name">{releaseTitle}</p>
             )}
           </div>
-        )}
+        ) : null}
 
         {otherEditions.length > 0 && (
           <section class="other-editions" style="margin-top:12px">
@@ -345,11 +361,12 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
               {album.release_type && <span class="type-chip">{releaseTypeLabel(album.release_type)}</span>}
               {genreEntries[0] && <span class="album-genre-label">{genreEntries[0][0]}</span>}
               {album.avg_rating != null && (
-                <span class={`rating ${ratingClass(album.avg_rating)}`}>{album.avg_rating.toFixed(1)}</span>
+                <span id="avg-rating-val" class={`rating ${ratingClass(album.avg_rating)}`}>{album.avg_rating.toFixed(1)}</span>
               )}
               {album.rating_count > 0 && (
-                <span class="community-stat">{album.rating_count} rating{album.rating_count !== 1 ? 's' : ''}</span>
+                <span id="rating-count-val" class="community-stat">{album.rating_count} rating{album.rating_count !== 1 ? 's' : ''}</span>
               )}
+              <span id="overall-note" class="community-stat" style="display:none"></span>
             </div>
             {genreEntries.length > 1 && (
               <div class="album-tags">
@@ -419,7 +436,7 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 
       <section class="also-logged">
           <p class="attr-label">Logged By</p>
-          <div class="also-logged-list">
+          <div class="also-logged-list" id="also-logged-list">
           {loggedBy.map(l => (
               <a href={`/${l.profile_url}/album/${slugParam}`} class="also-logged-item">
               {l.avatar_url
@@ -536,19 +553,6 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     margin-top: 0;
   }
 
-  .also-logged-item .rating { margin: 0 15px; }
-
-  .also-logged-date {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-weight: 400;
-  }
-
-  .also-logged-name {
-    flex: none;
-    margin-right: 4px;
-  }
-
   .also-logged-note {
     min-width: 0;
     overflow: hidden;
@@ -576,6 +580,96 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
     flex-direction: column;
   }
 </style>
+
+<script>
+  // ── Release filter ────────────────────────────────────────────────────
+  const relSel = document.getElementById('release-select') as HTMLSelectElement | null;
+  if (relSel) {
+    const albumId   = relSel.dataset.albumId!;
+    const list      = document.getElementById('also-logged-list')!;
+    const infoDl    = document.getElementById('release-info-dl')!;
+    const avgEl     = document.getElementById('avg-rating-val');
+    const countEl   = document.getElementById('rating-count-val');
+    const noteEl    = document.getElementById('overall-note')!;
+    const origList  = list.innerHTML;
+    const origAvg   = avgEl?.textContent ?? '';
+    const origCount = countEl?.textContent ?? '';
+
+    function rc(r: number) { return r >= 70 ? 'rating-hi' : r >= 50 ? 'rating-mid' : 'rating-lo'; }
+
+    function fmtDateClient(dateStr: string | null): string {
+      if (!dateStr) return '';
+      try {
+        const d = new Date(dateStr);
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz, month: 'numeric', day: 'numeric', year: '2-digit',
+          hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+        }).formatToParts(d);
+        const get = (t: string) => parts.find((p: Intl.DateTimeFormatPart) => p.type === t)?.value ?? '';
+        return `${get('month')}/${get('day')}/${get('year')} ${get('hour')}:${get('minute')}`;
+      } catch { return ''; }
+    }
+
+    function renderLoggedBy(entries: { profile_url: string; display_name: string | null; avatar_url: string | null; rating: number | null; added_at: string | null; notes: string | null }[]) {
+      if (!entries.length) { list.innerHTML = '<p style="padding:8px 0;color:var(--text-muted);font-size:11px">No entries for this release</p>'; return; }
+      const slug = location.pathname.split('/').pop();
+      list.innerHTML = entries.map(l => {
+        const dateStr = fmtDateClient(l.added_at);
+        return `
+          <a href="/${l.profile_url}/album/${slug}" class="also-logged-item">
+            ${l.avatar_url ? `<img src="${l.avatar_url}" class="also-logged-avatar" alt="" />` : `<span class="also-logged-avatar also-logged-placeholder"></span>`}
+            <span class="also-logged-name">${l.display_name || l.profile_url}${dateStr ? ` <span class="also-logged-date"> · ${dateStr}</span>` : ''}</span>
+            ${l.rating != null ? `<span class="rating ${rc(l.rating)}">${l.rating}</span>` : ''}
+            ${l.notes ? `<span class="also-logged-note">${l.notes.split('\n')[0]}</span>` : ''}
+          </a>`;
+      }).join('');
+    }
+
+    function renderReleaseDl(info: Record<string, unknown> | null, title: string | null) {
+      if (!info) { infoDl.style.display = info === null && title ? 'grid' : 'none'; infoDl.innerHTML = title ? `<dt>Edition</dt><dd>${title}</dd>` : ''; return; }
+      const rows = [
+        info.format        ? `<dt>Format</dt><dd>${info.format}</dd>` : '',
+        info.date          ? `<dt>Released</dt><dd>${info.date}</dd>` : '',
+        info.country       ? `<dt>Country</dt><dd>${info.country}</dd>` : '',
+        ...(Array.isArray(info.labels) ? (info.labels as {name:string;catalog:string}[]).map(l => `<dt>Label</dt><dd>${l.name}${l.catalog ? ` — ${l.catalog}` : ''}</dd>`) : []),
+        info.barcode        ? `<dt>Barcode</dt><dd>${info.barcode}</dd>` : '',
+        info.disambiguation ? `<dt>Edition</dt><dd>${info.disambiguation}</dd>` : '',
+      ].filter(Boolean);
+      infoDl.innerHTML = rows.join('');
+      infoDl.style.display = rows.length ? 'grid' : 'none';
+    }
+
+    relSel.addEventListener('change', async () => {
+      const mbid = relSel.value;
+      if (!mbid) {
+        list.innerHTML = origList;
+        if (avgEl)   { avgEl.textContent = origAvg; avgEl.className = `rating ${origAvg ? rc(parseFloat(origAvg)) : ''}`; }
+        if (countEl) { countEl.textContent = origCount; countEl.style.display = ''; }
+        noteEl.style.display = 'none';
+        infoDl.style.display = 'none';
+        return;
+      }
+      try {
+        const res  = await fetch(`/api/album-release?albumId=${albumId}&mbid=${encodeURIComponent(mbid)}`);
+        const data = await res.json() as { loggedBy: Parameters<typeof renderLoggedBy>[0]; avgRating: number | null; ratingCount: number; releaseInfo: Record<string, unknown> | null; releaseTitle: string | null };
+        renderLoggedBy(data.loggedBy);
+        if (avgEl) {
+          avgEl.textContent   = data.avgRating != null ? data.avgRating.toFixed(1) : '—';
+          avgEl.className     = `rating ${data.avgRating != null ? rc(data.avgRating) : ''}`;
+          avgEl.style.display = '';
+        }
+        if (countEl) {
+          countEl.textContent  = `${data.ratingCount} rating${data.ratingCount !== 1 ? 's' : ''} (this release)`;
+          countEl.style.display = data.ratingCount > 0 ? '' : 'none';
+        }
+        noteEl.textContent  = origAvg ? `${origAvg} overall` : '';
+        noteEl.style.display = origAvg ? '' : 'none';
+        renderReleaseDl(data.releaseInfo, data.releaseTitle);
+      } catch {}
+    });
+  }
+</script>
 
 <script>
   const btn = document.getElementById('queue-btn') as HTMLButtonElement | null;

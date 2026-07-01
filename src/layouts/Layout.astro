@@ -48,9 +48,9 @@ const user = Astro.locals.user;
                     {user.avatar_url && <img src={user.avatar_url} class="profile-avatar" alt="" />}
                     <span>{user.display_name || user.username}</span>
                   </div>
-                  <a href="/" class="nav-hamburger-item">Community</a>
-                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">Dashboard</a>
-                  <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">Library</a>
+                  <a href="/" class="nav-hamburger-item">Community Dashboard</a>
+                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">My Dashboard</a>
+                  <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">My Library</a>
                   {user.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
                   <a href="/settings" class="nav-hamburger-item">Settings</a>
                   <form method="post" action="/auth/logout" style="margin:0">
@@ -73,9 +73,9 @@ const user = Astro.locals.user;
                     {user.avatar_url && <img src={user.avatar_url} class="profile-avatar" alt="" />}
                     <span>{user.display_name || user.username}</span>
                   </div>
-                  <a href="/" class="nav-hamburger-item">Community</a>
-                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">Dashboard</a>
-                  <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">Library</a>
+                  <a href="/" class="nav-hamburger-item">Community Dashboard</a>
+                  <a href={`/${user.profile_url}`} class="nav-hamburger-item">My Dashboard</a>
+                  <a href={`/${user.profile_url}/library`} class="nav-hamburger-item">My Library</a>
                   {user.is_admin === 1 && <a href="/admin" class="nav-hamburger-item">Admin</a>}
                   <a href="/settings" class="nav-hamburger-item">Settings</a>
                   <form method="post" action="/auth/logout" style="margin:0">
