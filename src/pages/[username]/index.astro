@@ -99,7 +99,7 @@ if (isOwner || !profileUser.is_private) {
         SELECT a.slug, a.artist, a.album, a.year, a.cover_url, a.country, a.release_type, ua.rating, ua.recommended, ua.added_at, ua.genre
         FROM albums a JOIN user_albums ua ON ua.album_id = a.id AND ua.user_id = ?
         WHERE ua.is_hidden = 0 AND ua.rating IS NOT NULL
-        ORDER BY ua.added_at DESC LIMIT 15
+        ORDER BY COALESCE(ua.logged_at, ua.added_at) DESC LIMIT 15
       `).bind(profileUser.id).all<DashAlbum>()
     : Promise.resolve({ results: [] as DashAlbum[] });
 
@@ -277,6 +277,29 @@ if (!isOwner && !profileUser.is_private) {
     <div id="dashboard-wrapper" data-user-base={userBase} data-tz={tz}>
       {/* ── Activity section ──────────────────────────────────────────────── */}
       <div class="activity-section">
+
+              {bioHtml && (<div id="bio-wrapper">
+           <div class="user-bio album-notes" set:html={bioHtml} />
+
+          {socialLinks.length > 0 && (
+            <div class="social-links-row">
+              {socialLinks.map(link => {
+                const p = PLATFORM_MAP.get(link.platform);
+                if (!p) return null;
+                return (
+                  <a href={platformUrl(p, link.username)} target="_blank" rel="noopener noreferrer"
+                    class="social-link-icon" title={p.label}
+                    style={`--brand: ${p.color}`}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                      <path d={p.svgPath} />
+                    </svg>
+                  </a>
+                );
+              })}
+            </div>
+          )}
+      </div>)}
+
         <div class="stat-cards">
           <div class="stat-card">
             <span class="stat-val">{stats.total_albums}</span>
@@ -297,28 +320,6 @@ if (!isOwner && !profileUser.is_private) {
             </div>
           )}
         </div>
-
-        {bioHtml && (<div id="bio-wrapper">
-           <div class="user-bio album-notes" set:html={bioHtml} />
-
-          {socialLinks.length > 0 && (
-            <div class="social-links-row">
-              {socialLinks.map(link => {
-                const p = PLATFORM_MAP.get(link.platform);
-                if (!p) return null;
-                return (
-                  <a href={platformUrl(p, link.username)} target="_blank" rel="noopener noreferrer"
-                    class="social-link-icon" title={p.label}
-                    style={`--brand: ${p.color}`}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
-                      <path d={p.svgPath} />
-                    </svg>
-                  </a>
-                );
-              })}
-            </div>
-          )}
-        </div>)}
 
         {/* ── World map ─────────────────────────────────────────────────────── */}
         {hasMapData && (

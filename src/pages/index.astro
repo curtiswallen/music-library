@@ -133,7 +133,7 @@ const [recentRes, topRes, statsRes, subgRes, descRes, featuredRes, countryList] 
     JOIN albums a ON a.id = ua.album_id
     JOIN users u ON u.id = ua.user_id
     WHERE ${recentWhere}
-    ORDER BY ua.added_at DESC LIMIT 15
+    ORDER BY COALESCE(ua.logged_at, ua.added_at) DESC LIMIT 15
   `).bind(...recentParams).all<RecentEntry>(),
 
   !hasFilter
