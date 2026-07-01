@@ -272,17 +272,19 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 
         {loggedInUser && (
           <div class="album-actions">
-            {myEntry === 'none' && (
-              <button id="queue-btn" class="btn" data-album-id={String(album.id)}>Add to Queue</button>
-            )}
-            {myEntry === 'queued' && (
-              <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">✓ In Queue</a>
-            )}
-            {myEntry !== 'logged' && (
-              <a href={myEntry === 'queued'
-                ? `/${loggedInUser.profile_url}/album/${slugParam}?edit=1`
-                : logAlbumHref} class="btn">Log Album</a>
-            )}
+            <div class="queue-log-wrapper">
+              {myEntry === 'none' && (
+                <button id="queue-btn" class="btn" data-album-id={String(album.id)}>Add to Queue</button>
+              )}
+              {myEntry === 'queued' && (
+                <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">✓ In Queue</a>
+              )}
+              {myEntry !== 'logged' && (
+                <a href={myEntry === 'queued'
+                  ? `/${loggedInUser.profile_url}/album/${slugParam}?edit=1`
+                  : logAlbumHref} class="btn">Log Album</a>
+              )}
+            </div>
             {myEntry === 'logged' && (
               <a href={`/${loggedInUser.profile_url}/album/${slugParam}`} class="btn">→ My entry</a>
             )}
