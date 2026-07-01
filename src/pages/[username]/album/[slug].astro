@@ -606,10 +606,7 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
           {isOwner && album.rating != null && (
             <button id="relog-btn" class="btn" type="button">&#8635; Relog</button>
           )}
-        </div>
-
-        {!isOwner && loggedInUser && (
-          <div class="album-actions">
+          {!isOwner && loggedInUser && (
             <div class="queue-log-wrapper">
               {viewerEntry === 'none' && (
                 <button id="queue-btn" class="btn queue-btn" data-album-id={String(album.id)}>Add to Queue</button>
@@ -622,12 +619,14 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
                   ? `/${loggedInUser.profile_url}/album/${album.slug}?edit=1`
                   : logAlbumHref} class="btn log-btn">Log Album</a>
               )}
-            </div>
             {viewerEntry === 'logged' && (
               <a href={`/${loggedInUser.profile_url}/album/${album.slug}`} class="btn my-entry-btn">→ My Entry</a>
             )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+
+
 
         {(releaseInfo || album.release_title) && (
           <div class="release-detail">
