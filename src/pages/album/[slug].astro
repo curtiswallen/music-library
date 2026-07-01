@@ -190,6 +190,8 @@ function fmtLen(seconds: number | null): string {
 }
 
 const loggedInUser = Astro.locals.user;
+const fromParam = (Astro.url.searchParams.get('from') ?? '').replace(/[^a-z0-9-_]/gi, '');
+const fromName  = (Astro.url.searchParams.get('fromName') ?? '').slice(0, 60);
 
 let myEntry: 'none' | 'queued' | 'logged' = 'none';
 if (loggedInUser) {
@@ -265,9 +267,12 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
       </h1>
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
-      {loggedInUser && myEntry === 'logged' && (
+      {(fromParam || (loggedInUser && myEntry === 'logged')) && (
         <div class="artist-view-toggle">
-          <a href={`/${loggedInUser.profile_url}/album/${slugParam}`}>mine</a>
+          {fromParam && <a href={`/${fromParam}/album/${slugParam}`}>{fromName || fromParam}'s</a>}
+          {loggedInUser && myEntry === 'logged' && (
+            <a href={`/${loggedInUser.profile_url}/album/${slugParam}${fromParam ? `?from=${fromParam}&fromName=${encodeURIComponent(fromName || fromParam)}` : ''}`}>mine</a>
+          )}
           <span class="avc-active">community</span>
         </div>
       )}
@@ -551,15 +556,6 @@ const logAlbumHref = `/add?${logAlbumParams.toString()}`;
 
   .related-section {
     margin-top: 0;
-  }
-
-  .also-logged-note {
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    color: var(--text-muted);
-    padding-right: 50px;
   }
 
   .other-editions .rating { margin: 0 }

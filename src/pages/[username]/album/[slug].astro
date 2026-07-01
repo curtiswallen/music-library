@@ -498,6 +498,9 @@ if (loggedInUser && !isOwner) {
   if (mine) viewerEntry = mine.is_queued ? 'queued' : 'logged';
 }
 
+const fromParam = (Astro.url.searchParams.get('from') ?? '').replace(/[^a-z0-9-_]/gi, '');
+const fromName  = (Astro.url.searchParams.get('fromName') ?? '').slice(0, 60);
+
 if (!isOwner && !profileUser.is_private) {
   Astro.response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
 }
@@ -572,8 +575,22 @@ const RATING_OPTS = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,1
       <h1><span class="breadcrumb-sep">›</span></h1>
       <h1><span class="breadcrumb-current">{album.album}</span></h1>
       <div class="artist-view-toggle">
-        <span class="avc-active">mine</span>
-        <a href={`/album/${slugParam}`}>community</a>
+        {fromParam && <a href={`/${fromParam}/album/${slugParam}`}>{fromName || fromParam}'s</a>}
+        {isOwner
+          ? <span class="avc-active">mine</span>
+          : <span class="avc-active">{profileUser.display_name || profileUser.username}'s</span>
+        }
+        {!isOwner && loggedInUser && viewerEntry === 'logged' && (() => {
+          const dn = encodeURIComponent(profileUser.display_name || profileUser.username);
+          return <a href={`/${loggedInUser.profile_url}/album/${slugParam}?from=${profileUser.profile_url}&fromName=${dn}`}>mine</a>;
+        })()}
+        {(() => {
+          const dn = encodeURIComponent(profileUser.display_name || profileUser.username);
+          const q = !isOwner ? `?from=${profileUser.profile_url}&fromName=${dn}`
+                  : fromParam ? `?from=${fromParam}&fromName=${encodeURIComponent(fromName || fromParam)}`
+                  : '';
+          return <a href={`/album/${slugParam}${q}`}>community</a>;
+        })()}
       </div>
     </div>
     <div class="page-header-actions" style="display:flex;gap:8px">
