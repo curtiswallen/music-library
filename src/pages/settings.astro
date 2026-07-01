@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Combobox from '../components/Combobox.astro';
+import RichTextarea from '../components/RichTextarea.astro';
 import { env } from 'cloudflare:workers';
 import { SOCIAL_PLATFORMS, parseSocialLinks, type SocialLink } from '../lib/social-platforms';
 
@@ -218,9 +219,8 @@ const TIMEZONES: { label: string; value: string }[] = [
 
       <div class="form-group">
         <label for="bio">Bio</label>
-        <textarea id="bio" name="bio" rows="4" maxlength="1000"
-                  placeholder="Write a short bio…">{formBio}</textarea>
-        <span class="field-hint">Shown on your public dashboard. Markdown supported (links, bold, etc.). Max 1000 characters.</span>
+        <RichTextarea id="bio" name="bio" rows={4} value={formBio} placeholder="Write a short bio…" />
+        <span class="field-hint">Shown on your public dashboard. Max 1000 characters.</span>
       </div>
 
       <div class="form-group">
