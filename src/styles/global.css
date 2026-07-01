@@ -764,10 +764,15 @@ a.tag.tag-sketchy:hover { border-color: var(--red); color: var(--red); }
 .album-actions .btn { display: block; flex: 1; min-width: 0; text-align: center; font-size: 10px; padding: 3px 6px; height: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .album-actions .btn:hover { border-color: var(--border); }
 .com-entry-btn { border-radius: 3px 3px 0 0; }
-#relog-btn { border-radius: 0 0 3px 3px; border-top: 0; }
+.album-actions > .btn.com-entry-btn:only-child { border-radius: 3px; }
+.com-pair { display: flex; }
+.com-pair-l { flex: 2; border-radius: 3px 0 0 3px; }
+.com-pair-r { flex: 1; border-radius: 0 3px 3px 0; border-left: 0; }
 .queue-log-wrapper { display: flex; flex-direction: row; gap: 0; }
-.queue-btn { border-radius: 0 0 0 3px; border-top: 0; } 
+.queue-btn { border-radius: 0 0 0 3px; border-top: 0; }
 .log-btn { border-radius: 0 0 3px 0; border-top: 0; border-left: 0; }
+.album-actions > .queue-log-wrapper:first-child .queue-btn { border-radius: 3px 0 0 3px; border-top: 1px solid var(--border); }
+.album-actions > .queue-log-wrapper:first-child .log-btn  { border-radius: 0 3px 3px 0;  border-top: 1px solid var(--border); }
 
 .canonical-note { font-size: 10px; color: var(--text-muted); margin-bottom: 14px; }
 .edit-fields input[readonly],
